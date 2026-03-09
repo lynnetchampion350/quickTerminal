@@ -5,7 +5,8 @@ cd "$(dirname "$0")"
 APP_NAME="quickTerminal"
 BUNDLE="${APP_NAME}.app"
 ICON_SRC="icon.png"
-VERSION="1.0.0"
+# NOTE: Keep VERSION in sync with kAppVersion in quickTerminal.swift
+VERSION="1.1.0"
 BUNDLE_ID="com.l3v0.quickterminal"
 
 echo "=== Building ${APP_NAME}.app ==="

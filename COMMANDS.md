@@ -18,7 +18,7 @@
 <br>
 
 ![Version](https://img.shields.io/badge/Version-1.0.0-blue?style=for-the-badge)
-![Commands](https://img.shields.io/badge/Commands-37-brightgreen?style=for-the-badge)
+![Commands](https://img.shields.io/badge/Commands-40-brightgreen?style=for-the-badge)
 ![Shortcuts](https://img.shields.io/badge/Shortcuts-25%2B-orange?style=for-the-badge)
 ![App](https://img.shields.io/badge/App-4.8_MB-purple?style=for-the-badge)
 
@@ -106,11 +106,25 @@
 | | Command | Default |
 |:---:|---|:---:|
 | :pushpin: | **Always on Top (on/off)** | On |
+| :low_brightness: | **Auto-Dim (on/off)** | Off |
 | :bulb: | **Syntax Highlighting (on/off)** | On |
 | :clipboard: | **Copy on Select (on/off)** | On |
-| :eye: | **Hide on Click Outside (on/off)** | On |
+| :eye: | **Hide on Click Outside (on/off)** | Off |
 | :eye: | **Hide on Deactivate (on/off)** | Off |
 | :electric_plug: | **Launch at Login (on/off)** | Off |
+| :arrows_counterclockwise: | **Auto-Check Updates (on/off)** | On |
+
+### :arrows_counterclockwise: Update
+
+| | Command | Description |
+|:---:|---|---|
+| :mag: | **Check for Updates** | Manually check GitHub for a new version |
+| :arrow_down: | **Install Update (vX.Y.Z)** | Download + install available update (appears when update found) |
+| :arrows_counterclockwise: | **Auto-Check Updates (on/off)** | Toggle automatic checks every 72 hours |
+
+> [!NOTE]
+> Updates preserve all settings, tabs, splits, working directories, and window state.
+> The app restarts seamlessly after installing.
 
 ### :mag: Tools
 
@@ -251,10 +265,12 @@
 | Setting | Range | Default |
 |---|:---:|:---:|
 | :pushpin: Always on Top | On / Off | On |
-| :eye: Hide on Click Outside | On / Off | On |
+| :low_brightness: Auto-Dim | On / Off | Off |
+| :eye: Hide on Click Outside | On / Off | Off |
 | :eye: Hide on Deactivate | On / Off | Off |
 | :clipboard: Copy on Select | On / Off | On |
 | :electric_plug: Auto-Start at Login | On / Off | Off |
+| :arrows_counterclockwise: Auto-Check Updates | On / Off | On |
 
 ### :art: Shell & Theme
 
@@ -292,7 +308,8 @@
 
 ![Built with Swift](https://img.shields.io/badge/Built_with-Swift-F05138?style=flat-square&logo=swift&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-macOS-000000?style=flat-square&logo=apple&logoColor=white)
-![quickTERMINAL](https://img.shields.io/badge/quickTERMINAL-v1.0.0-blue?style=flat-square)
+![quickTERMINAL](https://img.shields.io/badge/quickTERMINAL-v1.1.0-blue?style=flat-square)
+![Lines](https://img.shields.io/badge/10000%2B_Lines-One_File-blue?style=flat-square)
 ![App](https://img.shields.io/badge/App-4.8_MB-brightgreen?style=flat-square)
 
 </div>

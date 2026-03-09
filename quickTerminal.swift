@@ -6,6 +6,23 @@ import Carbon
 import Darwin
 import Darwin.POSIX
 
+// MARK: - Version
+
+let kAppVersion = "1.1.0"
+
+func isNewerVersion(remote: String, local: String) -> Bool {
+    let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
+    let rParts = strip(remote).split(separator: ".").compactMap { Int($0) }
+    let lParts = strip(local).split(separator: ".").compactMap { Int($0) }
+    for i in 0..<max(rParts.count, lParts.count) {
+        let r = i < rParts.count ? rParts[i] : 0
+        let l = i < lParts.count ? lParts[i] : 0
+        if r > l { return true }
+        if r < l { return false }
+    }
+    return false
+}
+
 // MARK: - Types
 
 struct TextAttrs: Equatable {
@@ -3033,7 +3050,7 @@ class TerminalView: NSView {
             .font: NSFont.systemFont(ofSize: 10, weight: .light),
             .foregroundColor: NSColor.gray
         ]
-        footerItem.attributedTitle = NSAttributedString(string: "quickTERMINAL — LEVOGNE", attributes: footerAttrs)
+        footerItem.attributedTitle = NSAttributedString(string: "quickTERMINAL v\(kAppVersion) — LEVOGNE", attributes: footerAttrs)
         footerItem.isEnabled = false
         menu.addItem(footerItem)
 
@@ -3202,16 +3219,34 @@ class TerminalView: NSView {
 
     // MARK: Drag & Drop (file path insertion)
 
+    /// Track active drag session so hideOnClickOutside doesn't dismiss during drag
+    private(set) var isDragSessionActive = false
+    private var cachedDragOperation: NSDragOperation = []
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         let pb = sender.draggingPasteboard
         if pb.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) ||
            pb.canReadObject(forClasses: [NSString.self], options: nil) {
-            return .copy
+            cachedDragOperation = .copy
+            isDragSessionActive = true
+        } else {
+            cachedDragOperation = []
         }
-        return []
+        return cachedDragOperation
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        cachedDragOperation
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        isDragSessionActive = false
+        cachedDragOperation = []
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        isDragSessionActive = false
+        cachedDragOperation = []
         let pb = sender.draggingPasteboard
         // File URLs: insert shell-escaped paths
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
@@ -5085,6 +5120,7 @@ class FooterBarView: NSView {
         quitBtn = QuitButton(frame: .zero)
         quitBtn.onClick = { NSApp.terminate(nil) }
         rechtsContent.addSubview(quitBtn)
+
     }
 
     override func layout() {
@@ -5714,11 +5750,16 @@ class SettingsOverlay: NSView {
         rows.append(makeSegmentRow(label: "Default Shell", options: ["zsh", "bash", "sh"],
             selected: shellIdx, key: "defaultShellIndex"))
 
+        // Window behavior group
+        rows.append(makeSectionHeader("Window"))
         rows.append(makeToggleRow(label: "Always on Top", settingsKey: "alwaysOnTop"))
+        rows.append(makeToggleRow(label: "Auto-Dim", settingsKey: "autoDim"))
         rows.append(makeToggleRow(label: "Hide on Click Outside", settingsKey: "hideOnClickOutside"))
         rows.append(makeToggleRow(label: "Hide on Deactivate", settingsKey: "hideOnDeactivate"))
+
         rows.append(makeToggleRow(label: "Copy on Select", settingsKey: "copyOnSelect"))
         rows.append(makeToggleRow(label: "Launch at Login", settingsKey: "autoStartEnabled"))
+        rows.append(makeToggleRow(label: "Auto-Check Updates", settingsKey: "autoCheckUpdates"))
 
         // Reset button
         rows.append(makeResetRow())
@@ -6054,6 +6095,7 @@ class SettingsOverlay: NSView {
     private func labelForKey(_ key: String) -> String {
         switch key {
         case "alwaysOnTop": return "Always on Top"
+        case "autoDim": return "Auto-Dim"
         case "hideOnClickOutside": return "Hide on Click Outside"
         case "hideOnDeactivate": return "Hide on Deactivate"
         case "copyOnSelect": return "Copy on Select"
@@ -6061,6 +6103,35 @@ class SettingsOverlay: NSView {
         case "autoStartEnabled": return "Launch at Login"
         default: return ""
         }
+    }
+
+    private func makeSectionHeader(_ title: String) -> NSView {
+        let row = NSView()
+        row.wantsLayer = true
+
+        let lbl = NSTextField(labelWithString: title.uppercased())
+        lbl.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .bold)
+        lbl.textColor = NSColor(calibratedWhite: 0.45, alpha: 1.0)
+        lbl.isEditable = false; lbl.isBordered = false; lbl.drawsBackground = false
+        lbl.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(lbl)
+
+        let line = NSView()
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06).cgColor
+        line.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(line)
+
+        NSLayoutConstraint.activate([
+            lbl.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+            lbl.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -4),
+            line.leadingAnchor.constraint(equalTo: lbl.trailingAnchor, constant: 8),
+            line.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
+            line.centerYAnchor.constraint(equalTo: lbl.centerYAnchor),
+            line.heightAnchor.constraint(equalToConstant: 1),
+        ])
+
+        return row
     }
 
     private func makeToggleRow(label: String, settingsKey: String) -> NSView {
@@ -6352,13 +6423,15 @@ class SettingsOverlay: NSView {
         "fontFamily": 0,
         "defaultShellIndex": 0,
         "alwaysOnTop": true,
-        "hideOnClickOutside": true,
+        "autoDim": false,
+        "hideOnClickOutside": false,
         "hideOnDeactivate": false,
         "copyOnSelect": true,
         "cursorBlink": false,
         "syntaxHighlighting": true,
         "promptTheme": "default",
         "autoStartEnabled": false,
+        "autoCheckUpdates": true,
     ]
 
     private func isAtDefaults() -> Bool {
@@ -6674,7 +6747,7 @@ class HelpViewer {
         var l: [StyledLine] = []
 
         l.append(StyledLine(text: "quickTERMINAL", style: .title))
-        l.append(StyledLine(text: "v1.0.0", style: .badge))
+        l.append(StyledLine(text: "v\(kAppVersion)", style: .badge))
         l.append(StyledLine(text: "", style: .normal))
         l.append(StyledLine(text: "─────────────────────────────────────────────", style: .separator))
         l.append(StyledLine(text: "", style: .normal))
@@ -6695,6 +6768,7 @@ class HelpViewer {
             case "Split Horizontal": icon = "\u{2500}" // ─
             case "Reset Window": icon = "\u{21BA}"     // ↺
             case "Always on Top": icon = "\u{1F4CC}"   // 📌
+            case "Auto-Dim": icon = "\u{1F505}"              // 🔅
             case "Clear": icon = "\u{1F9F9}"           // 🧹
             case "Hide": icon = "\u{1F441}"            // 👁
             case "Help": icon = "\u{2753}"             // ❓
@@ -7728,6 +7802,222 @@ class CommandPaletteView: NSView, NSTextFieldDelegate {
     }
 }
 
+// MARK: - Update Checker
+
+struct GitHubRelease {
+    let tagName: String
+    let downloadURL: URL
+}
+
+class UpdateChecker {
+    private var downloadTask: URLSessionDownloadTask?
+    private var progressObservation: NSKeyValueObservation?
+
+    func checkForUpdate(completion: @escaping (Result<GitHubRelease?, Error>) -> Void) {
+        let url = URL(string: "https://api.github.com/repos/LEVOGNE/quickTerminal/releases/latest")!
+        var req = URLRequest(url: url)
+        req.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 15
+
+        URLSession.shared.dataTask(with: req) { data, response, error in
+            if let error = error {
+                DispatchQueue.main.async { completion(.failure(error)) }
+                return
+            }
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String,
+                  let assets = json["assets"] as? [[String: Any]],
+                  let firstAsset = assets.first(where: {
+                      ($0["name"] as? String)?.hasSuffix(".zip") == true
+                  }),
+                  let urlStr = firstAsset["browser_download_url"] as? String,
+                  let downloadURL = URL(string: urlStr)
+            else {
+                DispatchQueue.main.async { completion(.success(nil)) }
+                return
+            }
+
+            if isNewerVersion(remote: tagName, local: kAppVersion) {
+                DispatchQueue.main.async {
+                    completion(.success(GitHubRelease(tagName: tagName, downloadURL: downloadURL)))
+                }
+            } else {
+                DispatchQueue.main.async { completion(.success(nil)) }
+            }
+        }.resume()
+    }
+
+    func downloadAndInstall(release: GitHubRelease,
+                            onProgress: @escaping (Double) -> Void,
+                            onComplete: @escaping (Result<Void, Error>) -> Void) {
+        let task = URLSession.shared.downloadTask(with: release.downloadURL) { [weak self] tmpURL, _, error in
+            self?.progressObservation = nil
+            if let error = error {
+                DispatchQueue.main.async { onComplete(.failure(error)) }
+                return
+            }
+            guard let tmpURL = tmpURL else {
+                DispatchQueue.main.async {
+                    onComplete(.failure(NSError(domain: "UpdateChecker", code: 1,
+                                               userInfo: [NSLocalizedDescriptionKey: "Download failed"])))
+                }
+                return
+            }
+            // Copy to persistent temp location (URLSession tmp file gets deleted)
+            let zipPath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("quickTerminal_update_\(UUID().uuidString).zip")
+            do {
+                if FileManager.default.fileExists(atPath: zipPath.path) {
+                    try FileManager.default.removeItem(at: zipPath)
+                }
+                try FileManager.default.copyItem(at: tmpURL, to: zipPath)
+            } catch {
+                DispatchQueue.main.async { onComplete(.failure(error)) }
+                return
+            }
+
+            DispatchQueue.main.async {
+                self?.installUpdate(from: zipPath, completion: onComplete)
+            }
+        }
+
+        progressObservation = task.observe(\.countOfBytesReceived) { t, _ in
+            guard t.countOfBytesExpectedToReceive > 0 else { return }
+            let pct = Double(t.countOfBytesReceived) / Double(t.countOfBytesExpectedToReceive)
+            DispatchQueue.main.async { onProgress(pct) }
+        }
+
+        downloadTask = task
+        task.resume()
+    }
+
+    private func installUpdate(from zipPath: URL, completion: @escaping (Result<Void, Error>) -> Void) {
+        let fm = FileManager.default
+        let extractDir = fm.temporaryDirectory.appendingPathComponent("quickTerminal_extract_\(UUID().uuidString)")
+
+        // 1. Extract with ditto
+        let dittoProc = Process()
+        dittoProc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        dittoProc.arguments = ["-xk", zipPath.path, extractDir.path]
+        do {
+            try dittoProc.run()
+            dittoProc.waitUntilExit()
+        } catch {
+            completion(.failure(NSError(domain: "UpdateChecker", code: 2,
+                                       userInfo: [NSLocalizedDescriptionKey: "Failed to extract: \(error.localizedDescription)"])))
+            return
+        }
+        guard dittoProc.terminationStatus == 0 else {
+            completion(.failure(NSError(domain: "UpdateChecker", code: 3,
+                                       userInfo: [NSLocalizedDescriptionKey: "ditto failed with exit code \(dittoProc.terminationStatus)"])))
+            return
+        }
+
+        // 2. Find .app in extracted contents
+        guard let appBundle = findAppBundle(in: extractDir) else {
+            completion(.failure(NSError(domain: "UpdateChecker", code: 4,
+                                       userInfo: [NSLocalizedDescriptionKey: "No .app bundle found in archive"])))
+            try? fm.removeItem(at: extractDir)
+            return
+        }
+
+        // Verify executable exists
+        let execPath = appBundle.appendingPathComponent("Contents/MacOS/quickTerminal")
+        guard fm.isExecutableFile(atPath: execPath.path) else {
+            completion(.failure(NSError(domain: "UpdateChecker", code: 5,
+                                       userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])))
+            try? fm.removeItem(at: extractDir)
+            return
+        }
+
+        // 3. Current app path
+        let currentAppPath = Bundle.main.bundlePath
+        let currentAppURL = URL(fileURLWithPath: currentAppPath)
+        let parentDir = currentAppURL.deletingLastPathComponent()
+
+        // Check write permission
+        guard fm.isWritableFile(atPath: parentDir.path) else {
+            completion(.failure(NSError(domain: "UpdateChecker", code: 6,
+                                       userInfo: [NSLocalizedDescriptionKey: "No write permission at \(parentDir.path)"])))
+            try? fm.removeItem(at: extractDir)
+            return
+        }
+
+        // 4. Move old .app to temp (rollback backup)
+        let backupPath = fm.temporaryDirectory.appendingPathComponent("quickTerminal_backup_\(UUID().uuidString).app")
+        do {
+            try fm.moveItem(at: currentAppURL, to: backupPath)
+        } catch {
+            completion(.failure(NSError(domain: "UpdateChecker", code: 7,
+                                       userInfo: [NSLocalizedDescriptionKey: "Failed to move old app: \(error.localizedDescription)"])))
+            try? fm.removeItem(at: extractDir)
+            return
+        }
+
+        // 5. Copy new .app to original path
+        do {
+            try fm.copyItem(at: appBundle, to: currentAppURL)
+        } catch {
+            // Rollback
+            try? fm.moveItem(at: backupPath, to: currentAppURL)
+            completion(.failure(NSError(domain: "UpdateChecker", code: 8,
+                                       userInfo: [NSLocalizedDescriptionKey: "Failed to install update, rolled back: \(error.localizedDescription)"])))
+            try? fm.removeItem(at: extractDir)
+            return
+        }
+
+        // 6. Remove quarantine
+        let xattrProc = Process()
+        xattrProc.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        xattrProc.arguments = ["-cr", currentAppPath]
+        try? xattrProc.run()
+        xattrProc.waitUntilExit()
+
+        // Cleanup
+        try? fm.removeItem(at: extractDir)
+        try? fm.removeItem(at: zipPath)
+        try? fm.removeItem(at: backupPath)
+
+        // 7. Save session before relaunch
+        if let delegate = NSApp.delegate as? AppDelegate {
+            delegate.saveSession()
+        }
+
+        // 8. Prepare relaunch command (supports .app and dev-binary)
+        let relaunchCmd: String
+        if currentAppPath.hasSuffix(".app") {
+            relaunchCmd = "open \"\(currentAppPath)\""
+        } else {
+            relaunchCmd = "\"\(ProcessInfo.processInfo.arguments[0])\""
+        }
+
+        completion(.success(()))
+
+        // 9. Show SUCCESS toast for 3s, then relaunch + exit
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            let shellProc = Process()
+            shellProc.executableURL = URL(fileURLWithPath: "/bin/sh")
+            shellProc.arguments = ["-c", "sleep 0.3; \(relaunchCmd)"]
+            try? shellProc.run()
+            exit(0)
+        }
+    }
+
+    private func findAppBundle(in directory: URL) -> URL? {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(at: directory, includingPropertiesForKeys: [.isDirectoryKey],
+                                              options: [.skipsHiddenFiles]) else { return nil }
+        for case let fileURL as URL in enumerator {
+            if fileURL.pathExtension == "app" {
+                let vals = try? fileURL.resourceValues(forKeys: [.isDirectoryKey])
+                if vals?.isDirectory == true { return fileURL }
+            }
+        }
+        return nil
+    }
+}
+
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -7741,6 +8031,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var visualEffect: NSVisualEffectView!
     var isAnimating = false
     var lastHideTime: TimeInterval = 0  // suppress hover-activate right after hiding
+    let updateChecker = UpdateChecker()
+    var pendingRelease: GitHubRelease?
+    var updateCheckTimer: Timer?
+
+    /// True if any TerminalView (primary or split secondary) has an active drag session
+    private var isAnyDragSessionActive: Bool {
+        termViews.contains { $0.isDragSessionActive } ||
+        splitContainers.contains { $0.secondaryView?.isDragSessionActive == true }
+    }
+
+    /// The user's configured window opacity, falling back to 1.0
+    private var effectiveOpacity: CGFloat {
+        let base = CGFloat(UserDefaults.standard.double(forKey: "windowOpacity"))
+        return base > 0.01 ? base : 1.0
+    }
+
+    /// Animate window to full (undimmed) opacity
+    private func restoreWindowOpacity() {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().alphaValue = effectiveOpacity
+        }
+    }
     var headerView: HeaderBarView!
     var footerView: FooterBarView!
     var footerTimer: Timer?
@@ -7794,21 +8108,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // One-time prompt for Full Disk Access
         requestFullDiskAccessIfNeeded()
 
-        // Register default settings
-        UserDefaults.standard.register(defaults: [
-            "windowOpacity": 0.99,
-            "blurIntensity": 0.96,
-            "terminalFontSize": 10.0,
-            "cursorStyle": 0,
-            "defaultShellIndex": 0,
-            "alwaysOnTop": true,
-            "hideOnClickOutside": true,
-            "hideOnDeactivate": false,
-            "copyOnSelect": true,
-            "cursorBlink": false,
-            "syntaxHighlighting": true,
-            "promptTheme": "default",
-        ])
+        // Register default settings (single source of truth in SettingsOverlay.defaultSettings)
+        UserDefaults.standard.register(defaults: SettingsOverlay.defaultSettings)
 
         // Menu bar icon — custom drawn >_ prompt
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -8003,6 +8304,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         window.contentView?.addSubview(footerView)
 
+        // Version label — just above footer, bottom-right, low z so terminal text covers it
+        let verLabel = NSTextField(labelWithString: "v\(kAppVersion)")
+        verLabel.font = NSFont.monospacedSystemFont(ofSize: 8, weight: .light)
+        verLabel.textColor = NSColor(calibratedWhite: 0.3, alpha: 1.0)
+        verLabel.isBezeled = false
+        verLabel.drawsBackground = false
+        verLabel.isEditable = false
+        verLabel.isSelectable = false
+        verLabel.sizeToFit()
+        verLabel.frame.origin = NSPoint(x: bounds.width - verLabel.frame.width - 12, y: footerH + 2)
+        verLabel.autoresizingMask = [.minXMargin, .maxYMargin]
+        verLabel.wantsLayer = true
+        verLabel.layer?.zPosition = 1  // above background, below terminal content
+        window.contentView?.addSubview(verLabel)
+
         // Restore previous session or create first tab
         if !restoreSession() {
             addTab()
@@ -8014,6 +8330,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.updateHeaderTabs()
         }
         updateFooter()
+
+        // Auto-check for updates: 3s after launch, then every 72h
+        scheduleUpdateCheck(initialDelay: 3.0)
+
 
         // Global hotkey: Ctrl+< to toggle window (Carbon API — works system-wide)
         // keyCode 50 = the < key (ISO keyboard, left of Y/Z)
@@ -8267,12 +8587,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if let sec = sc.secondaryView { sec.userCursorStyle = style; sec.setNeedsDisplay(sec.bounds) }
             }
         case "alwaysOnTop":
-            if let v = value as? Bool { window.level = v ? .floating : .normal }
+            if let v = value as? Bool {
+                window.level = v ? .floating : .normal
+                if v {
+                    // Auto-disable hide on deactivate — they conflict logically
+                    UserDefaults.standard.set(false, forKey: "hideOnDeactivate")
+                    if let overlay = settingsOverlay {
+                        updateToggleInOverlay(overlay, key: "hideOnDeactivate", value: false)
+                    }
+                }
+            }
+        case "autoDim":
+            if let on = value as? Bool, !on, !window.isKeyWindow {
+                restoreWindowOpacity()
+            }
         case "hideOnClickOutside":
             guard let on = value as? Bool else { return }
             if on && globalClickMonitor == nil && window.isVisible {
                 globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
                     guard let self = self, self.window.isVisible else { return }
+                    if self.isAnyDragSessionActive { return }
+                    // Don't hide when clicking on the menu bar
+                    let clickLocation = event.locationInWindow
+                    if let screen = NSScreen.screens.first(where: { NSMouseInRect(clickLocation, $0.frame, false) }) {
+                        if clickLocation.y >= screen.visibleFrame.maxY { return }
+                    }
                     self.hideWindowAnimated()
                 }
             } else if !on, let monitor = globalClickMonitor {
@@ -8678,6 +9017,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             PaletteCommand(title: "Split Horizontal", shortcut: "\u{21E7}\u{2318}D") { [weak self] in self?.toggleSplit(vertical: false) },
             PaletteCommand(title: "Reset Window", shortcut: "") { [weak self] in self?.resetWindowSize() },
             PaletteCommand(title: "Always on Top (\(onOff("alwaysOnTop")))", shortcut: "") { [weak self] in self?.promptToggle("Always on Top", key: "alwaysOnTop") },
+            PaletteCommand(title: "Auto-Dim (\(onOff("autoDim")))", shortcut: "") { [weak self] in self?.promptToggle("Auto-Dim", key: "autoDim") },
             PaletteCommand(title: "Clear", shortcut: "\u{2318}K") { [weak self] in
                 guard let self = self, !self.termViews.isEmpty else { return }
                 self.termViews[self.activeTab].clearScrollback(nil)
@@ -8728,6 +9068,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             PaletteCommand(title: "Search", shortcut: "") { [weak self] in self?.startScrollbackSearch() },
             PaletteCommand(title: "Perf", shortcut: "") { [weak self] in self?.togglePerfOverlay() },
             PaletteCommand(title: "Parser", shortcut: "") { [weak self] in self?.toggleParserOverlay() },
+            // Update commands
+            PaletteCommand(title: "Check for Updates", shortcut: "") { [weak self] in self?.manualCheckForUpdate() },
+            PaletteCommand(title: pendingRelease != nil ? "Install Update (\(pendingRelease!.tagName))" : "Install Update", shortcut: "") { [weak self] in
+                guard let self = self, let release = self.pendingRelease else {
+                    self?.showGenericToast(badge: "UPDATE", text: "No update available", badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0))
+                    return
+                }
+                self.startUpdateDownload(release: release)
+            },
+            PaletteCommand(title: "Auto-Check Updates (\(onOff("autoCheckUpdates")))", shortcut: "") { [weak self] in self?.promptToggle("Auto-Check Updates", key: "autoCheckUpdates") },
         ]
     }
 
@@ -8975,6 +9325,291 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    // MARK: - Update Toasts
+
+    func showGenericToast(badge badgeStr: String, text queryStr: String,
+                          badgeColor: NSColor, dismissAfter: TimeInterval = 6.0,
+                          identifier: String = "updateToast") {
+        guard let contentView = window.contentView else { return }
+        contentView.subviews.filter { $0.identifier == NSUserInterfaceItemIdentifier(identifier) }.forEach { $0.removeFromSuperview() }
+
+        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        let toastH: CGFloat = 30
+        let padOuter: CGFloat = 10
+        let padInner: CGFloat = 8
+        let badgePadX: CGFloat = 7
+        let badgeH: CGFloat = 18
+        let badgeR: CGFloat = 4
+
+        let badgeTextSz = (badgeStr as NSString).size(withAttributes: [.font: font])
+        let queryTextSz = (queryStr as NSString).size(withAttributes: [.font: font])
+        let badgeW = ceil(badgeTextSz.width) + badgePadX * 2
+        let totalW = padOuter + badgeW + padInner + ceil(queryTextSz.width) + padOuter
+
+        let toast = NSView(frame: NSRect(
+            x: round((contentView.bounds.width - totalW) / 2),
+            y: contentView.bounds.height - toastH - 48,
+            width: totalW, height: toastH))
+        toast.identifier = NSUserInterfaceItemIdentifier(identifier)
+        toast.wantsLayer = true
+        toast.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.93).cgColor
+        toast.layer?.cornerRadius = 4
+        toast.layer?.borderWidth = 0.5
+        toast.layer?.borderColor = NSColor(calibratedWhite: 0.28, alpha: 0.5).cgColor
+        toast.layer?.zPosition = 99999
+
+        let badgeY = round((toastH - badgeH) / 2)
+        let bv = NSView(frame: NSRect(x: padOuter, y: badgeY, width: badgeW, height: badgeH))
+        bv.wantsLayer = true
+        bv.layer?.backgroundColor = badgeColor.cgColor
+        bv.layer?.cornerRadius = badgeR
+
+        let badgeLbl = NSTextField(labelWithString: badgeStr)
+        badgeLbl.font = font
+        badgeLbl.textColor = .white
+        badgeLbl.alignment = .center
+        badgeLbl.isBezeled = false
+        badgeLbl.drawsBackground = false
+        badgeLbl.isEditable = false
+        let badgeLblH = ceil(badgeTextSz.height)
+        badgeLbl.frame = NSRect(x: 0, y: round((badgeH - badgeLblH) / 2), width: badgeW, height: badgeLblH)
+        bv.addSubview(badgeLbl)
+        toast.addSubview(bv)
+
+        let queryLbl = NSTextField(labelWithString: queryStr)
+        queryLbl.font = font
+        queryLbl.textColor = NSColor(calibratedWhite: 0.62, alpha: 1.0)
+        queryLbl.isBezeled = false
+        queryLbl.drawsBackground = false
+        queryLbl.isEditable = false
+        let queryLblH = ceil(queryTextSz.height)
+        queryLbl.frame = NSRect(
+            x: padOuter + badgeW + padInner,
+            y: round((toastH - queryLblH) / 2),
+            width: ceil(queryTextSz.width), height: queryLblH)
+        toast.addSubview(queryLbl)
+
+        toast.alphaValue = 0
+        contentView.addSubview(toast)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            toast.animator().alphaValue = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + dismissAfter) {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.4
+                toast.animator().alphaValue = 0
+            }, completionHandler: {
+                toast.removeFromSuperview()
+            })
+        }
+    }
+
+    func showUpdateToast(version: String) {
+        let v = version.hasPrefix("v") ? version : "v\(version)"
+        showGenericToast(badge: "UPDATE", text: "\(v) available",
+                         badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0),
+                         dismissAfter: 8.0)
+    }
+
+    func showDownloadProgressToast(percent: Double) {
+        guard let contentView = window.contentView else { return }
+        let identifier = "downloadProgressToast"
+
+        // Dismiss any existing generic/update toasts first
+        for id in ["updateToast", "searchToast"] {
+            contentView.subviews.filter { $0.identifier == NSUserInterfaceItemIdentifier(id) }.forEach { $0.removeFromSuperview() }
+        }
+        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
+        let toastH: CGFloat = 34
+        let padOuter: CGFloat = 10
+        let padInner: CGFloat = 8
+        let badgePadX: CGFloat = 7
+        let badgeH: CGFloat = 18
+        let badgeR: CGFloat = 4
+        let progressH: CGFloat = 3
+
+        let pctStr = "\(Int(percent * 100))%"
+        let msgStr = "Downloading update…"
+
+        let badgeTextSz = (pctStr as NSString).size(withAttributes: [.font: font])
+        let msgTextSz = (msgStr as NSString).size(withAttributes: [.font: font])
+        let badgeW = ceil(badgeTextSz.width) + badgePadX * 2
+        let totalW = padOuter + badgeW + padInner + ceil(msgTextSz.width) + padOuter
+
+        // Reuse existing toast or create new
+        let existing = contentView.subviews.first { $0.identifier == NSUserInterfaceItemIdentifier(identifier) }
+        let toast: NSView
+        if let existing = existing {
+            toast = existing
+            // Update badge text
+            if let bv = toast.subviews.first, let lbl = bv.subviews.first as? NSTextField {
+                lbl.stringValue = pctStr
+            }
+            // Update progress bar
+            if let bar = toast.subviews.first(where: { $0.identifier == NSUserInterfaceItemIdentifier("progressBar") }) {
+                bar.frame.size.width = (toast.bounds.width - 2) * CGFloat(percent)
+            }
+            return
+        }
+
+        toast = NSView(frame: NSRect(
+            x: round((contentView.bounds.width - totalW) / 2),
+            y: contentView.bounds.height - toastH - 48,
+            width: totalW, height: toastH))
+        toast.identifier = NSUserInterfaceItemIdentifier(identifier)
+        toast.wantsLayer = true
+        toast.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.93).cgColor
+        toast.layer?.cornerRadius = 4
+        toast.layer?.borderWidth = 0.5
+        toast.layer?.borderColor = NSColor(calibratedWhite: 0.28, alpha: 0.5).cgColor
+        toast.layer?.zPosition = 99999
+
+        let badgeY = round(((toastH - progressH) - badgeH) / 2)
+        let bv = NSView(frame: NSRect(x: padOuter, y: badgeY, width: badgeW, height: badgeH))
+        bv.wantsLayer = true
+        bv.layer?.backgroundColor = NSColor(calibratedRed: 0.2, green: 0.5, blue: 0.85, alpha: 1.0).cgColor
+        bv.layer?.cornerRadius = badgeR
+
+        let badgeLbl = NSTextField(labelWithString: pctStr)
+        badgeLbl.font = font
+        badgeLbl.textColor = .white
+        badgeLbl.alignment = .center
+        badgeLbl.isBezeled = false
+        badgeLbl.drawsBackground = false
+        badgeLbl.isEditable = false
+        let badgeLblH = ceil(badgeTextSz.height)
+        badgeLbl.frame = NSRect(x: 0, y: round((badgeH - badgeLblH) / 2), width: badgeW, height: badgeLblH)
+        bv.addSubview(badgeLbl)
+        toast.addSubview(bv)
+
+        let msgLbl = NSTextField(labelWithString: msgStr)
+        msgLbl.font = font
+        msgLbl.textColor = NSColor(calibratedWhite: 0.62, alpha: 1.0)
+        msgLbl.isBezeled = false
+        msgLbl.drawsBackground = false
+        msgLbl.isEditable = false
+        let msgLblH = ceil(msgTextSz.height)
+        msgLbl.frame = NSRect(
+            x: padOuter + badgeW + padInner,
+            y: round(((toastH - progressH) - msgLblH) / 2),
+            width: ceil(msgTextSz.width), height: msgLblH)
+        toast.addSubview(msgLbl)
+
+        // Progress bar at bottom
+        let progressBg = NSView(frame: NSRect(x: 1, y: 1, width: totalW - 2, height: progressH))
+        progressBg.wantsLayer = true
+        progressBg.layer?.backgroundColor = NSColor(calibratedWhite: 0.15, alpha: 1.0).cgColor
+        progressBg.layer?.cornerRadius = progressH / 2
+        toast.addSubview(progressBg)
+
+        let progressBar = NSView(frame: NSRect(x: 1, y: 1, width: (totalW - 2) * CGFloat(percent), height: progressH))
+        progressBar.identifier = NSUserInterfaceItemIdentifier("progressBar")
+        progressBar.wantsLayer = true
+        progressBar.layer?.backgroundColor = NSColor(calibratedRed: 0.2, green: 0.5, blue: 0.85, alpha: 1.0).cgColor
+        progressBar.layer?.cornerRadius = progressH / 2
+        toast.addSubview(progressBar)
+
+        toast.alphaValue = 0
+        contentView.addSubview(toast)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            toast.animator().alphaValue = 1
+        }
+    }
+
+    func dismissDownloadProgressToast() {
+        guard let contentView = window.contentView else { return }
+        if let toast = contentView.subviews.first(where: { $0.identifier == NSUserInterfaceItemIdentifier("downloadProgressToast") }) {
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.3
+                toast.animator().alphaValue = 0
+            }, completionHandler: {
+                toast.removeFromSuperview()
+            })
+        }
+    }
+
+    func scheduleUpdateCheck(initialDelay: TimeInterval) {
+        updateCheckTimer?.invalidate()
+        guard UserDefaults.standard.bool(forKey: "autoCheckUpdates") else { return }
+        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
+
+        let interval: TimeInterval = 72 * 60 * 60  // 72 hours
+
+        // Initial check after short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + initialDelay) { [weak self] in
+            self?.silentUpdateCheck()
+        }
+
+        // Repeating timer for long-running sessions
+        updateCheckTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self?.silentUpdateCheck()
+        }
+    }
+
+    private func silentUpdateCheck() {
+        guard UserDefaults.standard.bool(forKey: "autoCheckUpdates") else { return }
+        updateChecker.checkForUpdate { [weak self] result in
+            if case .success(let release) = result, let release = release {
+                self?.pendingRelease = release
+                self?.showUpdateToast(version: release.tagName)
+            }
+        }
+    }
+
+    func manualCheckForUpdate() {
+        // Dev-build guard
+        guard Bundle.main.bundlePath.hasSuffix(".app") else {
+            showGenericToast(badge: "UPDATE", text: "Only works with .app bundle",
+                             badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0))
+            return
+        }
+
+        showGenericToast(badge: "UPDATE", text: "Checking…",
+                         badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0), dismissAfter: 3.0)
+
+        updateChecker.checkForUpdate { [weak self] result in
+            guard let self = self else { return }
+            switch result {
+            case .success(let release):
+                if let release = release {
+                    self.pendingRelease = release
+                    self.showUpdateToast(version: release.tagName)
+                } else {
+                    self.showGenericToast(badge: "UPDATE", text: "Already up to date (v\(kAppVersion))",
+                                          badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0))
+                }
+            case .failure:
+                self.showGenericToast(badge: "UPDATE", text: "Check failed — try again later",
+                                      badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0))
+            }
+        }
+    }
+
+    func startUpdateDownload(release: GitHubRelease) {
+        showDownloadProgressToast(percent: 0)
+        updateChecker.downloadAndInstall(release: release, onProgress: { [weak self] pct in
+            self?.showDownloadProgressToast(percent: pct)
+        }, onComplete: { [weak self] result in
+            guard let self = self else { return }
+            self.dismissDownloadProgressToast()
+            switch result {
+            case .success:
+                // SUCCESS toast (matching dummy design)
+                self.showGenericToast(badge: "SUCCESS", text: "Update installed — restarting…",
+                                      badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0),
+                                      dismissAfter: 3.0)
+                // Note: installUpdate already handles saveSession + relaunch + exit
+            case .failure(let error):
+                self.showGenericToast(badge: "ERROR", text: error.localizedDescription,
+                                      badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
+                                      dismissAfter: 8.0)
+            }
+        })
+    }
+
     func resetWindowSize() {
         let defaultSize = NSSize(width: 720, height: 480)
         var newFrame = window.frame
@@ -9196,6 +9831,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if hideOnClick {
             globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
                 guard let self = self, self.window.isVisible else { return }
+                if self.isAnyDragSessionActive { return }
                 // Don't hide when clicking on the menu bar (other tray icons, menus, etc.)
                 let clickLocation = event.locationInWindow // screen coordinates for global events
                 if let screen = NSScreen.screens.first(where: { NSMouseInRect(clickLocation, $0.frame, false) }) {
@@ -9277,23 +9913,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         guard !isAnimating else { return }
-        let base = CGFloat(UserDefaults.standard.double(forKey: "windowOpacity"))
-        let target = base > 0.01 ? base : 1.0
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            window.animator().alphaValue = target
-        }
+        guard UserDefaults.standard.bool(forKey: "autoDim") else { return }
+        restoreWindowOpacity()
     }
 
     func windowDidResignKey(_ notification: Notification) {
         guard !isAnimating, window.isVisible else { return }
-        let base = CGFloat(UserDefaults.standard.double(forKey: "windowOpacity"))
-        let active = base > 0.01 ? base : 1.0
+        guard UserDefaults.standard.bool(forKey: "autoDim") else { return }
+        if isAnyDragSessionActive { return }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            window.animator().alphaValue = active * 0.55
+            window.animator().alphaValue = effectiveOpacity * 0.55
         }
     }
 
@@ -9429,6 +10060,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidResignActive(_ notification: Notification) {
         // Always dismiss palette when app loses focus
         if let p = commandPalette, p.superview != nil { p.dismiss() }
+        if isAnyDragSessionActive { return }
         let hideOnDeactivate = UserDefaults.standard.bool(forKey: "hideOnDeactivate")
         if hideOnDeactivate && window.isVisible {
             // Don't hide if the user clicked on the menu bar (other tray icons, menus, etc.)

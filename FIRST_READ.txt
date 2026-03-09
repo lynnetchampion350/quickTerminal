@@ -50,9 +50,19 @@
   Double-tap Ctrl to open the quickBAR command palette.
 
 
+  UPDATES
+  ───────
+
+  quickTERMINAL checks for updates automatically every 72 hours.
+  You can also check manually via quickBAR → "Check for Updates".
+  Updates preserve all your tabs, splits, settings, and working directories.
+
+
   MORE INFO
   ─────────
 
-  GitHub:  https://github.com/LEVOGNE/quickTerminal
-  License: MIT
+  GitHub:   https://github.com/LEVOGNE/quickTerminal
+  License:  Free for personal use, commercial license required for businesses
+            See LICENSE file for details
+  Author:   LEVOGNE — Levent Ersen (l.ersen@icloud.com)
 

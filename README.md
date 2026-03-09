@@ -4,34 +4,25 @@
 
 <br>
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  * o o                 quickTERMINAL                     │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│  $ swift build quickTerminal.swift                       │
-│  > 9500 lines | 1 file | 4.8 MB app | 0 dependencies     │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-```
+<img src="quickTERMINAL.png" width="700" alt="quickTERMINAL Screenshot">
 
 <br>
 
 **A blazing-fast, single-file terminal emulator for macOS.**
 
-*Zero dependencies. Pure Swift. Lives in your menu bar. 4.8 MB app bundle (1.3 MB binary).*
+*Zero dependencies. Pure Swift. Lives in your menu bar. Built-in auto-updater. 4.8 MB app bundle.*
 
 <br>
 
 ![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?style=for-the-badge&logo=swift&logoColor=white)
-![Lines](https://img.shields.io/badge/9500%2B_Lines-One_File-blue?style=for-the-badge)
+![Lines](https://img.shields.io/badge/10000%2B_Lines-One_File-blue?style=for-the-badge)
 ![App](https://img.shields.io/badge/App-4.8_MB-purple?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-Free_for_Personal_Use-green?style=for-the-badge)
 
 <br>
 
-[**Download quickTerminal.app (v1.0.0)**](https://github.com/LEVOGNE/quickTerminal/releases/latest)
+[**Download quickTerminal.app (v1.1.0)**](https://github.com/LEVOGNE/quickTerminal/releases/latest)
 
 ---
 
@@ -41,7 +32,7 @@
 
 > **Download → Unzip → Remove Quarantine → Done.**
 
-1. Download [`quickTerminal-v1.0.0-macos.zip`](https://github.com/LEVOGNE/quickTerminal/releases/latest) (2.9 MB)
+1. Download [`quickTerminal.zip`](https://github.com/LEVOGNE/quickTerminal/releases/latest)
 2. Unzip and move `quickTerminal.app` to `/Applications/`
 
 > [!CAUTION]
@@ -73,7 +64,7 @@
 ## Why quickTERMINAL?
 
 > [!IMPORTANT]
-> **9500+ lines. One file. 4.8 MB app. Full terminal emulation.**
+> **10000+ lines. One file. 4.8 MB app. Full terminal emulation.**
 >
 > No Electron. No WebView. No libvte. No SwiftTerm.
 > Written from scratch with a hand-rolled VT parser, direct PTY management,
@@ -147,6 +138,7 @@
 | :question: | **Mode Query** | DECRQM — query private and ANSI terminal modes |
 | :wheelchair: | **Accessibility** | VoiceOver support — screen reader access to terminal content |
 | :bar_chart: | **Diagnostics** | Built-in performance monitor and parser state viewer |
+| :arrows_counterclockwise: | **Auto-Update** | Built-in update system — checks GitHub Releases every 72h, downloads + installs + restarts seamlessly |
 
 <br>
 
@@ -297,8 +289,11 @@ IND  NEL  HTS  RI  DCS  CSI  OSC  ST (8-bit C1)
 | :floppy_disk: | **Session Restore** | Tabs, shells, splits, directories restored on restart |
 | :lock: | **Single Instance** | File lock prevents duplicate processes |
 | :pushpin: | **Always on Top** | Pin window above all others |
+| :low_brightness: | **Auto-Dim** | Dims window when unfocused (off by default) |
 | :electric_plug: | **Auto-Start** | Launch at login via LaunchAgent |
+| :open_file_folder: | **Drag & Drop** | Drag files/images into terminal — pastes shell-escaped path |
 | :shield: | **Crash Reporting** | Automatic crash logs to `~/.quickterminal/crash.log` |
+| :arrows_counterclockwise: | **Auto-Update** | Checks GitHub Releases every 72h, one-click install with progress bar, session-preserving restart |
 
 <br>
 
@@ -457,11 +452,21 @@ Each shell gets:
 | **Font (Fira Code)** | Choice | Fira Code, JetBrains Mono, Monocraft, Iosevka Thin |
 | **Shell (zsh)** | Choice | zsh, bash, sh |
 | **Always on Top (on/off)** | Toggle | — |
+| **Auto-Dim (on/off)** | Toggle | — |
 | **Syntax Highlighting (on/off)** | Toggle | — |
 | **Copy on Select (on/off)** | Toggle | — |
 | **Hide on Click Outside (on/off)** | Toggle | — |
 | **Hide on Deactivate (on/off)** | Toggle | — |
 | **Launch at Login (on/off)** | Toggle | — |
+| **Auto-Check Updates (on/off)** | Toggle | — |
+
+### Update
+
+| Command | Action |
+|---|---|
+| **Check for Updates** | Manually check GitHub for a new version |
+| **Install Update (vX.Y.Z)** | Download and install available update (appears dynamically) |
+| **Auto-Check Updates (on/off)** | Toggle automatic update checks (every 72h) |
 
 ### Tools
 
@@ -511,11 +516,14 @@ Each shell gets:
 | Cursor Style | Underline / Beam / Block | Underline |
 | Syntax Highlighting | On/Off | On |
 | Prompt Theme | 7 themes | default |
+| **Window** | | |
 | Always on Top | On/Off | On |
-| Hide on Click Outside | On/Off | On |
+| Auto-Dim | On/Off | Off |
+| Hide on Click Outside | On/Off | Off |
 | Hide on Deactivate | On/Off | Off |
 | Copy on Select | On/Off | On |
 | Auto-Start at Login | On/Off | Off |
+| Auto-Check Updates | On/Off | On |
 
 <br>
 
@@ -535,7 +543,7 @@ quickTerminal.app (4.8 MB)
 │   │   └── AppIcon.icns ··········· app icon (16px–1024px)
 │   └── Info.plist ················· LSUIElement=true (menu bar app)
 
-quickTerminal.swift (single file, ~9500 lines)
+quickTerminal.swift (single file, ~10000 lines)
 │
 ├── Terminal ·················· VT parser + state machine + grid
 │   ├── Cell ················· Character + attributes + width + hyperlink
@@ -551,20 +559,26 @@ quickTerminal.swift (single file, ~9500 lines)
 │   ├── Keyboard ············· Full key encoding + Kitty protocol
 │   └── Accessibility ········ VoiceOver / screen reader support
 │
+├── UpdateChecker ············· Auto-update system
+│   ├── GitHub API ··········· Check releases every 72h
+│   ├── Download ············· Progress-tracked ZIP download
+│   └── Self-replace ········· Unzip, swap .app, rollback on failure, restart
+│
 ├── AppDelegate ··············· Window, tabs, splits, settings
 │   ├── BorderlessWindow ····· Custom shape + popover arrow
 │   ├── HeaderBarView ········ Tab bar + add button
 │   ├── FooterBarView ········ Shell buttons + git branch + badges
 │   ├── SettingsOverlay ······ Preferences UI
-│   ├── CommandPaletteView ··· quickBAR — 37 commands with inline prompts
+│   ├── CommandPaletteView ··· quickBAR — 40 commands with inline prompts
 │   ├── HelpViewer ··········· Cinema-scroll markdown viewer
 │   ├── DiagnosticsOverlay ··· Performance monitor + parser state viewer
 │   ├── SplitContainer ······· Vertical/horizontal split panes
 │   └── Scrollback Search ···· Full-text search with match highlighting
 │
-└── Build
-    bash build_app.sh → quickTerminal.app (4.8 MB)
-    bash build.sh     → quickTerminal binary (1.3 MB)
+└── Build Pipeline
+    bash build.sh     → quickTerminal binary (local testing)
+    bash build_app.sh → quickTerminal.app (4.8 MB bundle)
+    bash build_zip.sh → quickTerminal.zip (GitHub Release)
 ```
 
 > [!IMPORTANT]
@@ -578,11 +592,16 @@ quickTerminal.swift (single file, ~9500 lines)
 ## Build
 
 ```bash
-# Build
+# 1. Local testing
 bash build.sh
-
-# Run
 ./quickTerminal
+
+# 2. App bundle (icon, fonts, shell configs)
+bash build_app.sh
+open quickTerminal.app
+
+# 3. GitHub Release package (.app + install.sh + FIRST_READ.txt + LICENSE + README)
+bash build_zip.sh
 ```
 
 > [!NOTE]
@@ -591,20 +610,7 @@ bash build.sh
 > - Swift toolchain (included with Xcode or Command Line Tools)
 > - Frameworks: Cocoa, Carbon
 
-### App Bundle
-
-```bash
-# Build .app bundle (with icon, fonts, shell configs)
-bash build_app.sh
-
-# Run
-open quickTerminal.app
-
-# Install
-cp -R quickTerminal.app /Applications/
-```
-
-The `.app` bundle (4.8 MB) includes everything — binary, icon, 4 terminal-optimized fonts, shell configs, and prompt themes. Distribute as a single file.
+The `.app` bundle (4.8 MB) includes everything — binary, icon, 4 terminal-optimized fonts, shell configs, and prompt themes. The `.zip` adds the installer script and documentation for end users.
 
 <br>
 
@@ -627,11 +633,14 @@ The `.app` bundle (4.8 MB) includes everything — binary, icon, 4 terminal-opti
 
 ## Open Source
 
-quickTERMINAL is open source under the [MIT License](./LICENSE).
+quickTERMINAL is source-available with a dual license:
 
-> [!WARNING]
-> Current status: **Release Candidate**.
-> The project is stable and feature-complete. All P1/P2 issues from code review resolved.
+- **Personal & non-commercial use** — free and open
+- **Commercial use** — requires a paid license
+
+See [LICENSE](./LICENSE) for details. Contact: **l.ersen@icloud.com**
+
+> **10000+ lines of Swift. One file. Zero dependencies. 4.8 MB app. Full VT emulation + auto-updater.**
 
 ### Contributing
 
@@ -656,21 +665,21 @@ Planned milestones are tracked in [ROADMAP.md](./ROADMAP.md).
 
 This project follows [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
-### License
-
-MIT. See [LICENSE](./LICENSE).
-
 <br>
 
 ---
 
 <div align="center">
 
-### quickTERMINAL v1.0.0
+<img src="icon.png" width="64" alt="quickTERMINAL">
+
+### quickTERMINAL v1.1.0
+
+*10000+ lines. One file. Zero dependencies. Built-in auto-updater.*
 
 *Built with obsessive attention to every escape sequence, every pixel, every frame.*
 
-*Because a terminal should be fast, beautiful, and yours.*
+*Copyright (c) 2026 LEVOGNE — Levent Ersen*
 
 <br>
 
