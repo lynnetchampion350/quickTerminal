@@ -6,10 +6,11 @@ import Carbon
 import Darwin
 import Darwin.POSIX
 import Security
+import AVKit
 
 // MARK: - Version
 
-let kAppVersion = "1.2.1"
+let kAppVersion = "1.3.0"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -215,6 +216,7 @@ class Terminal {
     var savedUseG1 = false
     var savedOriginMode = false
     var savedAutoWrap = true
+    var savedPendingWrap = false
     var scrollTop = 0
     var scrollBottom: Int
     var scrollback: [[Cell]] = []
@@ -226,6 +228,7 @@ class Terminal {
     var appCursorMode = false
     var appKeypadMode = false
     var autoWrapMode = true
+    var pendingWrap = false   // deferred wrap: set when char fills last column, wrap on next printable
     var originMode = false
     var reverseVideoMode = false
     var leftRightMarginMode = false
@@ -339,6 +342,7 @@ class Terminal {
     }
 
     func advanceToNextTab() {
+        pendingWrap = false
         for x in (cursorX + 1)..<cols {
             if tabStops.contains(x) { cursorX = x; return }
         }
@@ -409,10 +413,10 @@ class Terminal {
                 // ESC always starts a new escape sequence, aborting current
                 pstate = .esc; return
             case 0x07: return // BEL — ignore in non-OSC states
-            case 0x08: cursorX = max(0, cursorX - 1); return
+            case 0x08: cursorX = max(0, cursorX - 1); pendingWrap = false; return
             case 0x09: advanceToNextTab(); return
             case 0x0A, 0x0B, 0x0C: lf(); return
-            case 0x0D: cursorX = 0; return
+            case 0x0D: cursorX = 0; pendingWrap = false; return
             case 0x0E: useG1 = true; return   // SO — shift out (activate G1)
             case 0x0F: useG1 = false; return  // SI — shift in (activate G0)
             default: return // other C0 — ignore
@@ -459,12 +463,14 @@ class Terminal {
                 savedAttrs = attrs; savedG0IsGraphics = charsetG0IsGraphics
                 savedG1IsGraphics = charsetG1IsGraphics; savedUseG1 = useG1
                 savedOriginMode = originMode; savedAutoWrap = autoWrapMode
+                savedPendingWrap = pendingWrap
                 pstate = .ground
             case 0x38: // ESC 8 — DECRC (restore cursor + attrs)
                 cursorX = savedX; cursorY = savedY
                 attrs = savedAttrs; charsetG0IsGraphics = savedG0IsGraphics
                 charsetG1IsGraphics = savedG1IsGraphics; useG1 = savedUseG1
                 originMode = savedOriginMode; autoWrapMode = savedAutoWrap
+                pendingWrap = savedPendingWrap
                 pstate = .ground
             case 0x44: lf(); pstate = .ground                                     // ESC D — index (IND)
             case 0x4D: rlf(); pstate = .ground                                    // ESC M — reverse index (RI)
@@ -672,12 +678,12 @@ class Terminal {
             return
         }
         let isWide = (w == 2)
-        // Auto-wrap: if cursor is past the right edge, wrap to next line
-        if autoWrapMode && cursorX >= eCols { cursorX = 0; lf() }
+        // Deferred wrap: if pending wrap flag is set, wrap now before placing next printable char
+        if pendingWrap && autoWrapMode { cursorX = 0; pendingWrap = false; lf() }
         // Wide char at last column: wrap early (can't fit 2 cells)
         if isWide && autoWrapMode && cursorX == eCols - 1 {
             grid[cursorY][cursorX] = Cell(char: " ", attrs: attrs, width: 1)
-            cursorX = 0; lf()
+            cursorX = 0; pendingWrap = false; lf()
         }
         guard cursorY >= 0, cursorY < rows, cursorX >= 0, cursorX < cols else { return }
         // IRM: insert mode — shift cells right before writing
@@ -699,6 +705,8 @@ class Terminal {
             lastChar = s
             cursorX += 1
         }
+        // If cursor reached right margin, set pending wrap instead of advancing past it
+        if cursorX >= eCols { cursorX = eCols - 1; pendingWrap = true }
     }
 
     func lf() {
@@ -778,7 +786,7 @@ class Terminal {
         scrollTop = 0; scrollBottom = rows - 1
         leftRightMarginMode = false; leftMargin = 0; rightMargin = cols - 1
         insertMode = false
-        appCursorMode = false; appKeypadMode = false; bracketedPasteMode = false; autoWrapMode = true; originMode = false; reverseVideoMode = false
+        appCursorMode = false; appKeypadMode = false; bracketedPasteMode = false; autoWrapMode = true; pendingWrap = false; originMode = false; reverseVideoMode = false
         cursorVisible = true; cursorStyle = 0
         mouseMode = 0; mouseEncoding = 0; focusReportingMode = false
         synchronizedOutput = false
@@ -1097,13 +1105,13 @@ class Terminal {
         let n = p.first ?? 0
         switch f {
         case 0x40: insertChars(max(1, n))                                         // @ — ICH
-        case 0x41: cursorY = max(scrollTop, cursorY - max(1, n))                  // A — CUU
-        case 0x42: cursorY = min(scrollBottom, cursorY + max(1, n))               // B — CUD
-        case 0x43: cursorX = min(cols - 1, cursorX + max(1, n))                   // C — CUF
-        case 0x44: cursorX = max(0, cursorX - max(1, n))                          // D — CUB
-        case 0x45: cursorX = 0; cursorY = min(scrollBottom, cursorY + max(1, n))  // E — CNL
-        case 0x46: cursorX = 0; cursorY = max(scrollTop, cursorY - max(1, n))     // F — CPL
-        case 0x47: cursorX = max(0, min(cols - 1, (n > 0 ? n : 1) - 1))          // G — CHA
+        case 0x41: cursorY = max(scrollTop, cursorY - max(1, n)); pendingWrap = false  // A — CUU
+        case 0x42: cursorY = min(scrollBottom, cursorY + max(1, n)); pendingWrap = false  // B — CUD
+        case 0x43: cursorX = min(cols - 1, cursorX + max(1, n)); pendingWrap = false  // C — CUF
+        case 0x44: cursorX = max(0, cursorX - max(1, n)); pendingWrap = false         // D — CUB
+        case 0x45: cursorX = 0; cursorY = min(scrollBottom, cursorY + max(1, n)); pendingWrap = false  // E — CNL
+        case 0x46: cursorX = 0; cursorY = max(scrollTop, cursorY - max(1, n)); pendingWrap = false     // F — CPL
+        case 0x47: cursorX = max(0, min(cols - 1, (n > 0 ? n : 1) - 1)); pendingWrap = false  // G — CHA
         case 0x48, 0x66:                                                          // H/f — CUP
             let r = (p.count > 0 && p[0] > 0) ? p[0] : 1
             let c = (p.count > 1 && p[1] > 0) ? p[1] : 1
@@ -1112,7 +1120,7 @@ class Terminal {
             } else {
                 cursorY = max(0, min(rows - 1, r - 1))
             }
-            cursorX = max(0, min(cols - 1, c - 1))
+            cursorX = max(0, min(cols - 1, c - 1)); pendingWrap = false
         case 0x49: // I — CHT (cursor forward tab)
             for _ in 0..<max(1, n) { advanceToNextTab() }
         case 0x4A: eraseDisplay(n)                                                // J — ED
@@ -1125,8 +1133,8 @@ class Terminal {
         case 0x58: eraseChars(max(1, n))                                          // X — ECH
         case 0x5A: // Z — CBT (cursor backward tab)
             for _ in 0..<max(1, n) { backToPrevTab() }
-        case 0x60: cursorX = max(0, min(cols - 1, (n > 0 ? n : 1) - 1))          // ` — HPA
-        case 0x61: cursorX = min(cols - 1, cursorX + max(1, n))                   // a — HPR
+        case 0x60: cursorX = max(0, min(cols - 1, (n > 0 ? n : 1) - 1)); pendingWrap = false  // ` — HPA
+        case 0x61: cursorX = min(cols - 1, cursorX + max(1, n)); pendingWrap = false           // a — HPR
         case 0x62: // b — REP (repeat preceding character)
             for _ in 0..<max(1, n) { put(lastChar) }
         case 0x63: // c — DA1
@@ -1137,7 +1145,8 @@ class Terminal {
             } else {
                 cursorY = max(0, min(rows - 1, (n > 0 ? n : 1) - 1))
             }
-        case 0x65: cursorY = min(rows - 1, cursorY + max(1, n))                   // e — VPR
+            pendingWrap = false
+        case 0x65: cursorY = min(rows - 1, cursorY + max(1, n)); pendingWrap = false  // e — VPR
         case 0x67: // g — TBC (tab clear)
             if n == 0 { tabStops.remove(cursorX) }       // clear tab at cursor
             else if n == 3 { tabStops.removeAll() }       // clear all tabs
@@ -1162,7 +1171,7 @@ class Terminal {
             let bot = (p.count > 1 && p[1] > 0) ? p[1] - 1 : rows - 1
             scrollTop = max(0, min(rows - 1, top))
             scrollBottom = max(scrollTop, min(rows - 1, bot))
-            cursorX = 0; cursorY = originMode ? scrollTop : 0
+            cursorX = 0; cursorY = originMode ? scrollTop : 0; pendingWrap = false
         case 0x73: // s — SCOSC or DECSLRM
             if leftRightMarginMode && p.count >= 2 {
                 // DECSLRM — set left/right margins
@@ -1222,7 +1231,7 @@ class Terminal {
             cursorX = 0; cursorY = 0
             scrollTop = 0; scrollBottom = rows - 1
             leftRightMarginMode = false; leftMargin = 0; rightMargin = cols - 1
-            appCursorMode = false; appKeypadMode = false; originMode = false; autoWrapMode = true
+            appCursorMode = false; appKeypadMode = false; originMode = false; autoWrapMode = true; pendingWrap = false
             cursorVisible = true; cursorStyle = 0
             mouseMode = 0; mouseEncoding = 0; focusReportingMode = false
             synchronizedOutput = false
@@ -1300,13 +1309,13 @@ class Terminal {
                 case 47, 1047:
                     altGrid = grid; altLineAttrs = lineAttrs; altX = cursorX; altY = cursorY
                     grid = Self.emptyGrid(cols, rows); lineAttrs = Array(repeating: 0, count: rows)
-                    cursorX = 0; cursorY = 0; scrollTop = 0; scrollBottom = rows - 1
-                case 1048: savedX = cursorX; savedY = cursorY
+                    cursorX = 0; cursorY = 0; scrollTop = 0; scrollBottom = rows - 1; pendingWrap = false
+                case 1048: savedX = cursorX; savedY = cursorY; savedPendingWrap = pendingWrap
                 case 1049:
-                    savedX = cursorX; savedY = cursorY
+                    savedX = cursorX; savedY = cursorY; savedPendingWrap = pendingWrap
                     altGrid = grid; altLineAttrs = lineAttrs; altX = cursorX; altY = cursorY
                     grid = Self.emptyGrid(cols, rows); lineAttrs = Array(repeating: 0, count: rows)
-                    cursorX = 0; cursorY = 0; scrollTop = 0; scrollBottom = rows - 1
+                    cursorX = 0; cursorY = 0; scrollTop = 0; scrollBottom = rows - 1; pendingWrap = false
                 case 1000: mouseMode = 1000  // X10 normal tracking
                 case 1002: mouseMode = 1002  // button-event tracking (report drag)
                 case 1003: mouseMode = 1003  // any-event tracking (report all motion)
@@ -1333,14 +1342,14 @@ class Terminal {
                         if let ala = altLineAttrs { lineAttrs = ala; altLineAttrs = nil }
                         scrollTop = 0; scrollBottom = rows - 1
                     }
-                case 1048: cursorX = savedX; cursorY = savedY
+                case 1048: cursorX = savedX; cursorY = savedY; pendingWrap = savedPendingWrap
                 case 1049:
                     if let ag = altGrid {
                         grid = ag; altGrid = nil
                         if let ala = altLineAttrs { lineAttrs = ala; altLineAttrs = nil }
                         scrollTop = 0; scrollBottom = rows - 1
                     }
-                    cursorX = savedX; cursorY = savedY
+                    cursorX = savedX; cursorY = savedY; pendingWrap = savedPendingWrap
                 case 1000, 1002, 1003: mouseMode = 0
                 case 1004: focusReportingMode = false
                 case 1005, 1006: mouseEncoding = 0
@@ -4064,6 +4073,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     var onSplitVertical: (() -> Void)?
     var onSplitHorizontal: (() -> Void)?
     var onGitToggle: (() -> Void)?
+    var onWebPickerToggle: (() -> Void)?
 
     private var tabContainer = NSView()
     private let tabScrollView = NSScrollView()
@@ -4071,6 +4081,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     private var splitVBtn: SplitIconButton!
     private var splitHBtn: SplitIconButton!
     private var gitBtn: HoverButton!
+    private var webPickerBtn: HoverButton!
     private let sep = NSView()
     private var lastTitles: [String] = []
     private var lastActiveIndex: Int = -1
@@ -4137,6 +4148,17 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         gitBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(gitBtn)
 
+        // WebPicker button
+        webPickerBtn = HoverButton(title: "</>", fontSize: 9, weight: .bold,
+            normalColor: NSColor(calibratedWhite: 0.5, alpha: 1.0),
+            hoverColor: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 1.0),
+            hoverBg: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.12),
+            pressBg: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.25),
+            cornerRadius: 4)
+        webPickerBtn.onClick = { [weak self] in self?.onWebPickerToggle?() }
+        webPickerBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(webPickerBtn)
+
         // Separator line at bottom
         sep.wantsLayer = true
         sep.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
@@ -4160,10 +4182,15 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
             splitHBtn.widthAnchor.constraint(equalToConstant: 20),
             splitHBtn.heightAnchor.constraint(equalToConstant: 20),
 
-            gitBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -4),
+            gitBtn.trailingAnchor.constraint(equalTo: webPickerBtn.leadingAnchor, constant: -4),
             gitBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
             gitBtn.widthAnchor.constraint(equalToConstant: 30),
             gitBtn.heightAnchor.constraint(equalToConstant: 20),
+
+            webPickerBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -4),
+            webPickerBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            webPickerBtn.widthAnchor.constraint(equalToConstant: 30),
+            webPickerBtn.heightAnchor.constraint(equalToConstant: 20),
 
             addBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             addBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -4276,6 +4303,16 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         } else {
             gitBtn.label.textColor = NSColor(calibratedWhite: 0.5, alpha: 1.0)
             gitBtn.layer?.backgroundColor = NSColor.clear.cgColor
+        }
+    }
+
+    func setWebPickerActive(_ active: Bool) {
+        if active {
+            webPickerBtn.label.textColor = NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 1.0)
+            webPickerBtn.layer?.backgroundColor = NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.15).cgColor
+        } else {
+            webPickerBtn.label.textColor = NSColor(calibratedWhite: 0.5, alpha: 1.0)
+            webPickerBtn.layer?.backgroundColor = NSColor.clear.cgColor
         }
     }
 
@@ -5877,10 +5914,17 @@ class SettingsOverlay: NSView {
         rows.append(makeToggleRow(label: "Launch at Login", settingsKey: "autoStartEnabled"))
         rows.append(makeToggleRow(label: "Auto-Check Updates", settingsKey: "autoCheckUpdates"))
 
+        // WebPicker
+        rows.append(makeSectionHeader("WebPicker"))
+        rows.append(makeSegmentRow(label: "Browser", options: ["Chrome", "Safari"],
+            selected: 0,
+            key: "webPickerBrowser",
+            disabled: true))
+
         // AI Usage
         rows.append(makeSectionHeader("Claude Code"))
         rows.append(makeToggleRow(label: "Show Usage Badge", settingsKey: "showAIUsage"))
-        rows.append(makeSegmentRow(label: "Refresh", options: ["30s", "1m", "5m"],
+        rows.append(makeSegmentRow(label: "Refresh", options: ["5m", "10m", "30m"],
             selected: UserDefaults.standard.integer(forKey: "aiUsageRefreshIndex"),
             key: "aiUsageRefreshIndex"))
         rows.append(makeStatusRow())
@@ -6347,12 +6391,12 @@ class SettingsOverlay: NSView {
         return row
     }
 
-    private func makeSegmentRow(label: String, options: [String], selected: Int, key: String, onChange: ((Int) -> Void)? = nil) -> NSView {
+    private func makeSegmentRow(label: String, options: [String], selected: Int, key: String, onChange: ((Int) -> Void)? = nil, disabled: Bool = false) -> NSView {
         let row = SettingsRowView()
 
         let lbl = NSTextField(labelWithString: label)
         lbl.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
-        lbl.textColor = NSColor(calibratedWhite: 0.75, alpha: 1.0)
+        lbl.textColor = disabled ? NSColor(calibratedWhite: 0.4, alpha: 1.0) : NSColor(calibratedWhite: 0.75, alpha: 1.0)
         lbl.isEditable = false; lbl.isBordered = false; lbl.drawsBackground = false
         lbl.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(lbl)
@@ -6363,20 +6407,23 @@ class SettingsOverlay: NSView {
         seg.controlSize = .mini
         seg.segmentStyle = .rounded
         seg.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .medium)
+        seg.isEnabled = !disabled
+        seg.alphaValue = disabled ? 0.35 : 1.0
         seg.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(seg)
 
-        row.hoverControl = seg
-
-        seg.target = BlockTarget.shared
-        let handler: (NSSegmentedControl) -> Void = { [weak self] s in
-            let idx = s.selectedSegment
-            UserDefaults.standard.set(idx, forKey: key)
-            self?.onChanged?(key, idx)
-            self?.updateResetButtonState()
-            onChange?(idx)
+        if !disabled {
+            row.hoverControl = seg
+            seg.target = BlockTarget.shared
+            let handler: (NSSegmentedControl) -> Void = { [weak self] s in
+                let idx = s.selectedSegment
+                UserDefaults.standard.set(idx, forKey: key)
+                self?.onChanged?(key, idx)
+                self?.updateResetButtonState()
+                onChange?(idx)
+            }
+            BlockTarget.shared.registerSeg(seg, handler: handler)
         }
-        BlockTarget.shared.registerSeg(seg, handler: handler)
 
         NSLayoutConstraint.activate([
             lbl.centerYAnchor.constraint(equalTo: row.centerYAnchor),
@@ -6435,7 +6482,7 @@ class SettingsOverlay: NSView {
         lbl.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(lbl)
 
-        let statusLbl = NSTextField(labelWithString: hasToken ? "Verbunden" : "Kein Claude Code Token")
+        let statusLbl = NSTextField(labelWithString: hasToken ? "Connected" : "No Claude Code Token")
         statusLbl.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         statusLbl.textColor = hasToken
             ? NSColor(calibratedRed: 0.3, green: 0.75, blue: 0.4, alpha: 1.0)
@@ -6586,8 +6633,9 @@ class SettingsOverlay: NSView {
         "promptTheme": "default",
         "autoStartEnabled": false,
         "autoCheckUpdates": true,
+        "webPickerBrowser": 0,
         "showAIUsage": true,
-        "aiUsageRefreshIndex": 1,
+        "aiUsageRefreshIndex": 0,
     ]
 
     private func isAtDefaults() -> Bool {
@@ -6606,7 +6654,7 @@ class SettingsOverlay: NSView {
         // Window size not at default 720×480
         let w = ud.double(forKey: "windowWidth")
         let h = ud.double(forKey: "windowHeight")
-        if w > 0 && abs(w - 720) > 1 { return false }
+        if w > 0 && abs(w - 860) > 1 { return false }
         if h > 0 && abs(h - 480) > 1 { return false }
         // Window was moved from default centered position
         let sx = ud.double(forKey: "windowX")
@@ -6905,6 +6953,35 @@ class GitHubClient {
         }
     }
 
+    func createRepo(name: String, isPrivate: Bool, completion: @escaping (Bool, String?) -> Void) {
+        guard let token = token,
+              let url = URL(string: "https://api.github.com/user/repos") else {
+            completion(false, "Nicht angemeldet"); return
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let body: [String: Any] = ["name": name, "private": isPrivate, "auto_init": false]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data, let http = response as? HTTPURLResponse else {
+                DispatchQueue.main.async { completion(false, error?.localizedDescription ?? "Netzwerkfehler") }
+                return
+            }
+            if http.statusCode == 201 {
+                // Parse clone_url from response
+                let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                let cloneURL = json?["clone_url"] as? String
+                DispatchQueue.main.async { completion(true, cloneURL) }
+            } else {
+                let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                let msg = json?["message"] as? String ?? "Error \(http.statusCode)"
+                DispatchQueue.main.async { completion(false, msg) }
+            }
+        }.resume()
+    }
+
     func logout() {
         token = nil
         username = nil
@@ -6952,12 +7029,12 @@ struct AITokenStore {
     }
 }
 
-struct AIUsageCategory {
+struct AIUsageCategory: Codable {
     let utilization: Double   // 0-100
     let resetsAt: Date?
 }
 
-struct AIUsageData {
+struct AIUsageData: Codable {
     let fiveHour: AIUsageCategory?
     let sevenDay: AIUsageCategory?
     let sevenDayOpus: AIUsageCategory?
@@ -6972,10 +7049,12 @@ class AIUsageManager {
     private static let usageURL = "https://api.anthropic.com/api/oauth/usage"
 
     var onUpdate: ((AIUsageData?) -> Void)?
-    private(set) var latestData: AIUsageData?
+    private(set) var latestData: AIUsageData? { didSet { if let d = latestData { saveToDisk(d) } } }
+    private(set) var lastStatusCode = 0
     private var pollTimer: Timer?
     private var cachedToken: String?
     private var tokenChecked = false
+    private static let cacheKey = "aiUsageDataCache"
     private let iso8601: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -6993,6 +7072,20 @@ class AIUsageManager {
     var hasToken: Bool { readToken() != nil }
 
     func clearData() { latestData = nil; cachedToken = nil; tokenChecked = false }
+
+    /// Load last cached data from disk (called on startup so badge shows immediately)
+    func loadCachedData() {
+        guard let raw = UserDefaults.standard.data(forKey: Self.cacheKey),
+              let data = try? JSONDecoder().decode(AIUsageData.self, from: raw) else { return }
+        latestData = data
+        onUpdate?(data)
+    }
+
+    private func saveToDisk(_ data: AIUsageData) {
+        if let raw = try? JSONEncoder().encode(data) {
+            UserDefaults.standard.set(raw, forKey: Self.cacheKey)
+        }
+    }
 
     private func debugLog(_ msg: String) {
         let line = "[\(Date())] \(msg)\n"
@@ -7020,22 +7113,23 @@ class AIUsageManager {
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
 
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-            if let error = error {
-                self?.debugLog("Network error: \(error.localizedDescription)")
-            }
-            if let http = response as? HTTPURLResponse {
-                self?.debugLog("HTTP \(http.statusCode)")
-            }
+            guard let self = self else { return }
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if let error = error { self.debugLog("Network error: \(error.localizedDescription)") }
+            self.debugLog("HTTP \(statusCode)")
             if let data = data, let body = String(data: data, encoding: .utf8) {
-                self?.debugLog("Response: \(String(body.prefix(500)))")
+                self.debugLog("Response: \(String(body.prefix(500)))")
             }
-            guard let self = self, let data = data,
-                  let http = response as? HTTPURLResponse, http.statusCode == 200,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else {
-                DispatchQueue.main.async { self?.onUpdate?(nil) }
+            DispatchQueue.main.async { self.lastStatusCode = statusCode }
+            // Auth errors → clear badge (token revoked/expired)
+            if statusCode == 401 || statusCode == 403 {
+                DispatchQueue.main.async { self.onUpdate?(nil) }
                 return
             }
+            // Transient errors (429, network, 5xx) → keep last data, badge stays green
+            guard let data = data, statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return }
             let result = self.parseUsageJSON(json)
             DispatchQueue.main.async {
                 self.latestData = result
@@ -7198,7 +7292,9 @@ class AIUsageBadge: NSView {
 
 class AIUsagePopover: NSView {
     var onDismiss: (() -> Void)?
+    var onRefresh: (() -> Void)?
     private let contentStack = NSView()
+    private let refreshBtn = NSButton()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -7212,18 +7308,58 @@ class AIUsagePopover: NSView {
         shadow?.shadowBlurRadius = 12
         shadow?.shadowOffset = NSSize(width: 0, height: -4)
 
+        refreshBtn.title = "↻"
+        refreshBtn.isBordered = false
+        refreshBtn.bezelStyle = .inline
+        refreshBtn.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        refreshBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        refreshBtn.toolTip = "Jetzt aktualisieren"
+        refreshBtn.target = self
+        refreshBtn.action = #selector(doRefresh)
+
         addSubview(contentStack)
+        addSubview(refreshBtn)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func doRefresh() {
+        refreshBtn.isEnabled = false
+        refreshBtn.contentTintColor = NSColor(calibratedWhite: 0.25, alpha: 1)
+        onRefresh?()
+    }
+
+    func setRefreshDone() {
+        refreshBtn.isEnabled = true
+        refreshBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+    }
 
     func update(data: AIUsageData?) {
         contentStack.subviews.forEach { $0.removeFromSuperview() }
 
         guard let data = data else {
-            let noData = makeLabel("No usage data", size: 10, color: NSColor(calibratedWhite: 0.5, alpha: 1))
+            let statusCode = AIUsageManager.shared.lastStatusCode
+            let msg: String
+            let msgColor: NSColor
+            if statusCode == 429 {
+                msg = "API rate limited (429) — please wait"
+                msgColor = NSColor(calibratedRed: 0.9, green: 0.6, blue: 0.2, alpha: 1)
+            } else if statusCode == 401 || statusCode == 403 {
+                msg = "Invalid token — please sign in again"
+                msgColor = NSColor(calibratedRed: 0.85, green: 0.35, blue: 0.35, alpha: 1)
+            } else if statusCode == 0 {
+                msg = "Waiting for first response..."
+                msgColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+            } else {
+                msg = "No data (HTTP \(statusCode))"
+                msgColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+            }
+            let noData = makeLabel(msg, size: 10, color: msgColor)
             contentStack.addSubview(noData)
-            noData.frame = NSRect(x: 12, y: 12, width: 180, height: 16)
+            noData.frame = NSRect(x: 12, y: 14, width: bounds.width - 44, height: 16)
+            frame.size.height = 46
+            contentStack.frame = bounds
+            refreshBtn.frame = NSRect(x: bounds.width - 28, y: 12, width: 22, height: 18)
             return
         }
 
@@ -7274,6 +7410,8 @@ class AIUsagePopover: NSView {
         let totalH = y
         frame.size.height = totalH
         contentStack.frame = bounds
+        // Refresh button — bottom-right corner, aligned with timestamp row
+        refreshBtn.frame = NSRect(x: bounds.width - 28, y: 10, width: 22, height: 18)
     }
 
     private func addCategory(y: CGFloat, w: CGFloat, title: String, util: Double, resetsAt: Date?) -> CGFloat {
@@ -7571,116 +7709,159 @@ class ClickableFileRow: NSView {
 }
 
 class GitPanelView: NSView {
-    private let scrollView = NSScrollView()
-    private let contentView = NSView()
+
+    // MARK: - State & Data
+
+    private var lastCwd = ""
     private var refreshTimer: Timer?
-    private var lastCwd: String = ""
-    private var isGitRepo = false
-    private let gitHubClient = GitHubClient()
-
-    // LOCAL section labels
-    private let branchLabel = NSTextField(labelWithString: "")
-    private let statusLabel = NSTextField(labelWithString: "")
-    private let filesLabel = NSTextField(labelWithString: "")
-    private let unpushedStack = NSStackView()
-    private let unpushedScroll = NSScrollView()
-    private let noRepoLabel = NSTextField(labelWithString: "")
-
-    // REMOTE section labels
-    private let remoteUserLabel = NSTextField(labelWithString: "")
-    private let remoteBranchLabel = NSTextField(labelWithString: "")
-    private let remotePRsLabel = NSTextField(labelWithString: "")
-    private let remoteCommitsStack = NSStackView()
-    private let remoteCommitsScroll = NSScrollView()
-
-    // Auth UI
-    private let tokenField = NSSecureTextField()
-    private var tokenSaveButton: NSButton!
-    private var tokenLinkButton: NSButton!
-    private let authStatusLabel = NSTextField(labelWithString: "")
-    private var logoutButton: NSButton!
-
-    // Section backgrounds
-    private let remoteSectionBg = NSView()
-
-    // Stored section views for hide/show
-    private var localSectionViews: [NSView] = []
-    private var remoteSectionViews: [NSView] = []
-
-    // Bottom anchor for content sizing
-    private var bottomConstraint: NSLayoutConstraint?
-
-    // Cache to avoid rebuilding stacks every refresh
-    private var lastUnpushedText = ""
-    private var lastRemoteCommitsText = ""
-
-    // Phase 1: Quick Actions
-    private let quickActionsContainer = NSStackView()
-    private let commitMessageField = NSTextField()
-    private let actionFeedbackLabel = NSTextField(labelWithString: "")
     private var feedbackTimer: Timer?
+    private let github = GitHubClient()
 
-    // Phase 2: Stash List
-    private let stashStack = NSStackView()
-    private let stashScroll = NSScrollView()
-    private var lastStashText = ""
-
-    // Phase 3: Diff Preview
-    private let filesStack = NSStackView()
-    private let filesScroll = NSScrollView()
+    private var isGitRepo = false
+    private var currentBranch = ""
+    private var ahead = 0
+    private var behind = 0
+    private var hasRemote = false
+    private var fileEntries: [(path: String, x: Character, y: Character, attr: NSAttributedString)] = []
+    private var lastFilesKey = ""
     private var expandedDiffFile: String?
     private weak var currentDiffView: NSView?
-    private var lastFilesText = ""
 
-    // Phase 4: Branch Management
-    private let branchListStack = NSStackView()
-    private let branchListScroll = NSScrollView()
-    private let newBranchField = NSTextField()
-    private var newBranchFieldHeight: NSLayoutConstraint!
-    private var branchNames: [String] = []
+    // isHorizontal: API-kompatibel behalten, aber ignoriert
+    var isHorizontal: Bool { get { false } set {} }
 
-    // Phase 5: Commit Graph
-    private let graphStack = NSStackView()
-    private let graphScroll = NSScrollView()
-    private var expandedCommitHash: String?
-    private weak var currentCommitDetailView: NSView?
-    private var lastGraphText = ""
+    // MARK: - UI: Scroll + Stack
 
-    // Phase 6: Git Stats
-    private let gitStatsLabel = NSTextField(labelWithString: "")
-    private var lastStatsRefresh: Date = .distantPast
-    private var lastStatsText = ""
+    private let scrollView = NSScrollView()
+    private let contentStack = NSStackView()
 
-    // Phase 7: CI/CD
-    private let ciStack = NSStackView()
-    private let ciScroll = NSScrollView()
-    private var lastCIText = ""
+    // MARK: - UI: Header Card
 
-    // Layout mode: vertical (right panel) vs horizontal (bottom panel)
-    private var _isHorizontal = false
-    private var verticalConstraints: [NSLayoutConstraint] = []
-    private var horizontalConstraints: [NSLayoutConstraint] = []
-    private weak var localCard: NSView?
-    private weak var remoteCard: NSView?
-    private weak var localHeader: NSTextField?
-    private weak var remoteHeader: NSTextField?
-    var isHorizontal: Bool {
-        get { _isHorizontal }
-        set {
-            guard newValue != _isHorizontal else { return }
-            _isHorizontal = newValue
-            NSLayoutConstraint.deactivate(_isHorizontal ? verticalConstraints : horizontalConstraints)
-            NSLayoutConstraint.activate(_isHorizontal ? horizontalConstraints : verticalConstraints)
-            layoutSubtreeIfNeeded()
-            updateContentSize()
-        }
-    }
+    private let headerCard = NSView()
+    private let projectLabel = NSTextField(labelWithString: "")
+    private let branchBadge = NSTextField(labelWithString: "")
+    private let statusLabel = NSTextField(labelWithString: "")
+
+    // MARK: - UI: No-Repo Card
+
+    private let noRepoCard = NSView()
+
+    // MARK: - UI: Files Card
+
+    private let filesCard = NSView()
+    private let filesHeaderLabel = NSTextField(labelWithString: "")
+    private let filesStack = NSStackView()
+    private let filesScrollView = NSScrollView()
+
+    // MARK: - UI: Commit Card
+
+    private let commitCard = NSView()
+    private let commitField = NSTextField()
+    private let saveBtn = NSButton()
+    private let feedbackLabel = NSTextField(labelWithString: "")
+
+    // MARK: - UI: GitHub Card
+
+    private let githubCard = NSView()
+    private let githubConnectedStack = NSStackView()  // shown when logged in
+    private let githubAuthStack = NSStackView()        // shown when not logged in
+    private let githubUserLabel = NSTextField(labelWithString: "")
+    private let githubSyncLabel = NSTextField(labelWithString: "")
+    private let uploadBtn = NSButton()
+    private let updateBtn = NSButton()
+    private let disconnectBtn = NSButton()
+    private let tokenField = NSSecureTextField()
+    private let tokenSaveBtn = NSButton()
+    private let tokenLinkBtn = NSButton()
+
+    // MARK: - UI: New Repo Overlay (inline)
+
+    private let newRepoOverlay = NSView()
+    private let repoNameField = NSTextField()
+    private var repoIsPrivate = true
+    private let repoPublicBtn = NSButton()
+    private let repoPrivateBtn = NSButton()
+    private let repoCreateBtn = NSButton()
+    private var newRepoOverlayVisible = false
+
+    // MARK: - Init
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor(calibratedWhite: 0.06, alpha: 0.85).cgColor
+        setupScrollAndStack()
+        buildHeaderCard()
+        buildNoRepoCard()
+        buildFilesCard()
+        buildCommitCard()
+        buildGithubCard()
+        buildNewRepoOverlay()
+        if github.isAuthenticated {
+            github.fetchUser { [weak self] _ in
+                DispatchQueue.main.async { self?.updateGithubCard() }
+            }
+        }
+    }
 
+    required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: - Layout Helpers
+
+    private func makeCard(alpha: Double = 0.04) -> NSView {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: alpha).cgColor
+        v.layer?.cornerRadius = 10
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }
+
+    private func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.font = NSFont.systemFont(ofSize: size, weight: weight)
+        l.textColor = color
+        l.isEditable = false
+        l.isBordered = false
+        l.drawsBackground = false
+        l.maximumNumberOfLines = 0
+        l.lineBreakMode = .byWordWrapping
+        l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }
+
+    private func makeBtn(_ title: String, color: NSColor, target: AnyObject?, action: Selector) -> NSButton {
+        let btn = NSButton(title: title, target: target, action: action)
+        btn.bezelStyle = .rounded
+        btn.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        btn.contentTintColor = color
+        btn.wantsLayer = true
+        btn.layer?.backgroundColor = color.withAlphaComponent(0.12).cgColor
+        btn.layer?.cornerRadius = 6
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        return btn
+    }
+
+    private func addToCard(_ card: NSView, views: [NSView], padding: CGFloat = 14, spacing: CGFloat = 8) -> NSStackView {
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = spacing
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: padding),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: padding),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -padding),
+            card.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: padding),
+        ])
+        return stack
+    }
+
+    // MARK: - Scroll & Stack Setup
+
+    private func setupScrollAndStack() {
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -7688,11 +7869,6 @@ class GitPanelView: NSView {
         scrollView.scrollerStyle = .overlay
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scrollView)
-
-        contentView.wantsLayer = true
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.documentView = contentView
-
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -7700,538 +7876,440 @@ class GitPanelView: NSView {
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
-        setupLabels()
-
-        // If token exists, fetch user info
-        if gitHubClient.isAuthenticated {
-            gitHubClient.fetchUser { [weak self] _ in
-                self?.updateRemoteAuthUI()
-            }
-        }
+        contentStack.orientation = .vertical
+        contentStack.alignment = .leading
+        contentStack.spacing = 8
+        contentStack.edgeInsets = NSEdgeInsets(top: 12, left: 10, bottom: 16, right: 10)
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = contentStack
+        contentStack.widthAnchor.constraint(equalTo: scrollView.widthAnchor).isActive = true
     }
 
-    required init?(coder: NSCoder) { fatalError() }
-
-    private func makeLabel(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSTextField {
-        let l = NSTextField(labelWithString: text)
-        l.font = NSFont.monospacedSystemFont(ofSize: size, weight: weight)
-        l.textColor = color
-        l.isEditable = false
-        l.isBordered = false
-        l.drawsBackground = false
-        l.lineBreakMode = .byWordWrapping
-        l.maximumNumberOfLines = 0
-        l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        l.translatesAutoresizingMaskIntoConstraints = false
-        return l
+    private func fullWidthInStack(_ view: NSView) {
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.widthAnchor.constraint(equalTo: contentStack.widthAnchor,
+                                     constant: -contentStack.edgeInsets.left - contentStack.edgeInsets.right).isActive = true
     }
 
-    private func makeSectionCard() -> NSView {
-        let v = NSView()
-        v.wantsLayer = true
-        v.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.04).cgColor
-        v.layer?.cornerRadius = 8
-        v.translatesAutoresizingMaskIntoConstraints = false
-        return v
+    // MARK: - Header Card
+
+    private func buildHeaderCard() {
+        headerCard.wantsLayer = true
+        headerCard.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.05).cgColor
+        headerCard.layer?.cornerRadius = 10
+        headerCard.translatesAutoresizingMaskIntoConstraints = false
+
+        projectLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        projectLabel.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
+        projectLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        branchBadge.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
+        branchBadge.textColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
+        branchBadge.wantsLayer = true
+        branchBadge.layer?.backgroundColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 0.12).cgColor
+        branchBadge.layer?.cornerRadius = 4
+        branchBadge.translatesAutoresizingMaskIntoConstraints = false
+
+        statusLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        statusLabel.textColor = NSColor(calibratedWhite: 0.5, alpha: 1.0)
+        statusLabel.maximumNumberOfLines = 2
+        statusLabel.lineBreakMode = .byWordWrapping
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let topRow = NSStackView(views: [projectLabel, branchBadge])
+        topRow.orientation = .horizontal
+        topRow.spacing = 8
+        topRow.alignment = .centerY
+        topRow.translatesAutoresizingMaskIntoConstraints = false
+
+        _ = addToCard(headerCard, views: [topRow, statusLabel], padding: 12, spacing: 5)
+
+        contentStack.addArrangedSubview(headerCard)
+        fullWidthInStack(headerCard)
     }
 
-    private func makeSectionHeader(_ title: String) -> NSTextField {
-        let l = NSTextField(labelWithString: title.uppercased())
-        l.font = NSFont.systemFont(ofSize: 9.5, weight: .semibold)
-        l.textColor = NSColor(calibratedWhite: 0.38, alpha: 1.0)
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 0
-        l.attributedStringValue = NSAttributedString(string: title.uppercased(), attributes: [
+    // MARK: - No-Repo Card
+
+    private func buildNoRepoCard() {
+        noRepoCard.wantsLayer = true
+        noRepoCard.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.04).cgColor
+        noRepoCard.layer?.cornerRadius = 10
+        noRepoCard.translatesAutoresizingMaskIntoConstraints = false
+
+        let title = makeLabel("No project tracking yet", size: 12, weight: .medium,
+                              color: NSColor(calibratedWhite: 0.6, alpha: 1.0))
+        let sub = makeLabel("Click the button to start tracking this folder.", size: 10.5, weight: .regular,
+                            color: NSColor(calibratedWhite: 0.4, alpha: 1.0))
+        let initBtn = makeBtn("Start Tracking", color: NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0),
+                              target: self, action: #selector(initRepoClicked))
+
+        _ = addToCard(noRepoCard, views: [title, sub, initBtn], padding: 14, spacing: 8)
+
+        contentStack.addArrangedSubview(noRepoCard)
+        fullWidthInStack(noRepoCard)
+        noRepoCard.isHidden = true
+    }
+
+    // MARK: - Files Card
+
+    private func buildFilesCard() {
+        filesCard.wantsLayer = true
+        filesCard.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.04).cgColor
+        filesCard.layer?.cornerRadius = 10
+        filesCard.translatesAutoresizingMaskIntoConstraints = false
+
+        filesHeaderLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
+        filesHeaderLabel.textColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+        filesHeaderLabel.attributedStringValue = NSAttributedString(string: "CHANGED FILES", attributes: [
             .font: NSFont.systemFont(ofSize: 9.5, weight: .semibold),
-            .foregroundColor: NSColor(calibratedWhite: 0.38, alpha: 1.0),
-            .kern: 2.0
+            .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0),
+            .kern: 1.5
         ])
-        l.isEditable = false
-        l.isBordered = false
-        l.drawsBackground = false
-        l.translatesAutoresizingMaskIntoConstraints = false
-        return l
+        filesHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        filesStack.orientation = .vertical
+        filesStack.alignment = .leading
+        filesStack.spacing = 2
+        filesStack.translatesAutoresizingMaskIntoConstraints = false
+
+        filesScrollView.drawsBackground = false
+        filesScrollView.hasVerticalScroller = true
+        filesScrollView.hasHorizontalScroller = false
+        filesScrollView.autohidesScrollers = true
+        filesScrollView.scrollerStyle = .overlay
+        filesScrollView.borderType = .noBorder
+        filesScrollView.translatesAutoresizingMaskIntoConstraints = false
+        filesScrollView.documentView = filesStack
+
+        filesStack.widthAnchor.constraint(equalTo: filesScrollView.widthAnchor).isActive = true
+        let hug = filesScrollView.heightAnchor.constraint(equalTo: filesStack.heightAnchor)
+        hug.priority = .defaultHigh
+        hug.isActive = true
+        filesScrollView.heightAnchor.constraint(lessThanOrEqualToConstant: 160).isActive = true
+
+        let inner = NSStackView(views: [filesHeaderLabel, filesScrollView])
+        inner.orientation = .vertical
+        inner.alignment = .leading
+        inner.spacing = 6
+        inner.translatesAutoresizingMaskIntoConstraints = false
+
+        filesCard.addSubview(inner)
+        NSLayoutConstraint.activate([
+            inner.topAnchor.constraint(equalTo: filesCard.topAnchor, constant: 12),
+            inner.leadingAnchor.constraint(equalTo: filesCard.leadingAnchor, constant: 12),
+            inner.trailingAnchor.constraint(equalTo: filesCard.trailingAnchor, constant: -12),
+            filesCard.bottomAnchor.constraint(equalTo: inner.bottomAnchor, constant: 12),
+            filesScrollView.widthAnchor.constraint(equalTo: inner.widthAnchor),
+        ])
+
+        contentStack.addArrangedSubview(filesCard)
+        fullWidthInStack(filesCard)
+        filesCard.isHidden = true
     }
 
-    private func makeSubLabel(_ text: String) -> NSTextField {
-        let l = NSTextField(labelWithString: text)
-        l.font = NSFont.systemFont(ofSize: 9, weight: .medium)
-        l.textColor = NSColor(calibratedWhite: 0.32, alpha: 1.0)
-        l.isEditable = false
-        l.isBordered = false
-        l.drawsBackground = false
-        l.translatesAutoresizingMaskIntoConstraints = false
-        return l
+    // MARK: - Commit Card
+
+    private func buildCommitCard() {
+        commitCard.wantsLayer = true
+        commitCard.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.04).cgColor
+        commitCard.layer?.cornerRadius = 10
+        commitCard.translatesAutoresizingMaskIntoConstraints = false
+
+        let label = NSTextField(labelWithString: "")
+        label.attributedStringValue = NSAttributedString(string: "WHAT DID YOU CHANGE?", attributes: [
+            .font: NSFont.systemFont(ofSize: 9.5, weight: .semibold),
+            .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0),
+            .kern: 1.5
+        ])
+
+        commitField.isEditable = true
+        commitField.isBordered = false
+        commitField.focusRingType = .none
+        commitField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        commitField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
+        commitField.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06)
+        commitField.placeholderString = "z.B. Login-Seite verbessert, Bug behoben..."
+        commitField.wantsLayer = true
+        commitField.layer?.cornerRadius = 6
+        commitField.translatesAutoresizingMaskIntoConstraints = false
+        commitField.target = self
+        commitField.action = #selector(saveClicked)
+
+        saveBtn.title = "💾  Save"
+        saveBtn.bezelStyle = .rounded
+        saveBtn.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        saveBtn.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
+        saveBtn.wantsLayer = true
+        saveBtn.layer?.backgroundColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 0.12).cgColor
+        saveBtn.layer?.cornerRadius = 6
+        saveBtn.translatesAutoresizingMaskIntoConstraints = false
+        saveBtn.target = self
+        saveBtn.action = #selector(saveClicked)
+
+        feedbackLabel.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        feedbackLabel.isHidden = true
+        feedbackLabel.translatesAutoresizingMaskIntoConstraints = false
+        feedbackLabel.maximumNumberOfLines = 2
+        feedbackLabel.lineBreakMode = .byWordWrapping
+        feedbackLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let inner = NSStackView(views: [label, commitField, saveBtn, feedbackLabel])
+        inner.orientation = .vertical
+        inner.alignment = .leading
+        inner.spacing = 8
+        inner.translatesAutoresizingMaskIntoConstraints = false
+        commitCard.addSubview(inner)
+
+        NSLayoutConstraint.activate([
+            inner.topAnchor.constraint(equalTo: commitCard.topAnchor, constant: 12),
+            inner.leadingAnchor.constraint(equalTo: commitCard.leadingAnchor, constant: 12),
+            inner.trailingAnchor.constraint(equalTo: commitCard.trailingAnchor, constant: -12),
+            commitCard.bottomAnchor.constraint(equalTo: inner.bottomAnchor, constant: 12),
+            commitField.widthAnchor.constraint(equalTo: inner.widthAnchor),
+            commitField.heightAnchor.constraint(equalToConstant: 28),
+            saveBtn.widthAnchor.constraint(equalTo: inner.widthAnchor),
+            saveBtn.heightAnchor.constraint(equalToConstant: 30),
+            feedbackLabel.widthAnchor.constraint(equalTo: inner.widthAnchor),
+        ])
+
+        contentStack.addArrangedSubview(commitCard)
+        fullWidthInStack(commitCard)
+        commitCard.isHidden = true
     }
 
-    private func setupLabels() {
-        let sidePad: CGFloat = 14
-        let cardPad: CGFloat = 12
-        let itemGap: CGFloat = 16
+    // MARK: - GitHub Card
 
-        // === Style data labels ===
-        let dataFont = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
-        let dimColor = NSColor(calibratedWhite: 0.55, alpha: 1.0)
+    private func buildGithubCard() {
+        githubCard.wantsLayer = true
+        githubCard.layer?.backgroundColor = NSColor(calibratedRed: 0.12, green: 0.14, blue: 0.22, alpha: 0.7).cgColor
+        githubCard.layer?.cornerRadius = 10
+        githubCard.translatesAutoresizingMaskIntoConstraints = false
 
-        branchLabel.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
-        branchLabel.textColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
-        branchLabel.translatesAutoresizingMaskIntoConstraints = false
+        // === AUTH STACK (not logged in) ===
+        let authTitle = makeLabel("🔗  Not connected to GitHub", size: 11, weight: .medium,
+                                  color: NSColor(calibratedWhite: 0.55, alpha: 1.0))
 
-        for l in [statusLabel, filesLabel, remoteUserLabel,
-                  remoteBranchLabel, remotePRsLabel] {
-            l.font = dataFont
-            l.textColor = dimColor
-            l.maximumNumberOfLines = 0
-            l.lineBreakMode = .byWordWrapping
-            l.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            l.translatesAutoresizingMaskIntoConstraints = false
-        }
-
-        // Stack views for marquee commit rows, wrapped in scroll views
-        for stack in [unpushedStack, remoteCommitsStack, stashStack, filesStack, branchListStack, graphStack, ciStack] {
-            stack.orientation = .vertical
-            stack.alignment = .leading
-            stack.spacing = 2
-            stack.translatesAutoresizingMaskIntoConstraints = false
-        }
-
-        // Configure scrollable containers for commit stacks
-        for (scroll, stack) in [(unpushedScroll, unpushedStack), (remoteCommitsScroll, remoteCommitsStack),
-                                (stashScroll, stashStack), (filesScroll, filesStack),
-                                (branchListScroll, branchListStack), (graphScroll, graphStack),
-                                (ciScroll, ciStack)] {
-            scroll.drawsBackground = false
-            scroll.hasVerticalScroller = true
-            scroll.hasHorizontalScroller = false
-            scroll.autohidesScrollers = true
-            scroll.scrollerStyle = .overlay
-            scroll.borderType = .noBorder
-            scroll.translatesAutoresizingMaskIntoConstraints = false
-            scroll.documentView = stack
-            stack.widthAnchor.constraint(equalTo: scroll.widthAnchor).isActive = true
-            // ScrollView hugs content height, but max 130px
-            let hug = scroll.heightAnchor.constraint(equalTo: stack.heightAnchor)
-            hug.priority = .defaultHigh
-            hug.isActive = true
-        }
-
-        // === Token field — rounded dark input ===
         tokenField.font = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
         tokenField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
         tokenField.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06)
         tokenField.isBordered = false
         tokenField.focusRingType = .none
         tokenField.bezelStyle = .roundedBezel
-        tokenField.placeholderString = "Paste your token here (ghp_...)"
+        tokenField.placeholderString = "Paste GitHub token (ghp_...)"
         tokenField.translatesAutoresizingMaskIntoConstraints = false
 
-        tokenSaveButton = NSButton(title: "Connect", target: self, action: #selector(saveToken))
-        tokenSaveButton.bezelStyle = .inline
-        tokenSaveButton.font = NSFont.systemFont(ofSize: 10, weight: .medium)
-        tokenSaveButton.translatesAutoresizingMaskIntoConstraints = false
-        tokenSaveButton.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
+        tokenSaveBtn.title = "Connect"
+        tokenSaveBtn.bezelStyle = .inline
+        tokenSaveBtn.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        tokenSaveBtn.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
+        tokenSaveBtn.translatesAutoresizingMaskIntoConstraints = false
+        tokenSaveBtn.target = self
+        tokenSaveBtn.action = #selector(saveTokenClicked)
 
-        tokenLinkButton = NSButton(title: "Create Token on GitHub →", target: self, action: #selector(openTokenPage))
-        tokenLinkButton.bezelStyle = .inline
-        tokenLinkButton.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
-        tokenLinkButton.translatesAutoresizingMaskIntoConstraints = false
-        tokenLinkButton.contentTintColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
+        tokenLinkBtn.title = "Token erstellen →"
+        tokenLinkBtn.bezelStyle = .inline
+        tokenLinkBtn.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
+        tokenLinkBtn.contentTintColor = NSColor(calibratedWhite: 0.38, alpha: 1.0)
+        tokenLinkBtn.translatesAutoresizingMaskIntoConstraints = false
+        tokenLinkBtn.target = self
+        tokenLinkBtn.action = #selector(openTokenPage)
 
-        authStatusLabel.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
-        authStatusLabel.textColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
-        authStatusLabel.alignment = .left
-        authStatusLabel.isHidden = true
-        authStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        let tokenRow = NSStackView(views: [tokenSaveBtn, tokenLinkBtn])
+        tokenRow.orientation = .horizontal
+        tokenRow.spacing = 12
+        tokenRow.alignment = .centerY
+        tokenRow.translatesAutoresizingMaskIntoConstraints = false
 
-        noRepoLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
-        noRepoLabel.textColor = NSColor(calibratedWhite: 0.22, alpha: 1.0)
-        noRepoLabel.alignment = .center
-        noRepoLabel.stringValue = "Not a Git Repository"
-        noRepoLabel.translatesAutoresizingMaskIntoConstraints = false
+        githubAuthStack.orientation = .vertical
+        githubAuthStack.alignment = .leading
+        githubAuthStack.spacing = 8
+        githubAuthStack.translatesAutoresizingMaskIntoConstraints = false
+        githubAuthStack.addArrangedSubview(authTitle)
+        githubAuthStack.addArrangedSubview(tokenField)
+        githubAuthStack.addArrangedSubview(tokenRow)
 
-        logoutButton = NSButton(title: "Disconnect", target: self, action: #selector(logoutButtonClicked))
-        logoutButton.bezelStyle = .inline
-        logoutButton.font = NSFont.systemFont(ofSize: 9, weight: .regular)
-        logoutButton.translatesAutoresizingMaskIntoConstraints = false
-        logoutButton.isHidden = true
-        logoutButton.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+        // === CONNECTED STACK (logged in) ===
+        githubUserLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        githubUserLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.78, blue: 1.0, alpha: 1.0)
+        githubUserLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        // === Phase 1: Quick Actions ===
-        let qaButtons: [(String, Selector, NSColor)] = [
-            ("Stage All", #selector(stageAllClicked), NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)),
-            ("Commit", #selector(commitClicked), NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)),
-            ("Push", #selector(pushClicked), NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)),
-            ("Pull", #selector(pullClicked), NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)),
-            ("Stash", #selector(stashSaveClicked), NSColor(calibratedRed: 0.7, green: 0.6, blue: 0.9, alpha: 1.0)),
-        ]
-        let quickActionsRow = NSStackView()
-        quickActionsRow.orientation = .horizontal
-        quickActionsRow.spacing = 6
-        quickActionsRow.translatesAutoresizingMaskIntoConstraints = false
-        for (title, action, color) in qaButtons {
-            let btn = NSButton(title: title, target: self, action: action)
-            btn.bezelStyle = .inline
-            btn.font = NSFont.systemFont(ofSize: 9.5, weight: .medium)
-            btn.contentTintColor = color
-            btn.translatesAutoresizingMaskIntoConstraints = false
-            quickActionsRow.addArrangedSubview(btn)
-        }
+        githubSyncLabel.font = NSFont.systemFont(ofSize: 10.5, weight: .regular)
+        githubSyncLabel.textColor = NSColor(calibratedWhite: 0.55, alpha: 1.0)
+        githubSyncLabel.maximumNumberOfLines = 2
+        githubSyncLabel.lineBreakMode = .byWordWrapping
+        githubSyncLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        githubSyncLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        commitMessageField.isEditable = true
-        commitMessageField.isBordered = false
-        commitMessageField.focusRingType = .none
-        commitMessageField.font = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
-        commitMessageField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
-        commitMessageField.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06)
-        commitMessageField.placeholderString = "Commit message... (Enter to commit)"
-        commitMessageField.isHidden = true
-        commitMessageField.translatesAutoresizingMaskIntoConstraints = false
-        commitMessageField.target = self
-        commitMessageField.action = #selector(commitWithMessage)
+        uploadBtn.title = "↑  Upload to GitHub"
+        uploadBtn.bezelStyle = .rounded
+        uploadBtn.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        uploadBtn.contentTintColor = NSColor(calibratedRed: 0.5, green: 0.78, blue: 1.0, alpha: 1.0)
+        uploadBtn.wantsLayer = true
+        uploadBtn.layer?.backgroundColor = NSColor(calibratedRed: 0.5, green: 0.78, blue: 1.0, alpha: 0.1).cgColor
+        uploadBtn.layer?.cornerRadius = 6
+        uploadBtn.translatesAutoresizingMaskIntoConstraints = false
+        uploadBtn.target = self
+        uploadBtn.action = #selector(uploadClicked)
 
-        actionFeedbackLabel.font = NSFont.systemFont(ofSize: 9.5, weight: .medium)
-        actionFeedbackLabel.isHidden = true
-        actionFeedbackLabel.translatesAutoresizingMaskIntoConstraints = false
+        updateBtn.title = "↓  Aktualisieren"
+        updateBtn.bezelStyle = .rounded
+        updateBtn.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        updateBtn.contentTintColor = NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.35, alpha: 1.0)
+        updateBtn.wantsLayer = true
+        updateBtn.layer?.backgroundColor = NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.35, alpha: 0.1).cgColor
+        updateBtn.layer?.cornerRadius = 6
+        updateBtn.translatesAutoresizingMaskIntoConstraints = false
+        updateBtn.target = self
+        updateBtn.action = #selector(updateClicked)
 
-        quickActionsContainer.orientation = .vertical
-        quickActionsContainer.spacing = 4
-        quickActionsContainer.translatesAutoresizingMaskIntoConstraints = false
-        quickActionsContainer.addArrangedSubview(quickActionsRow)
-        quickActionsContainer.addArrangedSubview(commitMessageField)
-        quickActionsContainer.addArrangedSubview(actionFeedbackLabel)
-        commitMessageField.widthAnchor.constraint(equalTo: quickActionsContainer.widthAnchor).isActive = true
-        commitMessageField.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        disconnectBtn.title = "Abmelden"
+        disconnectBtn.bezelStyle = .inline
+        disconnectBtn.font = NSFont.systemFont(ofSize: 9, weight: .regular)
+        disconnectBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
+        disconnectBtn.translatesAutoresizingMaskIntoConstraints = false
+        disconnectBtn.target = self
+        disconnectBtn.action = #selector(disconnectClicked)
 
-        // === Phase 4: New Branch Field ===
-        newBranchField.isEditable = true
-        newBranchField.isBordered = false
-        newBranchField.focusRingType = .none
-        newBranchField.font = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
-        newBranchField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
-        newBranchField.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06)
-        newBranchField.placeholderString = "New branch name... (Enter to create)"
-        newBranchField.isHidden = true
-        newBranchField.translatesAutoresizingMaskIntoConstraints = false
-        newBranchField.target = self
-        newBranchField.action = #selector(createBranchWithName)
-        newBranchFieldHeight = newBranchField.heightAnchor.constraint(equalToConstant: 0)
-        newBranchFieldHeight.isActive = true
+        let userRow = NSStackView(views: [githubUserLabel, disconnectBtn])
+        userRow.orientation = .horizontal
+        userRow.spacing = 0
+        userRow.alignment = .centerY
+        userRow.translatesAutoresizingMaskIntoConstraints = false
+        let spacer = NSView()
+        spacer.translatesAutoresizingMaskIntoConstraints = false
+        userRow.insertArrangedSubview(spacer, at: 1)
+        userRow.setCustomSpacing(0, after: githubUserLabel)
 
-        // === Phase 6: Git Stats Label ===
-        gitStatsLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-        gitStatsLabel.textColor = NSColor(calibratedWhite: 0.55, alpha: 1.0)
-        gitStatsLabel.maximumNumberOfLines = 0
-        gitStatsLabel.lineBreakMode = .byWordWrapping
-        gitStatsLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        gitStatsLabel.translatesAutoresizingMaskIntoConstraints = false
+        githubConnectedStack.orientation = .vertical
+        githubConnectedStack.alignment = .leading
+        githubConnectedStack.spacing = 8
+        githubConnectedStack.translatesAutoresizingMaskIntoConstraints = false
+        githubConnectedStack.addArrangedSubview(userRow)
+        githubConnectedStack.addArrangedSubview(githubSyncLabel)
+        githubConnectedStack.addArrangedSubview(uploadBtn)
+        githubConnectedStack.addArrangedSubview(updateBtn)
 
-        // === Cards (rounded bg containers) ===
-        let localCard = makeSectionCard()
-        let remoteCard = makeSectionCard()
-        self.localCard = localCard
-        self.remoteCard = remoteCard
+        let outerStack = NSStackView(views: [githubAuthStack, githubConnectedStack])
+        outerStack.orientation = .vertical
+        outerStack.alignment = .leading
+        outerStack.spacing = 0
+        outerStack.translatesAutoresizingMaskIntoConstraints = false
 
-        // Remote section bg — subtle blue tint inside card
-        remoteSectionBg.wantsLayer = true
-        remoteSectionBg.layer?.backgroundColor = NSColor(calibratedRed: 0.18, green: 0.20, blue: 0.30, alpha: 0.25).cgColor
-        remoteSectionBg.layer?.cornerRadius = 8
-        remoteSectionBg.translatesAutoresizingMaskIntoConstraints = false
+        githubCard.addSubview(outerStack)
+        NSLayoutConstraint.activate([
+            outerStack.topAnchor.constraint(equalTo: githubCard.topAnchor, constant: 12),
+            outerStack.leadingAnchor.constraint(equalTo: githubCard.leadingAnchor, constant: 12),
+            outerStack.trailingAnchor.constraint(equalTo: githubCard.trailingAnchor, constant: -12),
+            githubCard.bottomAnchor.constraint(equalTo: outerStack.bottomAnchor, constant: 12),
+            githubAuthStack.widthAnchor.constraint(equalTo: outerStack.widthAnchor),
+            githubConnectedStack.widthAnchor.constraint(equalTo: outerStack.widthAnchor),
+            tokenField.widthAnchor.constraint(equalTo: githubAuthStack.widthAnchor),
+            tokenField.heightAnchor.constraint(equalToConstant: 26),
+            uploadBtn.widthAnchor.constraint(equalTo: githubConnectedStack.widthAnchor),
+            uploadBtn.heightAnchor.constraint(equalToConstant: 30),
+            updateBtn.widthAnchor.constraint(equalTo: githubConnectedStack.widthAnchor),
+            updateBtn.heightAnchor.constraint(equalToConstant: 28),
+            userRow.widthAnchor.constraint(equalTo: githubConnectedStack.widthAnchor),
+            githubSyncLabel.widthAnchor.constraint(equalTo: githubConnectedStack.widthAnchor),
+        ])
 
-        // === Section headers ===
-        let localHeader = makeSectionHeader("Local")
-        let remoteHeader = makeSectionHeader("Remote")
-        self.localHeader = localHeader
-        self.remoteHeader = remoteHeader
-
-        // === Sub-labels (beginner-friendly) ===
-        let branchTag = makeSubLabel("Branches")
-        let statusTag = makeSubLabel("Overview")
-        let filesTag = makeSubLabel("Changed Files")
-        let quickActionsTag = makeSubLabel("Quick Actions")
-        let unpushedTag = makeSubLabel("Not Yet Pushed")
-        let stashTag = makeSubLabel("Stashes")
-        let graphTag = makeSubLabel("Commit Graph")
-        let statsTag = makeSubLabel("Activity")
-        let rBranchTag = makeSubLabel("Sync Status")
-        let rPRsTag = makeSubLabel("Open Pull Requests")
-        let rCommitsTag = makeSubLabel("Recent Commits")
-        let ciTag = makeSubLabel("CI/CD Workflows")
-
-        // Phase 4: "New" button next to Branches header
-        let newBranchButton = NSButton(title: "+ New", target: self, action: #selector(newBranchClicked))
-        newBranchButton.bezelStyle = .inline
-        newBranchButton.font = NSFont.systemFont(ofSize: 9, weight: .medium)
-        newBranchButton.contentTintColor = NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)
-        newBranchButton.translatesAutoresizingMaskIntoConstraints = false
-
-        // === Build view hierarchy ===
-        let allLocalViews: [NSView] = [localCard, localHeader, branchLabel,
-                                         branchTag, branchListScroll, newBranchButton, newBranchField,
-                                         statusTag, statusLabel,
-                                         filesTag, filesScroll,
-                                         quickActionsTag, quickActionsContainer,
-                                         unpushedTag, unpushedScroll,
-                                         stashTag, stashScroll,
-                                         graphTag, graphScroll,
-                                         statsTag, gitStatsLabel]
-        let allRemoteViews: [NSView] = [remoteCard, remoteSectionBg, remoteHeader,
-                                          tokenField, tokenSaveButton, tokenLinkButton, authStatusLabel,
-                                          remoteUserLabel, logoutButton, rBranchTag, remoteBranchLabel,
-                                          rPRsTag, remotePRsLabel, rCommitsTag, remoteCommitsScroll,
-                                          ciTag, ciScroll]
-
-        // Add local card first, then content on top
-        contentView.addSubview(localCard)
-        for v in allLocalViews where v !== localCard { contentView.addSubview(v) }
-
-        // Add remote card, bg, then content
-        contentView.addSubview(remoteCard)
-        contentView.addSubview(remoteSectionBg)
-        for v in allRemoteViews where v !== remoteCard && v !== remoteSectionBg { contentView.addSubview(v) }
-        contentView.addSubview(noRepoLabel)
-
-        localSectionViews = allLocalViews
-        remoteSectionViews = allRemoteViews
-
-        // === Shared constraints (always active, inner-card layout) ===
-        let sharedConstraints: [NSLayoutConstraint] = [
-            // Local header always at top-left
-            localHeader.topAnchor.constraint(equalTo: contentView.topAnchor, constant: sidePad),
-            localHeader.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: sidePad),
-            localCard.topAnchor.constraint(equalTo: localHeader.bottomAnchor, constant: 8),
-
-            // Inner local card layout
-            branchLabel.topAnchor.constraint(equalTo: localCard.topAnchor, constant: cardPad),
-            branchLabel.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            branchLabel.trailingAnchor.constraint(lessThanOrEqualTo: localCard.trailingAnchor, constant: -cardPad),
-
-            // P4: Branches
-            branchTag.topAnchor.constraint(equalTo: branchLabel.bottomAnchor, constant: itemGap),
-            branchTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            newBranchButton.centerYAnchor.constraint(equalTo: branchTag.centerYAnchor),
-            newBranchButton.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-            branchListScroll.topAnchor.constraint(equalTo: branchTag.bottomAnchor, constant: 3),
-            branchListScroll.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            branchListScroll.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-            branchListScroll.heightAnchor.constraint(lessThanOrEqualToConstant: 130),
-            newBranchField.topAnchor.constraint(equalTo: branchListScroll.bottomAnchor, constant: 3),
-            newBranchField.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            newBranchField.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-
-            // Overview
-            statusTag.topAnchor.constraint(equalTo: newBranchField.bottomAnchor, constant: itemGap),
-            statusTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            statusLabel.topAnchor.constraint(equalTo: statusTag.bottomAnchor, constant: 3),
-            statusLabel.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            statusLabel.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-
-            // P3: Changed Files (scrollable clickable rows)
-            filesTag.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: itemGap),
-            filesTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            filesScroll.topAnchor.constraint(equalTo: filesTag.bottomAnchor, constant: 3),
-            filesScroll.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            filesScroll.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-            filesScroll.heightAnchor.constraint(lessThanOrEqualToConstant: 130),
-
-            // P1: Quick Actions
-            quickActionsTag.topAnchor.constraint(equalTo: filesScroll.bottomAnchor, constant: itemGap),
-            quickActionsTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            quickActionsContainer.topAnchor.constraint(equalTo: quickActionsTag.bottomAnchor, constant: 3),
-            quickActionsContainer.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            quickActionsContainer.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-
-            // Not Yet Pushed
-            unpushedTag.topAnchor.constraint(equalTo: quickActionsContainer.bottomAnchor, constant: itemGap),
-            unpushedTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            unpushedScroll.topAnchor.constraint(equalTo: unpushedTag.bottomAnchor, constant: 3),
-            unpushedScroll.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            unpushedScroll.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-            unpushedScroll.heightAnchor.constraint(lessThanOrEqualToConstant: 130),
-
-            // P2: Stashes
-            stashTag.topAnchor.constraint(equalTo: unpushedScroll.bottomAnchor, constant: itemGap),
-            stashTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            stashScroll.topAnchor.constraint(equalTo: stashTag.bottomAnchor, constant: 3),
-            stashScroll.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            stashScroll.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-            stashScroll.heightAnchor.constraint(lessThanOrEqualToConstant: 130),
-
-            // P5: Commit Graph
-            graphTag.topAnchor.constraint(equalTo: stashScroll.bottomAnchor, constant: itemGap),
-            graphTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            graphScroll.topAnchor.constraint(equalTo: graphTag.bottomAnchor, constant: 3),
-            graphScroll.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            graphScroll.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-            graphScroll.heightAnchor.constraint(lessThanOrEqualToConstant: 200),
-
-            // P6: Activity Stats
-            statsTag.topAnchor.constraint(equalTo: graphScroll.bottomAnchor, constant: itemGap),
-            statsTag.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            gitStatsLabel.topAnchor.constraint(equalTo: statsTag.bottomAnchor, constant: 3),
-            gitStatsLabel.leadingAnchor.constraint(equalTo: localCard.leadingAnchor, constant: cardPad),
-            gitStatsLabel.trailingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: -cardPad),
-
-            localCard.bottomAnchor.constraint(equalTo: gitStatsLabel.bottomAnchor, constant: cardPad),
-
-            // Remote card inner layout
-            remoteCard.topAnchor.constraint(equalTo: remoteHeader.bottomAnchor, constant: 8),
-            remoteSectionBg.topAnchor.constraint(equalTo: remoteCard.topAnchor),
-            remoteSectionBg.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor),
-            remoteSectionBg.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor),
-            remoteSectionBg.bottomAnchor.constraint(equalTo: remoteCard.bottomAnchor),
-            tokenField.topAnchor.constraint(equalTo: remoteCard.topAnchor, constant: cardPad),
-            tokenField.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            tokenField.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            tokenField.heightAnchor.constraint(equalToConstant: 24),
-            tokenSaveButton.topAnchor.constraint(equalTo: tokenField.bottomAnchor, constant: 8),
-            tokenSaveButton.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            tokenLinkButton.centerYAnchor.constraint(equalTo: tokenSaveButton.centerYAnchor),
-            tokenLinkButton.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            authStatusLabel.topAnchor.constraint(equalTo: tokenSaveButton.bottomAnchor, constant: 4),
-            authStatusLabel.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            authStatusLabel.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            remoteUserLabel.topAnchor.constraint(equalTo: remoteCard.topAnchor, constant: cardPad),
-            remoteUserLabel.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            logoutButton.centerYAnchor.constraint(equalTo: remoteUserLabel.centerYAnchor),
-            logoutButton.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            rBranchTag.topAnchor.constraint(equalTo: remoteUserLabel.bottomAnchor, constant: itemGap),
-            rBranchTag.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            remoteBranchLabel.topAnchor.constraint(equalTo: rBranchTag.bottomAnchor, constant: 3),
-            remoteBranchLabel.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            remoteBranchLabel.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            rPRsTag.topAnchor.constraint(equalTo: remoteBranchLabel.bottomAnchor, constant: itemGap),
-            rPRsTag.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            remotePRsLabel.topAnchor.constraint(equalTo: rPRsTag.bottomAnchor, constant: 3),
-            remotePRsLabel.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            remotePRsLabel.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            rCommitsTag.topAnchor.constraint(equalTo: remotePRsLabel.bottomAnchor, constant: itemGap),
-            rCommitsTag.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            remoteCommitsScroll.topAnchor.constraint(equalTo: rCommitsTag.bottomAnchor, constant: 3),
-            remoteCommitsScroll.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            remoteCommitsScroll.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            remoteCommitsScroll.heightAnchor.constraint(lessThanOrEqualToConstant: 130),
-
-            // P7: CI/CD Workflows
-            ciTag.topAnchor.constraint(equalTo: remoteCommitsScroll.bottomAnchor, constant: itemGap),
-            ciTag.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            ciScroll.topAnchor.constraint(equalTo: ciTag.bottomAnchor, constant: 3),
-            ciScroll.leadingAnchor.constraint(equalTo: remoteCard.leadingAnchor, constant: cardPad),
-            ciScroll.trailingAnchor.constraint(equalTo: remoteCard.trailingAnchor, constant: -cardPad),
-            ciScroll.heightAnchor.constraint(lessThanOrEqualToConstant: 130),
-            remoteCard.bottomAnchor.constraint(equalTo: ciScroll.bottomAnchor, constant: cardPad),
-
-            // General
-            // contentWidthCon added separately below
-            noRepoLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            noRepoLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ]
-        NSLayoutConstraint.activate(sharedConstraints)
-
-        contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor).isActive = true
-
-        // === VERTICAL layout (right panel): cards stacked, full width ===
-        verticalConstraints = [
-            localCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
-            localCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
-            remoteHeader.topAnchor.constraint(equalTo: localCard.bottomAnchor, constant: 20),
-            remoteHeader.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: sidePad),
-            remoteCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
-            remoteCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
-            remoteCard.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -sidePad),
-        ]
-
-        // === HORIZONTAL layout (bottom panel): cards side by side, equal width + height ===
-        horizontalConstraints = [
-            localCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
-            localCard.widthAnchor.constraint(equalTo: remoteCard.widthAnchor),
-            localCard.heightAnchor.constraint(equalTo: remoteCard.heightAnchor),
-            remoteHeader.topAnchor.constraint(equalTo: contentView.topAnchor, constant: sidePad),
-            remoteHeader.leadingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: sidePad),
-            remoteCard.leadingAnchor.constraint(equalTo: localCard.trailingAnchor, constant: 8),
-            remoteCard.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
-            localCard.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -sidePad),
-            remoteCard.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -sidePad),
-        ]
-
-        // Start with vertical (will switch when layoutGitPanel sets isHorizontal)
-        NSLayoutConstraint.activate(verticalConstraints)
-
-        updateRemoteAuthUI()
+        contentStack.addArrangedSubview(githubCard)
+        fullWidthInStack(githubCard)
+        githubCard.isHidden = true
     }
 
-    private func updateRemoteAuthUI() {
-        let loggedIn = gitHubClient.isAuthenticated
+    // MARK: - New Repo Overlay
 
-        // Two states: not logged in → show token input, logged in → show data
-        tokenField.isHidden = loggedIn
-        tokenSaveButton.isHidden = loggedIn
-        tokenLinkButton.isHidden = loggedIn
-        remoteUserLabel.isHidden = !loggedIn
-        logoutButton.isHidden = !loggedIn
+    private func buildNewRepoOverlay() {
+        newRepoOverlay.wantsLayer = true
+        newRepoOverlay.layer?.backgroundColor = NSColor(calibratedWhite: 0.08, alpha: 0.97).cgColor
+        newRepoOverlay.layer?.cornerRadius = 10
+        newRepoOverlay.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.1).cgColor
+        newRepoOverlay.layer?.borderWidth = 1
+        newRepoOverlay.translatesAutoresizingMaskIntoConstraints = false
+        newRepoOverlay.isHidden = true
+        addSubview(newRepoOverlay)
 
-        // Show/hide remote data views (tag labels + data labels)
-        let remoteDataViews = remoteSectionViews.filter { v in
-            v !== remoteSectionBg && v !== tokenField && v !== tokenSaveButton &&
-            v !== tokenLinkButton && v !== authStatusLabel &&
-            v !== remoteUserLabel && v !== logoutButton
-        }
-        // Filter out the card and header — keep them always visible
-        for v in remoteDataViews {
-            // Skip the card bg and the header
-            if v.isKind(of: NSTextField.self) || v === remoteSectionBg {
-                // remoteSectionBg shown always when logged in, tags/data hidden when not
-                if v === remoteSectionBg {
-                    v.isHidden = false // always show card bg
-                } else {
-                    v.isHidden = !loggedIn
-                }
-            }
-        }
+        let title = makeLabel("Create new GitHub project", size: 13, weight: .semibold,
+                              color: NSColor(calibratedWhite: 0.85, alpha: 1.0))
 
-        remoteSectionBg.isHidden = false  // Card bg always visible
-        authStatusLabel.isHidden = true
+        repoNameField.isEditable = true
+        repoNameField.isBordered = false
+        repoNameField.focusRingType = .none
+        repoNameField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        repoNameField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
+        repoNameField.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.07)
+        repoNameField.placeholderString = "projekt-name"
+        repoNameField.wantsLayer = true
+        repoNameField.layer?.cornerRadius = 6
+        repoNameField.translatesAutoresizingMaskIntoConstraints = false
 
-        if loggedIn {
-            let user = gitHubClient.username ?? "connected"
-            remoteUserLabel.stringValue = "@\(user)"
-            remoteUserLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.75, blue: 1.0, alpha: 1.0)
-        }
+        let visLabel = makeLabel("Sichtbarkeit:", size: 10.5, weight: .regular,
+                                 color: NSColor(calibratedWhite: 0.5, alpha: 1.0))
+
+        repoPublicBtn.setButtonType(.radio)
+        repoPublicBtn.title = "Public"
+        repoPublicBtn.font = NSFont.systemFont(ofSize: 10.5, weight: .regular)
+        repoPublicBtn.contentTintColor = NSColor(calibratedWhite: 0.65, alpha: 1.0)
+        repoPublicBtn.translatesAutoresizingMaskIntoConstraints = false
+        repoPublicBtn.target = self
+        repoPublicBtn.action = #selector(repoVisibilityChanged(_:))
+        repoPublicBtn.state = .off
+
+        repoPrivateBtn.setButtonType(.radio)
+        repoPrivateBtn.title = "Private"
+        repoPrivateBtn.font = NSFont.systemFont(ofSize: 10.5, weight: .regular)
+        repoPrivateBtn.contentTintColor = NSColor(calibratedWhite: 0.65, alpha: 1.0)
+        repoPrivateBtn.translatesAutoresizingMaskIntoConstraints = false
+        repoPrivateBtn.target = self
+        repoPrivateBtn.action = #selector(repoVisibilityChanged(_:))
+        repoPrivateBtn.state = .on
+
+        let visRow = NSStackView(views: [visLabel, repoPublicBtn, repoPrivateBtn])
+        visRow.orientation = .horizontal
+        visRow.spacing = 12
+        visRow.alignment = .centerY
+        visRow.translatesAutoresizingMaskIntoConstraints = false
+
+        repoCreateBtn.title = "✔  Create & Upload"
+        repoCreateBtn.bezelStyle = .rounded
+        repoCreateBtn.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        repoCreateBtn.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
+        repoCreateBtn.wantsLayer = true
+        repoCreateBtn.layer?.backgroundColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 0.12).cgColor
+        repoCreateBtn.layer?.cornerRadius = 6
+        repoCreateBtn.translatesAutoresizingMaskIntoConstraints = false
+        repoCreateBtn.target = self
+        repoCreateBtn.action = #selector(createRepoClicked)
+
+        let cancelBtn = makeBtn("Cancel", color: NSColor(calibratedWhite: 0.45, alpha: 1.0),
+                                target: self, action: #selector(cancelNewRepo))
+
+        let innerStack = NSStackView(views: [title, repoNameField, visRow, repoCreateBtn, cancelBtn])
+        innerStack.orientation = .vertical
+        innerStack.alignment = .leading
+        innerStack.spacing = 10
+        innerStack.translatesAutoresizingMaskIntoConstraints = false
+        newRepoOverlay.addSubview(innerStack)
+
+        NSLayoutConstraint.activate([
+            newRepoOverlay.centerXAnchor.constraint(equalTo: centerXAnchor),
+            newRepoOverlay.centerYAnchor.constraint(equalTo: centerYAnchor),
+            newRepoOverlay.widthAnchor.constraint(equalTo: widthAnchor, constant: -24),
+            innerStack.topAnchor.constraint(equalTo: newRepoOverlay.topAnchor, constant: 16),
+            innerStack.leadingAnchor.constraint(equalTo: newRepoOverlay.leadingAnchor, constant: 16),
+            innerStack.trailingAnchor.constraint(equalTo: newRepoOverlay.trailingAnchor, constant: -16),
+            newRepoOverlay.bottomAnchor.constraint(equalTo: innerStack.bottomAnchor, constant: 16),
+            repoNameField.widthAnchor.constraint(equalTo: innerStack.widthAnchor),
+            repoNameField.heightAnchor.constraint(equalToConstant: 28),
+            repoCreateBtn.widthAnchor.constraint(equalTo: innerStack.widthAnchor),
+            repoCreateBtn.heightAnchor.constraint(equalToConstant: 30),
+            cancelBtn.widthAnchor.constraint(equalTo: innerStack.widthAnchor),
+        ])
     }
 
-    @objc private func saveToken() {
-        let value = tokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        tokenSaveButton.title = "Verifying..."
-        tokenSaveButton.isEnabled = false
-
-        gitHubClient.setToken(value)
-        gitHubClient.fetchUser { [weak self] username in
-            guard let self = self else { return }
-            if username != nil {
-                self.tokenField.stringValue = ""
-                self.authStatusLabel.isHidden = true
-                self.updateRemoteAuthUI()
-                self.refreshRemote()
-            } else {
-                self.gitHubClient.logout()
-                self.authStatusLabel.stringValue = "Invalid token"
-                self.authStatusLabel.textColor = NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0)
-                self.authStatusLabel.isHidden = false
-            }
-            self.tokenSaveButton.title = "Connect"
-            self.tokenSaveButton.isEnabled = true
-        }
-    }
-
-    @objc private func openTokenPage() {
-        let url = URL(string: "https://github.com/settings/tokens/new?scopes=repo&description=quickTerminal")!
-        NSWorkspace.shared.open(url)
-    }
-
-    @objc private func logoutButtonClicked() {
-        gitHubClient.logout()
-        updateRemoteAuthUI()
-    }
+    // MARK: - Public API (called by AppDelegate)
 
     func startRefreshing(cwd: String) {
         lastCwd = cwd
@@ -8243,32 +8321,32 @@ class GitPanelView: NSView {
     }
 
     func updateCwd(_ cwd: String) {
-        if cwd != lastCwd {
-            lastCwd = cwd
-            gitHubClient.cache = GitHubClient.RemoteCache()
-            refresh()
-        }
+        guard cwd != lastCwd else { return }
+        lastCwd = cwd
+        github.cache = GitHubClient.RemoteCache()
+        refresh()
     }
 
     func stopRefreshing() {
         refreshTimer?.invalidate()
         refreshTimer = nil
-        // gitHubClient cleanup not needed
     }
+
+    // MARK: - Git Helpers
 
     private func runGit(_ args: [String], cwd: String) -> String? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         proc.arguments = args
         proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
-        proc.environment = ["GIT_TERMINAL_PROMPT": "0", "PATH": "/usr/bin:/usr/local/bin"]
+        proc.environment = ["GIT_TERMINAL_PROMPT": "0", "PATH": "/usr/bin:/usr/local/bin:/opt/homebrew/bin"]
         let pipe = Pipe()
         proc.standardOutput = pipe
         proc.standardError = Pipe()
         do {
             try proc.run()
             proc.waitUntilExit()
-            if proc.terminationStatus != 0 { return nil }
+            guard proc.terminationStatus == 0 else { return nil }
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             guard var str = String(data: data, encoding: .utf8) else { return nil }
             while str.hasSuffix("\n") || str.hasSuffix("\r") { str.removeLast() }
@@ -8276,998 +8354,216 @@ class GitPanelView: NSView {
         } catch { return nil }
     }
 
-    private func refreshRemote() {
-        let cwd = lastCwd
-        let branch = runGit(["branch", "--show-current"], cwd: cwd) ?? "main"
-
-        gitHubClient.fetchRemoteDataIfNeeded(cwd: cwd, branch: branch) { [weak self] in
-            guard let self = self, self.gitHubClient.isAuthenticated else { return }
-
-            // Sync status — beginner-friendly
-            let tracking = self.runGit(["rev-parse", "--abbrev-ref", "@{upstream}"], cwd: cwd)
-            let behindAhead = self.runGit(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], cwd: cwd)
-
-            if let tracking = tracking {
-                var syncText = "✓ In sync with \(tracking)"
-                var syncColor = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.5, alpha: 1.0)
-                if let ba = behindAhead {
-                    let parts = ba.split(separator: "\t")
-                    if parts.count == 2 {
-                        let ahead = Int(parts[0]) ?? 0
-                        let behind = Int(parts[1]) ?? 0
-                        if ahead > 0 && behind > 0 {
-                            syncText = "↑ \(ahead) to push, ↓ \(behind) to pull  ·  \(tracking)"
-                            syncColor = NSColor(calibratedRed: 1.0, green: 0.7, blue: 0.3, alpha: 1.0)
-                        } else if ahead > 0 {
-                            syncText = "↑ \(ahead) commit\(ahead == 1 ? "" : "s") to push  ·  \(tracking)"
-                            syncColor = NSColor(calibratedRed: 0.95, green: 0.8, blue: 0.35, alpha: 1.0)
-                        } else if behind > 0 {
-                            syncText = "↓ \(behind) commit\(behind == 1 ? "" : "s") to pull  ·  \(tracking)"
-                            syncColor = NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)
-                        }
-                    }
-                }
-                self.remoteBranchLabel.stringValue = syncText
-                self.remoteBranchLabel.textColor = syncColor
-            } else {
-                self.remoteBranchLabel.stringValue = "No remote branch linked"
-                self.remoteBranchLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
-            }
-
-            // PRs — colored and clear
-            let prs = self.gitHubClient.cache.pullRequests
-            if prs.isEmpty {
-                self.remotePRsLabel.stringValue = "No open pull requests"
-                self.remotePRsLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
-            } else {
-                let prAttr = NSMutableAttributedString()
-                for (i, pr) in prs.prefix(5).enumerated() {
-                    if i > 0 { prAttr.append(NSAttributedString(string: "\n")) }
-                    prAttr.append(NSAttributedString(string: "#\(pr.number) ", attributes: [
-                        .foregroundColor: NSColor(calibratedRed: 0.45, green: 0.75, blue: 0.45, alpha: 0.8),
-                        .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .medium)
-                    ]))
-                    prAttr.append(NSAttributedString(string: pr.title, attributes: [
-                        .foregroundColor: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 1.0),
-                        .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                    ]))
-                }
-                self.remotePRsLabel.attributedStringValue = prAttr
-            }
-
-            // Remote commits — only rebuild if data changed
-            let commits = self.gitHubClient.cache.remoteCommits
-            let commitsKey = commits.map { "\($0.hash) \($0.message)" }.joined(separator: "\n")
-            if commitsKey != self.lastRemoteCommitsText {
-                self.lastRemoteCommitsText = commitsKey
-                self.remoteCommitsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-                if commits.isEmpty {
-                    let emptyRow = MarqueeLabel()
-                    emptyRow.attributedText = NSAttributedString(string: "No recent commits on remote", attributes: [
-                        .foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
-                        .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                    ])
-                    emptyRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                    self.remoteCommitsStack.addArrangedSubview(emptyRow)
-                } else {
-                    let tagsOutput = self.runGit(["tag", "--sort=-creatordate", "-n0", "--format=%(refname:short) %(objectname:short)"], cwd: cwd) ?? ""
-                    var tagMap: [String: String] = [:]
-                    for tagLine in tagsOutput.split(separator: "\n") {
-                        let tp = tagLine.split(separator: " ", maxSplits: 1)
-                        if tp.count == 2 { tagMap[String(tp[1])] = String(tp[0]) }
-                    }
-
-                    for c in commits.prefix(6) {
-                        let attr = NSMutableAttributedString()
-                        attr.append(NSAttributedString(string: c.hash + " ", attributes: [
-                            .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 0.7),
-                            .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
-                        ]))
-                        attr.append(NSAttributedString(string: c.message, attributes: [
-                            .foregroundColor: NSColor(calibratedWhite: 0.65, alpha: 1.0),
-                            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                        ]))
-                        if let tag = tagMap[c.hash] {
-                            attr.append(NSAttributedString(string: "  🏷 \(tag)", attributes: [
-                                .foregroundColor: NSColor(calibratedRed: 0.6, green: 0.5, blue: 0.8, alpha: 0.7),
-                                .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .medium)
-                            ]))
-                        }
-                        let row = MarqueeLabel()
-                        row.attributedText = attr
-                        row.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                        self.remoteCommitsStack.addArrangedSubview(row)
-                    }
-                }
-            }
-
-            // P7: CI/CD Workflow Runs
-            let runs = self.gitHubClient.cache.workflowRuns
-            let ciKey = runs.map { "\($0.name)|\($0.status)|\($0.conclusion ?? "")" }.joined(separator: "\n")
-            if ciKey != self.lastCIText {
-                self.lastCIText = ciKey
-                self.ciStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-                if runs.isEmpty {
-                    let emptyRow = MarqueeLabel()
-                    emptyRow.attributedText = NSAttributedString(string: "No workflow runs", attributes: [
-                        .foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
-                        .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                    ])
-                    emptyRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                    self.ciStack.addArrangedSubview(emptyRow)
-                } else {
-                    for run in runs {
-                        let icon: String
-                        let iconColor: NSColor
-                        if run.conclusion == "success" {
-                            icon = "✓"; iconColor = NSColor(calibratedRed: 0.4, green: 0.85, blue: 0.45, alpha: 1.0)
-                        } else if run.conclusion == "failure" {
-                            icon = "✗"; iconColor = NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0)
-                        } else if run.status == "in_progress" {
-                            icon = "●"; iconColor = NSColor(calibratedRed: 0.95, green: 0.8, blue: 0.35, alpha: 1.0)
-                        } else {
-                            icon = "○"; iconColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
-                        }
-                        let attr = NSMutableAttributedString()
-                        attr.append(NSAttributedString(string: "\(icon) ", attributes: [
-                            .foregroundColor: iconColor,
-                            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
-                        ]))
-                        attr.append(NSAttributedString(string: run.name, attributes: [
-                            .foregroundColor: NSColor(calibratedWhite: 0.65, alpha: 1.0),
-                            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                        ]))
-                        attr.append(NSAttributedString(string: " (\(run.branch))", attributes: [
-                            .foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
-                            .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-                        ]))
-                        let row = ClickableFileRow()
-                        row.filePath = run.htmlURL
-                        row.marqueeLabel.attributedText = attr
-                        row.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                        row.onClick = {
-                            if let url = URL(string: run.htmlURL) {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
-                        self.ciStack.addArrangedSubview(row)
-                    }
-                }
-            }
-
-            self.updateContentSize()
-        }
-    }
-
-    private func updateContentSize() {
-        contentView.layoutSubtreeIfNeeded()
-        let h = contentView.fittingSize.height
-        contentView.frame = NSRect(x: 0, y: 0,
-            width: scrollView.bounds.width, height: max(h, scrollView.bounds.height))
-    }
-
-    private func refresh() {
-        let cwd = lastCwd
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-
-            // Check if git repo
-            let topLevel = self.runGit(["rev-parse", "--show-toplevel"], cwd: cwd)
-            let isRepo = topLevel != nil
-
-            // Branch
-            let branch = self.runGit(["branch", "--show-current"], cwd: cwd) ?? ""
-            let headRef: String
-            if branch.isEmpty {
-                headRef = self.runGit(["rev-parse", "--short", "HEAD"], cwd: cwd) ?? "???"
-            } else {
-                headRef = branch
-            }
-
-            // Ahead/behind
-            var aheadBehind = ""
-            if isRepo {
-                if let ab = self.runGit(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], cwd: cwd) {
-                    let parts = ab.split(separator: "\t")
-                    if parts.count == 2 {
-                        let ahead = parts[0], behind = parts[1]
-                        if ahead != "0" { aheadBehind += " +" + ahead }
-                        if behind != "0" { aheadBehind += " -" + behind }
-                    }
-                }
-            }
-
-            // Status summary
-            var staged = 0, modified = 0, untracked = 0, conflicted = 0
-            var fileEntries: [(path: String, x: Character, y: Character, attr: NSAttributedString)] = []
-            if isRepo, let status = self.runGit(["status", "--porcelain=v1"], cwd: cwd) {
-                for line in status.split(separator: "\n", omittingEmptySubsequences: false) {
-                    if line.count < 3 { continue }
-                    let x = line[line.startIndex]
-                    let y = line[line.index(line.startIndex, offsetBy: 1)]
-                    let file = String(line.dropFirst(3))
-
-                    if x == "U" || y == "U" || (x == "A" && y == "A") || (x == "D" && y == "D") {
-                        conflicted += 1
-                    }
-                    if "MADRC".contains(x) && x != " " && x != "?" { staged += 1 }
-                    if "MD".contains(y) && y != " " && y != "?" { modified += 1 }
-                    if x == "?" { untracked += 1 }
-
-                    let tag: String
-                    let tagColor: NSColor
-                    let fileColor: NSColor
-                    if x == "U" || y == "U" || (x == "A" && y == "A") || (x == "D" && y == "D") {
-                        tag = "CONFLICT"
-                        tagColor = NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 1.0)
-                        fileColor = NSColor(calibratedRed: 1.0, green: 0.5, blue: 0.5, alpha: 1.0)
-                    } else if x == "?" {
-                        tag = "NEW"
-                        tagColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
-                        fileColor = NSColor(calibratedWhite: 0.55, alpha: 1.0)
-                    } else if x == "D" || y == "D" {
-                        tag = "DELETED"
-                        tagColor = NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 0.7)
-                        fileColor = NSColor(calibratedRed: 0.8, green: 0.5, blue: 0.5, alpha: 0.7)
-                    } else if "MADRC".contains(x) && x != " " && "MD".contains(y) && y != " " {
-                        tag = "STAGED+MOD"
-                        tagColor = NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.55, alpha: 1.0)
-                        fileColor = NSColor(calibratedRed: 0.9, green: 0.75, blue: 0.3, alpha: 1.0)
-                    } else if "MADRC".contains(x) && x != " " {
-                        tag = "STAGED"
-                        tagColor = NSColor(calibratedRed: 0.4, green: 0.85, blue: 0.45, alpha: 1.0)
-                        fileColor = NSColor(calibratedRed: 0.5, green: 0.8, blue: 0.55, alpha: 1.0)
-                    } else {
-                        tag = "MODIFIED"
-                        tagColor = NSColor(calibratedRed: 0.95, green: 0.7, blue: 0.25, alpha: 1.0)
-                        fileColor = NSColor(calibratedRed: 0.85, green: 0.7, blue: 0.4, alpha: 1.0)
-                    }
-
-                    let attr = NSMutableAttributedString()
-                    attr.append(NSAttributedString(string: tag, attributes: [
-                        .foregroundColor: tagColor,
-                        .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .bold)
-                    ]))
-                    attr.append(NSAttributedString(string: "  ", attributes: [
-                        .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .regular)
-                    ]))
-                    let displayName = (file as NSString).lastPathComponent
-                    attr.append(NSAttributedString(string: displayName, attributes: [
-                        .foregroundColor: fileColor,
-                        .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                    ]))
-                    fileEntries.append((path: file, x: x, y: y, attr: attr))
-                }
-            }
-
-            // Unpushed commits (local only)
-            let unpushedOutput = self.runGit(["log", "@{upstream}..HEAD", "--oneline", "-8"], cwd: cwd) ?? ""
-
-            // P2: Stash list
-            let stashOutput = self.runGit(["stash", "list"], cwd: cwd) ?? ""
-
-            // P4: Branch list
-            let branchOutput = self.runGit(["branch", "--format=%(HEAD) %(refname:short) %(upstream:track,nobracket)"], cwd: cwd) ?? ""
-
-            // P5: Commit graph
-            let graphOutput = self.runGit(["log", "--oneline", "--graph", "--all", "-20", "--format=%h %s", "--color=never"], cwd: cwd) ?? ""
-
-            // P6: Stats (30s cache)
-            let now = Date()
-            var statsText = ""
-            if isRepo && now.timeIntervalSince(self.lastStatsRefresh) >= 30 {
-                let todayLines = self.runGit(["log", "--since=midnight", "--numstat", "--format="], cwd: cwd) ?? ""
-                let todayCount = self.runGit(["rev-list", "--count", "--since=midnight", "HEAD"], cwd: cwd) ?? "0"
-                let weekCount = self.runGit(["rev-list", "--count", "--since=1.week.ago", "HEAD"], cwd: cwd) ?? "0"
-                let weekLines = self.runGit(["log", "--since=1.week.ago", "--numstat", "--format="], cwd: cwd) ?? ""
-
-                var added = 0, removed = 0
-                var fileCounts: [String: Int] = [:]
-                for line in todayLines.split(separator: "\n") {
-                    let parts = line.split(separator: "\t")
-                    if parts.count == 3 {
-                        added += Int(parts[0]) ?? 0
-                        removed += Int(parts[1]) ?? 0
-                    }
-                }
-                for line in weekLines.split(separator: "\n") {
-                    let parts = line.split(separator: "\t")
-                    if parts.count == 3 {
-                        let fname = (String(parts[2]) as NSString).lastPathComponent
-                        fileCounts[fname, default: 0] += (Int(parts[0]) ?? 0) + (Int(parts[1]) ?? 0)
-                    }
-                }
-                let topFiles = fileCounts.sorted { $0.value > $1.value }.prefix(2)
-                    .map { "\($0.key) (\($0.value))" }.joined(separator: ", ")
-                statsText = "+\(added) / -\(removed)  ·  \(todayCount) today, \(weekCount) this week"
-                if !topFiles.isEmpty { statsText += "\nTop: \(topFiles)" }
-            }
-
-            // Build status text (beginner-friendly)
-            var statusParts: [String] = []
-            if staged > 0 { statusParts.append("● \(staged) ready to commit") }
-            if modified > 0 { statusParts.append("○ \(modified) modified") }
-            if untracked > 0 { statusParts.append("+ \(untracked) new") }
-            if conflicted > 0 { statusParts.append("⚠ \(conflicted) conflicts") }
-            let statusText = statusParts.isEmpty ? "✓ All clean — no changes" : statusParts.joined(separator: "\n")
-
-            let filesKey = fileEntries.map { $0.path }.joined(separator: "\n")
-
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.isGitRepo = isRepo
-                self.noRepoLabel.isHidden = isRepo
-
-                // Hide/show local + remote sections
-                for v in self.localSectionViews { v.isHidden = !isRepo }
-                if !isRepo {
-                    for v in self.remoteSectionViews { v.isHidden = true }
-                } else {
-                    self.remoteSectionViews.first?.isHidden = false
-                    self.updateRemoteAuthUI()
-                }
-
-                if isRepo {
-                    if branch.isEmpty {
-                        self.branchLabel.stringValue = "⚠ Detached at \(headRef)"
-                        self.branchLabel.textColor = NSColor(calibratedRed: 1.0, green: 0.7, blue: 0.3, alpha: 1.0)
-                    } else {
-                        self.branchLabel.stringValue = "⎇  \(headRef)" + aheadBehind
-                        self.branchLabel.textColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
-                    }
-
-                    if statusParts.isEmpty {
-                        self.statusLabel.textColor = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.55, alpha: 1.0)
-                    } else {
-                        self.statusLabel.textColor = NSColor(calibratedWhite: 0.6, alpha: 1.0)
-                    }
-                    self.statusLabel.stringValue = statusText
-
-                    // P3: Populate files stack with clickable rows
-                    if filesKey != self.lastFilesText {
-                        self.lastFilesText = filesKey
-                        self.expandedDiffFile = nil
-                        self.currentDiffView?.removeFromSuperview()
-                        self.currentDiffView = nil
-                        self.filesStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-                        if fileEntries.isEmpty {
-                            let emptyRow = MarqueeLabel()
-                            emptyRow.attributedText = NSAttributedString(string: "No changed files", attributes: [
-                                .foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
-                                .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                            ])
-                            emptyRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                            self.filesStack.addArrangedSubview(emptyRow)
-                        } else {
-                            for entry in fileEntries.prefix(30) {
-                                let row = ClickableFileRow()
-                                row.filePath = entry.path
-                                row.statusX = entry.x
-                                row.statusY = entry.y
-                                row.marqueeLabel.attributedText = entry.attr
-                                row.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                                row.onClick = { [weak self] in
-                                    self?.toggleDiff(for: entry.path, statusX: entry.x, statusY: entry.y)
-                                }
-                                self.filesStack.addArrangedSubview(row)
-                            }
-                        }
-                    }
-
-                    // Populate unpushed stack — only rebuild if data changed
-                    if unpushedOutput != self.lastUnpushedText {
-                        self.lastUnpushedText = unpushedOutput
-                        self.unpushedStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-                        if unpushedOutput.isEmpty {
-                            let emptyRow = MarqueeLabel()
-                            emptyRow.attributedText = NSAttributedString(string: "✓ Everything is pushed", attributes: [
-                                .foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
-                                .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                            ])
-                            emptyRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                            self.unpushedStack.addArrangedSubview(emptyRow)
-                        } else {
-                            for line in unpushedOutput.split(separator: "\n").prefix(8) {
-                                let parts = line.split(separator: " ", maxSplits: 1)
-                                let hash = parts.count > 0 ? String(parts[0]) : ""
-                                let msg = parts.count > 1 ? String(parts[1]) : ""
-                                let attr = NSMutableAttributedString()
-                                attr.append(NSAttributedString(string: hash + " ", attributes: [
-                                    .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 0.7),
-                                    .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
-                                ]))
-                                attr.append(NSAttributedString(string: msg, attributes: [
-                                    .foregroundColor: NSColor(calibratedRed: 0.95, green: 0.8, blue: 0.35, alpha: 1.0),
-                                    .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                                ]))
-                                let row = MarqueeLabel()
-                                row.attributedText = attr
-                                row.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                                self.unpushedStack.addArrangedSubview(row)
-                            }
-                        }
-                    }
-
-                    // P2: Populate stash stack
-                    if stashOutput != self.lastStashText {
-                        self.lastStashText = stashOutput
-                        self.stashStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-                        if stashOutput.isEmpty {
-                            let emptyRow = MarqueeLabel()
-                            emptyRow.attributedText = NSAttributedString(string: "No stashes", attributes: [
-                                .foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
-                                .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                            ])
-                            emptyRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                            self.stashStack.addArrangedSubview(emptyRow)
-                        } else {
-                            for (i, line) in stashOutput.split(separator: "\n").prefix(10).enumerated() {
-                                let stashRow = NSStackView()
-                                stashRow.orientation = .horizontal
-                                stashRow.spacing = 4
-                                stashRow.translatesAutoresizingMaskIntoConstraints = false
-
-                                let label = MarqueeLabel()
-                                label.attributedText = NSAttributedString(string: String(line), attributes: [
-                                    .foregroundColor: NSColor(calibratedWhite: 0.6, alpha: 1.0),
-                                    .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                                ])
-                                label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-                                label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-                                let applyBtn = NSButton(title: "Apply", target: self, action: #selector(self.stashApplyClicked(_:)))
-                                applyBtn.bezelStyle = .inline
-                                applyBtn.font = NSFont.systemFont(ofSize: 8.5, weight: .medium)
-                                applyBtn.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
-                                applyBtn.tag = i
-                                applyBtn.translatesAutoresizingMaskIntoConstraints = false
-
-                                let dropBtn = NSButton(title: "Drop", target: self, action: #selector(self.stashDropClicked(_:)))
-                                dropBtn.bezelStyle = .inline
-                                dropBtn.font = NSFont.systemFont(ofSize: 8.5, weight: .medium)
-                                dropBtn.contentTintColor = NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0)
-                                dropBtn.tag = i
-                                dropBtn.translatesAutoresizingMaskIntoConstraints = false
-
-                                stashRow.addArrangedSubview(label)
-                                stashRow.addArrangedSubview(applyBtn)
-                                stashRow.addArrangedSubview(dropBtn)
-                                stashRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                                self.stashStack.addArrangedSubview(stashRow)
-                            }
-                        }
-                    }
-
-                    // P4: Populate branch list
-                    if !branchOutput.isEmpty {
-                        let branchLines = branchOutput.split(separator: "\n").map { String($0) }
-                        let currentCount = self.branchListStack.arrangedSubviews.count
-                        if branchLines.count != currentCount || currentCount == 0 {
-                            self.branchListStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-                            for (i, bLine) in branchLines.enumerated() {
-                                let isCurrent = bLine.hasPrefix("*")
-                                let trimmed = bLine.trimmingCharacters(in: .whitespaces)
-                                let parts = trimmed.split(separator: " ", maxSplits: 2)
-                                let bName = isCurrent ? (parts.count > 1 ? String(parts[1]) : trimmed) : (parts.count > 0 ? String(parts[0]) : trimmed)
-                                let tracking = parts.count > (isCurrent ? 2 : 1) ? String(parts.last!) : ""
-
-                                let brRow = NSStackView()
-                                brRow.orientation = .horizontal
-                                brRow.spacing = 4
-                                brRow.translatesAutoresizingMaskIntoConstraints = false
-
-                                let attr = NSMutableAttributedString()
-                                if isCurrent {
-                                    attr.append(NSAttributedString(string: "● ", attributes: [
-                                        .foregroundColor: NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0),
-                                        .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
-                                    ]))
-                                }
-                                attr.append(NSAttributedString(string: bName, attributes: [
-                                    .foregroundColor: isCurrent ?
-                                        NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0) :
-                                        NSColor(calibratedWhite: 0.6, alpha: 1.0),
-                                    .font: NSFont.monospacedSystemFont(ofSize: 10, weight: isCurrent ? .medium : .regular)
-                                ]))
-                                if !tracking.isEmpty {
-                                    attr.append(NSAttributedString(string: " \(tracking)", attributes: [
-                                        .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0),
-                                        .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
-                                    ]))
-                                }
-
-                                let label = MarqueeLabel()
-                                label.attributedText = attr
-                                label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-                                label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-                                brRow.addArrangedSubview(label)
-
-                                if !isCurrent {
-                                    let switchBtn = NSButton(title: "↗", target: self, action: #selector(self.branchSwitchClicked(_:)))
-                                    switchBtn.bezelStyle = .inline
-                                    switchBtn.font = NSFont.systemFont(ofSize: 9, weight: .medium)
-                                    switchBtn.contentTintColor = NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)
-                                    switchBtn.tag = i
-                                    switchBtn.translatesAutoresizingMaskIntoConstraints = false
-
-                                    let delBtn = NSButton(title: "✕", target: self, action: #selector(self.branchDeleteClicked(_:)))
-                                    delBtn.bezelStyle = .inline
-                                    delBtn.font = NSFont.systemFont(ofSize: 9, weight: .medium)
-                                    delBtn.contentTintColor = NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0)
-                                    delBtn.tag = i
-                                    delBtn.translatesAutoresizingMaskIntoConstraints = false
-
-                                    brRow.addArrangedSubview(switchBtn)
-                                    brRow.addArrangedSubview(delBtn)
-                                }
-
-                                brRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                                self.branchListStack.addArrangedSubview(brRow)
-                            }
-                            // Store branch names for tag-based lookup
-                            self.branchNames = branchLines.map { line in
-                                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                                let parts = trimmed.split(separator: " ", maxSplits: 2)
-                                if line.hasPrefix("*") { return parts.count > 1 ? String(parts[1]) : trimmed }
-                                return parts.count > 0 ? String(parts[0]) : trimmed
-                            }
-                        }
-                    }
-
-                    // P5: Populate commit graph
-                    if graphOutput != self.lastGraphText {
-                        self.lastGraphText = graphOutput
-                        self.expandedCommitHash = nil
-                        self.currentCommitDetailView?.removeFromSuperview()
-                        self.currentCommitDetailView = nil
-                        self.graphStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-                        if graphOutput.isEmpty {
-                            let emptyRow = MarqueeLabel()
-                            emptyRow.attributedText = NSAttributedString(string: "No commits", attributes: [
-                                .foregroundColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
-                                .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                            ])
-                            emptyRow.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                            self.graphStack.addArrangedSubview(emptyRow)
-                        } else {
-                            let graphColors: [NSColor] = [
-                                NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 0.8),
-                                NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 0.8),
-                                NSColor(calibratedRed: 0.95, green: 0.7, blue: 0.35, alpha: 0.8),
-                                NSColor(calibratedRed: 0.7, green: 0.5, blue: 0.9, alpha: 0.8),
-                                NSColor(calibratedRed: 1.0, green: 0.5, blue: 0.5, alpha: 0.8),
-                            ]
-                            for graphLine in graphOutput.split(separator: "\n").prefix(20) {
-                                let lineStr = String(graphLine)
-                                let attr = NSMutableAttributedString()
-
-                                // Split into graph chars and commit text
-                                var graphPart = ""
-                                var commitPart = ""
-                                var foundHash = false
-                                var charIdx = 0
-                                for ch in lineStr {
-                                    if !foundHash && (ch == "|" || ch == "*" || ch == "/" || ch == "\\" || ch == " " || ch == "_") {
-                                        graphPart.append(ch)
-                                    } else {
-                                        foundHash = true
-                                        commitPart.append(ch)
-                                    }
-                                    charIdx += 1
-                                }
-
-                                // Color graph characters
-                                for (ci, ch) in graphPart.enumerated() {
-                                    let color: NSColor
-                                    if ch == "*" {
-                                        color = NSColor(calibratedRed: 0.95, green: 0.85, blue: 0.35, alpha: 1.0)
-                                    } else if ch == " " {
-                                        color = .clear
-                                    } else {
-                                        color = graphColors[ci % graphColors.count]
-                                    }
-                                    attr.append(NSAttributedString(string: String(ch), attributes: [
-                                        .foregroundColor: color,
-                                        .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
-                                    ]))
-                                }
-
-                                // Commit text (hash + message)
-                                let commitTrimmed = commitPart.trimmingCharacters(in: .whitespaces)
-                                let commitWords = commitTrimmed.split(separator: " ", maxSplits: 1)
-                                if commitWords.count >= 1 {
-                                    let hash = String(commitWords[0])
-                                    attr.append(NSAttributedString(string: hash + " ", attributes: [
-                                        .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 0.7),
-                                        .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
-                                    ]))
-                                    if commitWords.count > 1 {
-                                        attr.append(NSAttributedString(string: String(commitWords[1]), attributes: [
-                                            .foregroundColor: NSColor(calibratedWhite: 0.6, alpha: 1.0),
-                                            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                                        ]))
-                                    }
-                                } else if !commitTrimmed.isEmpty {
-                                    attr.append(NSAttributedString(string: commitTrimmed, attributes: [
-                                        .foregroundColor: NSColor(calibratedWhite: 0.5, alpha: 1.0),
-                                        .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-                                    ]))
-                                }
-
-                                let row = ClickableFileRow()
-                                let hash = commitWords.first.map(String.init) ?? ""
-                                row.filePath = hash
-                                row.marqueeLabel.attributedText = attr
-                                row.heightAnchor.constraint(equalToConstant: 16).isActive = true
-                                if !hash.isEmpty && hash.allSatisfy({ $0.isHexDigit }) {
-                                    row.onClick = { [weak self] in
-                                        self?.toggleCommitDetail(for: hash)
-                                    }
-                                }
-                                self.graphStack.addArrangedSubview(row)
-                            }
-                        }
-                    }
-
-                    // P6: Update stats (30s cache)
-                    if !statsText.isEmpty {
-                        self.lastStatsRefresh = now
-                        self.lastStatsText = statsText
-                        self.gitStatsLabel.stringValue = statsText
-                        self.gitStatsLabel.textColor = NSColor(calibratedWhite: 0.55, alpha: 1.0)
-                    } else if self.lastStatsText.isEmpty {
-                        self.gitStatsLabel.stringValue = "No activity data"
-                        self.gitStatsLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
-                    }
-
-                    // Trigger remote refresh (respects 30s cache)
-                    self.refreshRemote()
-                }
-
-                self.updateContentSize()
-            }
-        }
-    }
-
-    // MARK: - Git Action Helper
-
     private func runGitAction(_ args: [String], cwd: String) -> (success: Bool, output: String) {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         proc.arguments = args
         proc.currentDirectoryURL = URL(fileURLWithPath: cwd)
-        proc.environment = ["GIT_TERMINAL_PROMPT": "0", "PATH": "/usr/bin:/usr/local/bin"]
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        proc.standardOutput = outPipe
-        proc.standardError = errPipe
+        proc.environment = ["GIT_TERMINAL_PROMPT": "0", "PATH": "/usr/bin:/usr/local/bin:/opt/homebrew/bin"]
+        let out = Pipe(), err = Pipe()
+        proc.standardOutput = out
+        proc.standardError = err
         do {
             try proc.run()
             proc.waitUntilExit()
-            let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
-            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            let outStr = String(data: outData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let success = proc.terminationStatus == 0
-            return (success, success ? outStr : errStr)
+            let outStr = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let errStr = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let ok = proc.terminationStatus == 0
+            return (ok, ok ? outStr : errStr)
         } catch { return (false, error.localizedDescription) }
     }
 
-    private func showActionFeedback(_ message: String, success: Bool) {
-        actionFeedbackLabel.stringValue = message
-        actionFeedbackLabel.textColor = success
-            ? NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
-            : NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0)
-        actionFeedbackLabel.isHidden = false
-        feedbackTimer?.invalidate()
-        feedbackTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
-            self?.actionFeedbackLabel.isHidden = true
-        }
-    }
+    // MARK: - Refresh
 
-    // MARK: - Phase 1: Quick Actions
+    private func refresh() {
+        let cwd = lastCwd
+        guard !cwd.isEmpty else { return }
 
-    @objc private func stageAllClicked() {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let result = self.runGitAction(["add", "-A"], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Staged all changes" : result.output, success: result.success)
-                self.refresh()
+
+            // 1. Is git repo?
+            let topLevel = self.runGit(["rev-parse", "--show-toplevel"], cwd: cwd)
+            let isRepo = topLevel != nil
+
+            // 2. Branch
+            let branch = isRepo ? (self.runGit(["branch", "--show-current"], cwd: cwd) ?? "main") : ""
+
+            // 3. Remote exists?
+            let remoteURL = isRepo ? self.runGit(["remote", "get-url", "origin"], cwd: cwd) : nil
+            let hasRemote = remoteURL != nil
+
+            // 4. Ahead / behind (only if remote)
+            var aheadCount = 0, behindCount = 0
+            if hasRemote, let ab = self.runGit(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], cwd: cwd) {
+                let parts = ab.split(separator: "\t")
+                if parts.count == 2 {
+                    aheadCount = Int(parts[0]) ?? 0
+                    behindCount = Int(parts[1]) ?? 0
+                }
+            }
+
+            // 5. Changed files
+            var entries: [(path: String, x: Character, y: Character, attr: NSAttributedString)] = []
+            if isRepo, let status = self.runGit(["status", "--porcelain=v1"], cwd: cwd) {
+                for line in status.split(separator: "\n", omittingEmptySubsequences: false) {
+                    guard line.count >= 3 else { continue }
+                    let x = line[line.startIndex]
+                    let y = line[line.index(line.startIndex, offsetBy: 1)]
+                    let file = String(line.dropFirst(3))
+
+                    let (tag, tagColor, fileColor): (String, NSColor, NSColor)
+                    if x == "?" {
+                        (tag, tagColor, fileColor) = ("NEU", NSColor(calibratedWhite: 0.45, alpha: 1.0), NSColor(calibratedWhite: 0.6, alpha: 1.0))
+                    } else if x == "D" || y == "D" {
+                        (tag, tagColor, fileColor) = ("DELETED", NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 0.8), NSColor(calibratedRed: 0.8, green: 0.5, blue: 0.5, alpha: 0.8))
+                    } else if x == "U" || y == "U" {
+                        (tag, tagColor, fileColor) = ("KONFLIKT", NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.35, alpha: 1.0), NSColor(calibratedRed: 1.0, green: 0.5, blue: 0.5, alpha: 1.0))
+                    } else if "MADRC".contains(x) && x != " " && "MD".contains(y) && y != " " {
+                        (tag, tagColor, fileColor) = ("BEREIT+MOD", NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.55, alpha: 1.0), NSColor(calibratedRed: 0.9, green: 0.75, blue: 0.3, alpha: 1.0))
+                    } else if "MADRC".contains(x) && x != " " {
+                        (tag, tagColor, fileColor) = ("BEREIT", NSColor(calibratedRed: 0.4, green: 0.85, blue: 0.45, alpha: 1.0), NSColor(calibratedRed: 0.5, green: 0.8, blue: 0.55, alpha: 1.0))
+                    } else {
+                        (tag, tagColor, fileColor) = ("MODIFIED", NSColor(calibratedRed: 0.95, green: 0.7, blue: 0.25, alpha: 1.0), NSColor(calibratedRed: 0.85, green: 0.7, blue: 0.4, alpha: 1.0))
+                    }
+
+                    let attr = NSMutableAttributedString()
+                    attr.append(NSAttributedString(string: tag, attributes: [
+                        .foregroundColor: tagColor, .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .bold)
+                    ]))
+                    attr.append(NSAttributedString(string: "  \((file as NSString).lastPathComponent)", attributes: [
+                        .foregroundColor: fileColor, .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+                    ]))
+                    entries.append((path: file, x: x, y: y, attr: attr))
+                }
+            }
+
+            // 6. Project name from cwd
+            let projectName = (cwd as NSString).lastPathComponent
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.isGitRepo = isRepo
+                self.currentBranch = branch
+                self.ahead = aheadCount
+                self.behind = behindCount
+                self.hasRemote = hasRemote
+                self.fileEntries = entries
+
+                self.updateLayout(projectName: projectName)
+                self.refreshGithubStatus(cwd: cwd)
             }
         }
     }
 
-    @objc private func commitClicked() {
-        commitMessageField.isHidden = !commitMessageField.isHidden
-        if !commitMessageField.isHidden {
-            commitMessageField.stringValue = ""
-            window?.makeFirstResponder(commitMessageField)
+    // MARK: - Layout Update
+
+    private func updateLayout(projectName: String) {
+        projectLabel.stringValue = projectName
+        if !currentBranch.isEmpty {
+            branchBadge.stringValue = " \(currentBranch) "
+            branchBadge.isHidden = false
+        } else {
+            branchBadge.isHidden = true
         }
-        updateContentSize()
+
+        if !isGitRepo {
+            statusLabel.stringValue = "No tracking — start it with the button"
+            statusLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
+        } else if fileEntries.isEmpty {
+            statusLabel.stringValue = "✅  All saved — nothing to do"
+            statusLabel.textColor = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.5, alpha: 1.0)
+        } else {
+            statusLabel.stringValue = "\(fileEntries.count) file\(fileEntries.count == 1 ? "" : "s") changed"
+            statusLabel.textColor = NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.3, alpha: 1.0)
+        }
+
+        noRepoCard.isHidden = isGitRepo
+        filesCard.isHidden = !isGitRepo || fileEntries.isEmpty
+        if isGitRepo { rebuildFilesStack() }
+        commitCard.isHidden = !isGitRepo
+        githubCard.isHidden = !isGitRepo
+        updateGithubCard()
     }
 
-    @objc private func commitWithMessage() {
-        let msg = commitMessageField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !msg.isEmpty else { return }
-        commitMessageField.isHidden = true
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["commit", "-m", msg], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Committed: \(msg)" : result.output, success: result.success)
-                self.refresh()
-            }
-        }
-    }
+    // MARK: - Files Stack
 
-    @objc private func pushClicked() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["push"], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Pushed successfully" : result.output, success: result.success)
-                self.gitHubClient.cache.lastFetch = .distantPast
-                self.refresh()
-            }
-        }
-    }
+    private func rebuildFilesStack() {
+        let key = fileEntries.map { $0.path }.joined(separator: "\n")
+        guard key != lastFilesKey else { return }
+        lastFilesKey = key
+        expandedDiffFile = nil
+        currentDiffView?.removeFromSuperview()
+        currentDiffView = nil
+        filesStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
 
-    @objc private func pullClicked() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["pull"], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Pulled successfully" : result.output, success: result.success)
-                self.gitHubClient.cache.lastFetch = .distantPast
-                self.refresh()
-            }
-        }
-    }
-
-    // MARK: - Phase 2: Stash Actions
-
-    @objc private func stashSaveClicked() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["stash", "push", "-m", "quickTerminal stash"], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Changes stashed" : result.output, success: result.success)
-                self.refresh()
-            }
+        for entry in fileEntries.prefix(30) {
+            let row = ClickableFileRow()
+            row.filePath = entry.path
+            row.statusX = entry.x
+            row.statusY = entry.y
+            row.marqueeLabel.attributedText = entry.attr
+            row.heightAnchor.constraint(equalToConstant: 18).isActive = true
+            row.onClick = { [weak self] in self?.toggleDiff(for: entry.path, x: entry.x, y: entry.y) }
+            filesStack.addArrangedSubview(row)
         }
     }
 
-    @objc private func stashApplyClicked(_ sender: NSButton) {
-        let index = sender.tag
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["stash", "apply", "stash@{\(index)}"], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Applied stash@{\(index)}" : result.output, success: result.success)
-                self.refresh()
-            }
-        }
-    }
-
-    @objc private func stashDropClicked(_ sender: NSButton) {
-        let index = sender.tag
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["stash", "drop", "stash@{\(index)}"], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Dropped stash@{\(index)}" : result.output, success: result.success)
-                self.refresh()
-            }
-        }
-    }
-
-    // MARK: - Phase 3: Diff Preview
-
-    private func toggleDiff(for filePath: String, statusX: Character, statusY: Character) {
+    private func toggleDiff(for filePath: String, x: Character, y: Character) {
         if expandedDiffFile == filePath {
             expandedDiffFile = nil
             currentDiffView?.removeFromSuperview()
             currentDiffView = nil
+            return
+        }
+        currentDiffView?.removeFromSuperview()
+        expandedDiffFile = filePath
+
+        let args: [String]
+        if "MADRC".contains(x) && x != " " && x != "?" {
+            args = ["diff", "--cached", filePath]
         } else {
-            currentDiffView?.removeFromSuperview()
-            expandedDiffFile = filePath
+            args = ["diff", filePath]
+        }
 
-            let args: [String]
-            if "MADRC".contains(statusX) && statusX != " " && statusX != "?" {
-                args = ["diff", "--cached", filePath]
-            } else {
-                args = ["diff", filePath]
-            }
-
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { return }
-                let diffOutput = self.runGit(args, cwd: self.lastCwd) ?? "No diff available"
-                DispatchQueue.main.async {
-                    let diffView = self.makeDiffView(diffOutput)
-                    if let index = self.filesStack.arrangedSubviews.firstIndex(where: { ($0 as? ClickableFileRow)?.filePath == filePath }) {
-                        self.filesStack.insertArrangedSubview(diffView, at: index + 1)
-                    }
-                    self.currentDiffView = diffView
-                    self.updateContentSize()
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let diffOut = self.runGit(args, cwd: self.lastCwd) ?? "No diff available"
+            DispatchQueue.main.async {
+                let diffView = self.makeDiffView(diffOut)
+                if let idx = self.filesStack.arrangedSubviews.firstIndex(where: { ($0 as? ClickableFileRow)?.filePath == filePath }) {
+                    self.filesStack.insertArrangedSubview(diffView, at: idx + 1)
                 }
+                self.currentDiffView = diffView
             }
         }
-        updateContentSize()
     }
 
     private func makeDiffView(_ diff: String) -> NSView {
-        let diffLabel = NSTextField(wrappingLabelWithString: "")
-        diffLabel.isEditable = false
-        diffLabel.isSelectable = true
-        diffLabel.drawsBackground = false
-        diffLabel.isBordered = false
-        diffLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        let attr = NSMutableAttributedString()
-        for (i, line) in diff.split(separator: "\n", omittingEmptySubsequences: false).prefix(200).enumerated() {
-            let lineStr = String(line)
-            let color: NSColor
-            if lineStr.hasPrefix("+++") || lineStr.hasPrefix("---") {
-                color = NSColor(calibratedWhite: 0.5, alpha: 1.0)
-            } else if lineStr.hasPrefix("+") {
-                color = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.45, alpha: 1.0)
-            } else if lineStr.hasPrefix("-") {
-                color = NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0)
-            } else if lineStr.hasPrefix("@@") {
-                color = NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)
-            } else {
-                color = NSColor(calibratedWhite: 0.45, alpha: 1.0)
-            }
-            if i > 0 { attr.append(NSAttributedString(string: "\n")) }
-            attr.append(NSAttributedString(string: lineStr, attributes: [
-                .foregroundColor: color,
-                .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
-            ]))
-        }
-        diffLabel.attributedStringValue = attr
-
-        let scroll = NSScrollView()
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.scrollerStyle = .overlay
-        scroll.borderType = .noBorder
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.documentView = diffLabel
-        diffLabel.widthAnchor.constraint(equalTo: scroll.widthAnchor).isActive = true
-        scroll.heightAnchor.constraint(lessThanOrEqualToConstant: 200).isActive = true
-        let hug = scroll.heightAnchor.constraint(equalTo: diffLabel.heightAnchor)
-        hug.priority = .defaultHigh
-        hug.isActive = true
-
-        scroll.wantsLayer = true
-        scroll.layer?.backgroundColor = NSColor(calibratedWhite: 0.0, alpha: 0.2).cgColor
-        scroll.layer?.cornerRadius = 4
-        return scroll
-    }
-
-    // MARK: - Phase 4: Branch Management
-
-    @objc private func newBranchClicked() {
-        newBranchField.isHidden = !newBranchField.isHidden
-        newBranchFieldHeight.constant = newBranchField.isHidden ? 0 : 24
-        if !newBranchField.isHidden {
-            newBranchField.stringValue = ""
-            window?.makeFirstResponder(newBranchField)
-        }
-        updateContentSize()
-    }
-
-    @objc private func createBranchWithName() {
-        let name = newBranchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
-        newBranchField.isHidden = true
-        newBranchFieldHeight.constant = 0
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["checkout", "-b", name], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Created branch: \(name)" : result.output, success: result.success)
-                self.refresh()
-            }
-        }
-    }
-
-    @objc private func branchSwitchClicked(_ sender: NSButton) {
-        let index = sender.tag
-        guard index < branchNames.count else { return }
-        let bName = branchNames[index]
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["checkout", bName], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Switched to \(bName)" : result.output, success: result.success)
-                self.refresh()
-            }
-        }
-    }
-
-    @objc private func branchDeleteClicked(_ sender: NSButton) {
-        let index = sender.tag
-        guard index < branchNames.count else { return }
-        let bName = branchNames[index]
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            let result = self.runGitAction(["branch", "-d", bName], cwd: self.lastCwd)
-            DispatchQueue.main.async {
-                self.showActionFeedback(result.success ? "Deleted \(bName)" : result.output, success: result.success)
-                self.refresh()
-            }
-        }
-    }
-
-    // MARK: - Phase 5: Commit Detail
-
-    private func toggleCommitDetail(for hash: String) {
-        if expandedCommitHash == hash {
-            expandedCommitHash = nil
-            currentCommitDetailView?.removeFromSuperview()
-            currentCommitDetailView = nil
-        } else {
-            currentCommitDetailView?.removeFromSuperview()
-            expandedCommitHash = hash
-
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                guard let self = self else { return }
-                let detail = self.runGit(["show", "--stat", "--format=%H%n%an%n%ad%n%B", hash], cwd: self.lastCwd) ?? "No details"
-                DispatchQueue.main.async {
-                    let detailView = self.makeCommitDetailView(detail)
-                    if let index = self.graphStack.arrangedSubviews.firstIndex(where: { ($0 as? ClickableFileRow)?.filePath == hash }) {
-                        self.graphStack.insertArrangedSubview(detailView, at: index + 1)
-                    }
-                    self.currentCommitDetailView = detailView
-                    self.updateContentSize()
-                }
-            }
-        }
-        updateContentSize()
-    }
-
-    private func makeCommitDetailView(_ detail: String) -> NSView {
-        let lines = detail.split(separator: "\n", omittingEmptySubsequences: false)
-        let attr = NSMutableAttributedString()
-        let dimFont = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
-        let dimColor = NSColor(calibratedWhite: 0.5, alpha: 1.0)
-
-        for (i, line) in lines.prefix(30).enumerated() {
-            let lineStr = String(line)
-            if i > 0 { attr.append(NSAttributedString(string: "\n")) }
-            if i == 0 {
-                // Full hash
-                attr.append(NSAttributedString(string: lineStr, attributes: [
-                    .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 0.8),
-                    .font: dimFont
-                ]))
-            } else if i == 1 {
-                // Author
-                attr.append(NSAttributedString(string: "Author: \(lineStr)", attributes: [
-                    .foregroundColor: NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 0.8),
-                    .font: dimFont
-                ]))
-            } else if i == 2 {
-                // Date
-                attr.append(NSAttributedString(string: "Date: \(lineStr)", attributes: [
-                    .foregroundColor: dimColor, .font: dimFont
-                ]))
-            } else {
-                attr.append(NSAttributedString(string: lineStr, attributes: [
-                    .foregroundColor: dimColor, .font: dimFont
-                ]))
-            }
-        }
-
         let label = NSTextField(wrappingLabelWithString: "")
         label.isEditable = false
         label.isSelectable = true
         label.drawsBackground = false
         label.isBordered = false
-        label.attributedStringValue = attr
         label.translatesAutoresizingMaskIntoConstraints = false
+
+        let attr = NSMutableAttributedString()
+        for (i, line) in diff.split(separator: "\n", omittingEmptySubsequences: false).prefix(200).enumerated() {
+            let s = String(line)
+            let color: NSColor
+            if s.hasPrefix("+++") || s.hasPrefix("---") { color = NSColor(calibratedWhite: 0.5, alpha: 1.0) }
+            else if s.hasPrefix("+") { color = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.45, alpha: 1.0) }
+            else if s.hasPrefix("-") { color = NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0) }
+            else if s.hasPrefix("@@") { color = NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0) }
+            else { color = NSColor(calibratedWhite: 0.45, alpha: 1.0) }
+            if i > 0 { attr.append(NSAttributedString(string: "\n")) }
+            attr.append(NSAttributedString(string: s, attributes: [
+                .foregroundColor: color, .font: NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
+            ]))
+        }
+        label.attributedStringValue = attr
 
         let scroll = NSScrollView()
         scroll.drawsBackground = false
@@ -9277,20 +8573,961 @@ class GitPanelView: NSView {
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.documentView = label
         label.widthAnchor.constraint(equalTo: scroll.widthAnchor).isActive = true
-        scroll.heightAnchor.constraint(lessThanOrEqualToConstant: 200).isActive = true
         let hug = scroll.heightAnchor.constraint(equalTo: label.heightAnchor)
         hug.priority = .defaultHigh
         hug.isActive = true
-
+        scroll.heightAnchor.constraint(lessThanOrEqualToConstant: 180).isActive = true
         scroll.wantsLayer = true
-        scroll.layer?.backgroundColor = NSColor(calibratedWhite: 0.0, alpha: 0.2).cgColor
+        scroll.layer?.backgroundColor = NSColor(calibratedWhite: 0.0, alpha: 0.25).cgColor
         scroll.layer?.cornerRadius = 4
         return scroll
+    }
+
+    // MARK: - GitHub Card Update
+
+    private func updateGithubCard() {
+        let loggedIn = github.isAuthenticated
+        githubAuthStack.isHidden = loggedIn
+        githubConnectedStack.isHidden = !loggedIn
+        if loggedIn {
+            let user = github.username ?? "verbunden"
+            githubUserLabel.stringValue = "🔗  @\(user)"
+        }
+    }
+
+    private func refreshGithubStatus(cwd: String) {
+        guard github.isAuthenticated, isGitRepo, hasRemote else {
+            if isGitRepo && !hasRemote && github.isAuthenticated {
+                githubSyncLabel.stringValue = "Not yet uploaded"
+                githubSyncLabel.textColor = NSColor(calibratedWhite: 0.45, alpha: 1.0)
+                uploadBtn.isHidden = false
+                updateBtn.isHidden = true
+            }
+            return
+        }
+
+        if ahead > 0 && behind > 0 {
+            githubSyncLabel.stringValue = "↑ \(ahead) zu senden, ↓ \(behind) zu holen"
+            githubSyncLabel.textColor = NSColor(calibratedRed: 1.0, green: 0.7, blue: 0.3, alpha: 1.0)
+        } else if ahead > 0 {
+            githubSyncLabel.stringValue = "↑ \(ahead) change\(ahead == 1 ? "" : "s") to push"
+            githubSyncLabel.textColor = NSColor(calibratedRed: 0.95, green: 0.8, blue: 0.35, alpha: 1.0)
+        } else if behind > 0 {
+            githubSyncLabel.stringValue = "↓ \(behind) new change\(behind == 1 ? "" : "s") available"
+            githubSyncLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)
+        } else {
+            githubSyncLabel.stringValue = "✓  Alles auf dem aktuellen Stand"
+            githubSyncLabel.textColor = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.5, alpha: 1.0)
+        }
+
+        uploadBtn.isHidden = ahead == 0
+        updateBtn.isHidden = behind == 0
+    }
+
+    // MARK: - Feedback
+
+    private func showFeedback(_ msg: String, success: Bool) {
+        feedbackLabel.stringValue = msg
+        feedbackLabel.textColor = success
+            ? NSColor(calibratedRed: 0.4, green: 0.85, blue: 0.5, alpha: 1.0)
+            : NSColor(calibratedRed: 1.0, green: 0.4, blue: 0.4, alpha: 1.0)
+        feedbackLabel.isHidden = false
+        feedbackTimer?.invalidate()
+        feedbackTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
+            self?.feedbackLabel.isHidden = true
+        }
+    }
+
+    // MARK: - Actions: Init
+
+    @objc private func initRepoClicked() {
+        let cwd = lastCwd
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let result = self.runGitAction(["init"], cwd: cwd)
+            DispatchQueue.main.async {
+                if result.success {
+                    self.refresh()
+                } else {
+                    self.showFeedback("Error: \(result.output)", success: false)
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions: Save (Stage All + Commit)
+
+    @objc private func saveClicked() {
+        let msg = commitField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !msg.isEmpty else {
+            showFeedback("Please describe what you changed first.", success: false)
+            window?.makeFirstResponder(commitField)
+            return
+        }
+        commitField.stringValue = ""
+        commitField.isEnabled = false
+        saveBtn.isEnabled = false
+        let cwd = lastCwd
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let stage = self.runGitAction(["add", "-A"], cwd: cwd)
+            guard stage.success else {
+                DispatchQueue.main.async {
+                    self.showFeedback("Error: \(stage.output)", success: false)
+                    self.commitField.isEnabled = true
+                    self.saveBtn.isEnabled = true
+                }
+                return
+            }
+            let commit = self.runGitAction(["commit", "-m", msg], cwd: cwd)
+            DispatchQueue.main.async {
+                self.commitField.isEnabled = true
+                self.saveBtn.isEnabled = true
+                self.showFeedback(commit.success ? "✓  Saved: \(msg)" : "Error: \(commit.output)", success: commit.success)
+                self.refresh()
+            }
+        }
+    }
+
+    // MARK: - Actions: Upload (Push)
+
+    @objc private func uploadClicked() {
+        if !hasRemote {
+            showNewRepoOverlay()
+            return
+        }
+        uploadBtn.isEnabled = false
+        let cwd = lastCwd
+        let branch = currentBranch
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let result = self.runGitAction(["push", "-u", "origin", branch], cwd: cwd)
+            DispatchQueue.main.async {
+                self.uploadBtn.isEnabled = true
+                self.showFeedback(result.success ? "✓  Uploaded!" : "Error: \(result.output)", success: result.success)
+                self.github.cache.lastFetch = .distantPast
+                self.refresh()
+            }
+        }
+    }
+
+    // MARK: - Actions: Update (Pull)
+
+    @objc private func updateClicked() {
+        updateBtn.isEnabled = false
+        let cwd = lastCwd
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            let result = self.runGitAction(["pull"], cwd: cwd)
+            DispatchQueue.main.async {
+                self.updateBtn.isEnabled = true
+                self.showFeedback(result.success ? "✓  Updated!" : "Error: \(result.output)", success: result.success)
+                self.github.cache.lastFetch = .distantPast
+                self.refresh()
+            }
+        }
+    }
+
+    // MARK: - Actions: GitHub Auth
+
+    @objc private func saveTokenClicked() {
+        let value = tokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        tokenSaveBtn.title = "Checking..."
+        tokenSaveBtn.isEnabled = false
+        github.setToken(value)
+        github.fetchUser { [weak self] username in
+            guard let self = self else { return }
+            if username != nil {
+                self.tokenField.stringValue = ""
+                self.updateGithubCard()
+                self.refresh()
+            } else {
+                self.github.logout()
+                self.showFeedback("Invalid token — please try again", success: false)
+            }
+            self.tokenSaveBtn.title = "Connect"
+            self.tokenSaveBtn.isEnabled = true
+        }
+    }
+
+    @objc private func openTokenPage() {
+        NSWorkspace.shared.open(URL(string: "https://github.com/settings/tokens/new?scopes=repo&description=quickTerminal")!)
+    }
+
+    @objc private func disconnectClicked() {
+        github.logout()
+        updateGithubCard()
+    }
+
+    // MARK: - New Repo Overlay
+
+    private func showNewRepoOverlay() {
+        let name = (lastCwd as NSString).lastPathComponent
+        repoNameField.stringValue = name
+        newRepoOverlayVisible = true
+        newRepoOverlay.isHidden = false
+        newRepoOverlay.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            self.newRepoOverlay.animator().alphaValue = 1
+        }
+        window?.makeFirstResponder(repoNameField)
+    }
+
+    @objc private func cancelNewRepo() {
+        newRepoOverlayVisible = false
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            self.newRepoOverlay.animator().alphaValue = 0
+        }, completionHandler: {
+            self.newRepoOverlay.isHidden = true
+        })
+    }
+
+    @objc private func repoVisibilityChanged(_ sender: NSButton) {
+        repoIsPrivate = sender === repoPrivateBtn
+        repoPublicBtn.state = repoIsPrivate ? .off : .on
+        repoPrivateBtn.state = repoIsPrivate ? .on : .off
+    }
+
+    @objc private func createRepoClicked() {
+        var name = repoNameField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            repoCreateBtn.shake()
+            return
+        }
+        name = name.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_")).inverted)
+            .joined(separator: "-")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+
+        repoCreateBtn.isEnabled = false
+        repoCreateBtn.title = "Creating..."
+
+        let cwd = lastCwd
+        let branch = currentBranch.isEmpty ? "main" : currentBranch
+        let isPrivate = repoIsPrivate
+
+        github.createRepo(name: name, isPrivate: isPrivate) { [weak self] success, cloneURLOrError in
+            guard let self = self else { return }
+            if success, let cloneURL = cloneURLOrError {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let remoteAdd = self.runGitAction(["remote", "add", "origin", cloneURL], cwd: cwd)
+                    if !remoteAdd.success {
+                        // remote may already exist — try updating it instead
+                        _ = self.runGitAction(["remote", "set-url", "origin", cloneURL], cwd: cwd)
+                    }
+                    let push = self.runGitAction(["push", "-u", "origin", branch], cwd: cwd)
+                    DispatchQueue.main.async {
+                        self.repoCreateBtn.isEnabled = true
+                        self.repoCreateBtn.title = "✔  Create & Upload"
+                        self.cancelNewRepo()
+                        self.showFeedback(push.success ? "✓  Project created & uploaded to GitHub!" : "Repo created, push failed: \(push.output)", success: push.success)
+                        self.github.cache.lastFetch = .distantPast
+                        self.refresh()
+                    }
+                }
+            } else {
+                self.repoCreateBtn.isEnabled = true
+                self.repoCreateBtn.title = "✔  Create & Upload"
+                self.showFeedback("Error: \(cloneURLOrError ?? "Unknown error")", success: false)
+            }
+        }
     }
 
     deinit {
         refreshTimer?.invalidate()
         feedbackTimer?.invalidate()
+    }
+}
+
+// MARK: - NSButton shake animation helper
+private extension NSButton {
+    func shake() {
+        let anim = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        anim.timingFunction = CAMediaTimingFunction(name: .linear)
+        anim.duration = 0.35
+        anim.values = [-8, 8, -6, 6, -4, 4, 0]
+        layer?.add(anim, forKey: "shake")
+    }
+}
+
+// MARK: - Chrome CDP Client
+
+class ChromeCDPClient {
+    static var debugPort: Int {
+        UserDefaults.standard.integer(forKey: "webPickerBrowser") == 1 ? 9221 : 9222
+    }
+    private var webSocketTask: URLSessionWebSocketTask?
+    private var wsSession: URLSession?
+    private var messageId = 0
+    private var pendingCallbacks: [Int: ([String: Any]?) -> Void] = [:]
+    var onDisconnected: (() -> Void)?
+
+    /// Prüft ob Chrome mit --remote-debugging-port läuft (2s Timeout)
+    func isAvailable(completion: @escaping (Bool) -> Void) {
+        let urlStr = "http://localhost:\(Self.debugPort)/json"
+        guard let url = URL(string: urlStr) else { completion(false); return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 2.0
+        URLSession.shared.dataTask(with: req) { _, response, error in
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let ok = code == 200
+            DispatchQueue.main.async { completion(ok) }
+        }.resume()
+    }
+
+    /// Startet Chrome mit --remote-debugging-port, dann polling bis CDP bereit
+    func launchChrome(onStatus: ((String) -> Void)? = nil, completion: @escaping () -> Void) {
+        openChrome()
+        pollUntilAvailable(attempts: 14, interval: 0.7, onStatus: onStatus, completion: completion)
+    }
+
+    /// Beendet laufendes Chrome und startet es neu mit --remote-debugging-port
+    func forceRelaunchChrome(onStatus: ((String) -> Void)? = nil, completion: @escaping () -> Void) {
+        for name in ["Google Chrome", "Chromium", "Google Chrome Canary"] {
+            let kill = Process()
+            kill.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+            kill.arguments = [name]
+            kill.standardOutput = FileHandle.nullDevice
+            kill.standardError  = FileHandle.nullDevice
+            _ = try? kill.run()
+        }
+        onStatus?("Stopping Chrome...")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
+            guard let self = self else { return }
+            self.openChrome()
+            self.pollUntilAvailable(attempts: 16, interval: 0.8, onStatus: onStatus, completion: completion)
+        }
+    }
+
+    /// Pollt isAvailable bis CDP antwortet oder Versuche erschöpft
+    private func pollUntilAvailable(attempts: Int, interval: TimeInterval,
+                                     onStatus: ((String) -> Void)?, completion: @escaping () -> Void) {
+        if attempts <= 0 { completion(); return }
+        isAvailable { [weak self] available in
+            guard let self = self else { return }
+            if available {
+                completion()
+            } else {
+                let dots = String(repeating: ".", count: 4 - (attempts % 4))
+                onStatus?("Waiting for Chrome\(dots)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + interval) {
+                    self.pollUntilAvailable(attempts: attempts - 1, interval: interval,
+                                             onStatus: onStatus, completion: completion)
+                }
+            }
+        }
+    }
+
+    private func openChrome() {
+        // Key insight (same approach as Puppeteer/Playwright):
+        // Chrome ignores --remote-debugging-port when another instance already runs in the SAME profile.
+        // Solution: --user-data-dir points to a fresh tmp dir → forces a truly new instance with its own port.
+        let tmpDir = "/tmp/qt-chrome-debug-\(Self.debugPort)"
+        let candidates = [
+            "/Applications/Google Chrome.app",
+            "/Applications/Chromium.app",
+            "/Applications/Google Chrome Canary.app",
+        ]
+        guard let app = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else { return }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        proc.arguments = ["-na", app, "--args",
+                          "--user-data-dir=\(tmpDir)",
+                          "--remote-debugging-port=\(Self.debugPort)",
+                          "--no-first-run",
+                          "--no-default-browser-check",
+                          "--disable-session-restore"]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError  = FileHandle.nullDevice
+        try? proc.run()
+    }
+
+    /// Gibt die WebSocket-URL des ersten aktiven Page-Tabs zurück
+    func getActiveTabWS(completion: @escaping (String?) -> Void) {
+        let urlStr = "http://localhost:\(Self.debugPort)/json/list"
+        guard let url = URL(string: urlStr) else { completion(nil); return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 3.0
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            guard let data = data,
+                  let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            guard let tab = tabs.first(where: {
+                guard ($0["type"] as? String) == "page",
+                      let tabURL = $0["url"] as? String else { return false }
+                // Skip Chrome-internal pages — JS injection doesn't work there
+                return tabURL.hasPrefix("http://") || tabURL.hasPrefix("https://") || tabURL == "about:blank"
+            }), let wsURL = tab["webSocketDebuggerUrl"] as? String else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            DispatchQueue.main.async { completion(wsURL) }
+        }.resume()
+    }
+
+    /// Verbindet via WebSocket mit einem Chrome-Tab
+    func connect(wsURL: String, completion: @escaping (Bool) -> Void) {
+        disconnect()
+        guard let url = URL(string: wsURL) else { completion(false); return }
+        wsSession = URLSession(configuration: .default)
+        webSocketTask = wsSession?.webSocketTask(with: url)
+        webSocketTask?.resume()
+        receiveLoop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { completion(true) }
+    }
+
+    private func receiveLoop() {
+        webSocketTask?.receive { [weak self] result in
+            guard let self = self else { return }
+            switch result {
+            case .failure:
+                DispatchQueue.main.async { [weak self] in self?.onDisconnected?() }
+                return
+            case .success(let msg):
+                if case .string(let text) = msg,
+                   let data = text.data(using: .utf8),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let id = json["id"] as? Int {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self,
+                              let cb = self.pendingCallbacks.removeValue(forKey: id) else { return }
+                        cb(json["result"] as? [String: Any])
+                    }
+                }
+                self.receiveLoop()
+            }
+        }
+    }
+
+    /// Führt JavaScript im aktiven Tab aus (Runtime.evaluate)
+    func evaluate(_ expr: String, completion: @escaping ([String: Any]?) -> Void) {
+        guard let webSocketTask = webSocketTask else {
+            DispatchQueue.main.async { completion(nil) }
+            return
+        }
+        messageId += 1
+        let id = messageId
+        let msg: [String: Any] = [
+            "id": id,
+            "method": "Runtime.evaluate",
+            "params": ["expression": expr, "returnByValue": true]
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: msg),
+              let text = String(data: data, encoding: .utf8) else {
+            DispatchQueue.main.async { completion(nil) }
+            return
+        }
+        pendingCallbacks[id] = completion
+        webSocketTask.send(.string(text)) { [weak self] error in
+            if error != nil {
+                DispatchQueue.main.async {
+                    self?.pendingCallbacks.removeValue(forKey: id)
+                    completion(nil)
+                }
+            }
+        }
+    }
+
+    func disconnect() {
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        webSocketTask = nil
+        wsSession = nil
+        pendingCallbacks.removeAll()
+        messageId = 0
+    }
+
+    /// Creates a new blank tab via /json/new (works even when Chrome has no open windows)
+    func createBlankTab(completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/new?about:blank") else {
+            DispatchQueue.main.async { completion(nil) }; return
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        req.timeoutInterval = 3.0
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            guard let data = data,
+                  let tab = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let wsURL = tab["webSocketDebuggerUrl"] as? String else {
+                DispatchQueue.main.async { completion(nil) }; return
+            }
+            DispatchQueue.main.async { completion(wsURL) }
+        }.resume()
+    }
+
+    /// Closes a Chrome tab via /json/close/{targetId}
+    func closeTab(targetId: String, completion: @escaping () -> Void) {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/close/\(targetId)") else {
+            DispatchQueue.main.async { completion() }; return
+        }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 3.0
+        URLSession.shared.dataTask(with: req) { _, _, _ in
+            DispatchQueue.main.async { completion() }
+        }.resume()
+    }
+
+    /// Returns hostname of the currently active page tab (e.g. "github.com")
+    func getTabHostname(targetId: String, completion: @escaping (String?) -> Void) {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/list") else {
+            DispatchQueue.main.async { completion(nil) }; return
+        }
+        var listReq = URLRequest(url: url)
+        listReq.timeoutInterval = 3.0
+        URLSession.shared.dataTask(with: listReq) { data, _, _ in
+            guard let data = data,
+                  let tabs = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  let tab = tabs.first(where: { ($0["id"] as? String) == targetId }),
+                  let tabURL = tab["url"] as? String else {
+                DispatchQueue.main.async { completion(nil) }; return
+            }
+            // Extract hostname: "https://github.com/foo" → "github.com"
+            let hostname: String
+            if tabURL == "about:blank" || tabURL.isEmpty {
+                hostname = ""
+            } else if let host = URL(string: tabURL)?.host {
+                hostname = host
+            } else {
+                hostname = tabURL
+            }
+            DispatchQueue.main.async { completion(hostname) }
+        }.resume()
+    }
+}
+// MARK: - WebPicker Sidebar View
+
+class WebPickerSidebarView: NSView {
+    private let cdp = ChromeCDPClient()
+    private var pollTimer: Timer?
+    private var tabSearchTimer: Timer?
+    private var titlePollTimer: Timer?
+    private var isConnected = false
+    private var currentTargetId: String?
+    var onClose: (() -> Void)?
+
+    // Teal accent
+    private static let teal = NSColor(calibratedRed: 0.24, green: 0.79, blue: 0.63, alpha: 1.0)
+
+    // UI elements
+    private let titleLabel    = NSTextField(labelWithString: "◈  WebPicker")
+    private let closeBtn      = NSButton()
+    private let titleSep      = NSView()
+    private let statusDot     = NSView()
+    private let statusLabel   = NSTextField(labelWithString: "Not connected")
+    private let pickBtn       = NSButton()
+    private let connectBtn    = NSButton()
+    private let disconnectBtn = NSButton()
+    private let previewSep    = NSView()
+    private let previewLabel  = NSTextField(labelWithString: "")
+    private let feedbackLabel = NSTextField(labelWithString: "")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 1).cgColor
+        setupUI()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setupUI() {
+        // ── Title bar ──
+        titleLabel.font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        titleLabel.textColor = Self.teal
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        closeBtn.title = "✕"
+        closeBtn.isBordered = false; closeBtn.bezelStyle = .inline
+        closeBtn.font = NSFont.systemFont(ofSize: 11)
+        closeBtn.contentTintColor = NSColor(calibratedWhite: 0.4, alpha: 1)
+        closeBtn.target = self; closeBtn.action = #selector(doClose)
+        closeBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(closeBtn)
+
+        // Teal separator line under title
+        titleSep.wantsLayer = true
+        titleSep.layer?.backgroundColor = Self.teal.withAlphaComponent(0.35).cgColor
+        titleSep.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleSep)
+
+        // ── Status row ──
+        statusDot.wantsLayer = true
+        statusDot.layer?.cornerRadius = 4
+        statusDot.layer?.backgroundColor = NSColor.systemGray.cgColor
+        statusDot.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(statusDot)
+
+        statusLabel.font = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
+        statusLabel.textColor = NSColor(calibratedWhite: 0.55, alpha: 1)
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(statusLabel)
+
+        // ── Pick button (main action, teal styled) ──
+        pickBtn.title = "Pick Element"
+        pickBtn.bezelStyle = .rounded
+        pickBtn.isEnabled = false
+        pickBtn.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        pickBtn.wantsLayer = true
+        pickBtn.target = self; pickBtn.action = #selector(startPicking)
+        pickBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(pickBtn)
+        styleTealButton(pickBtn, enabled: false)
+
+        // ── Connect button ──
+        connectBtn.title = "  ⊕  Connect"
+        connectBtn.bezelStyle = .rounded
+        connectBtn.font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
+        connectBtn.wantsLayer = true
+        connectBtn.target = self; connectBtn.action = #selector(doConnectBtn)
+        connectBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(connectBtn)
+        styleTealButton(connectBtn, enabled: true)
+
+        // ── Disconnect button ──
+        disconnectBtn.title = "⏏  Disconnect"
+        disconnectBtn.bezelStyle = .inline
+        disconnectBtn.isBordered = false
+        disconnectBtn.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
+        disconnectBtn.contentTintColor = NSColor(calibratedWhite: 0.4, alpha: 1)
+        disconnectBtn.isHidden = true
+        disconnectBtn.target = self; disconnectBtn.action = #selector(doDisconnect)
+        disconnectBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(disconnectBtn)
+
+        // ── Preview area ──
+        previewSep.wantsLayer = true
+        previewSep.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.06).cgColor
+        previewSep.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(previewSep)
+
+        previewLabel.font = NSFont.monospacedSystemFont(ofSize: 8.5, weight: .regular)
+        previewLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1)
+        previewLabel.maximumNumberOfLines = 4
+        previewLabel.lineBreakMode = .byTruncatingTail
+        previewLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(previewLabel)
+
+        feedbackLabel.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        feedbackLabel.textColor = Self.teal
+        feedbackLabel.isHidden = true
+        feedbackLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(feedbackLabel)
+
+        NSLayoutConstraint.activate([
+            // Title bar
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            closeBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            closeBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            closeBtn.widthAnchor.constraint(equalToConstant: 18),
+            titleSep.leadingAnchor.constraint(equalTo: leadingAnchor),
+            titleSep.trailingAnchor.constraint(equalTo: trailingAnchor),
+            titleSep.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 7),
+            titleSep.heightAnchor.constraint(equalToConstant: 1),
+            // Status
+            statusDot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            statusDot.topAnchor.constraint(equalTo: titleSep.bottomAnchor, constant: 10),
+            statusDot.widthAnchor.constraint(equalToConstant: 8),
+            statusDot.heightAnchor.constraint(equalToConstant: 8),
+            statusLabel.leadingAnchor.constraint(equalTo: statusDot.trailingAnchor, constant: 6),
+            statusLabel.centerYAnchor.constraint(equalTo: statusDot.centerYAnchor),
+            statusLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            // Pick button
+            pickBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            pickBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            pickBtn.topAnchor.constraint(equalTo: statusDot.bottomAnchor, constant: 9),
+            // Connect button (same position as pickBtn — only one visible at a time)
+            connectBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            connectBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            connectBtn.topAnchor.constraint(equalTo: statusDot.bottomAnchor, constant: 9),
+            // Disconnect button (small, below pick)
+            disconnectBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            disconnectBtn.topAnchor.constraint(equalTo: pickBtn.bottomAnchor, constant: 4),
+            // Preview sep
+            previewSep.leadingAnchor.constraint(equalTo: leadingAnchor),
+            previewSep.trailingAnchor.constraint(equalTo: trailingAnchor),
+            previewSep.topAnchor.constraint(equalTo: disconnectBtn.bottomAnchor, constant: 7),
+            previewSep.heightAnchor.constraint(equalToConstant: 1),
+            // Preview
+            previewLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            previewLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            previewLabel.topAnchor.constraint(equalTo: previewSep.bottomAnchor, constant: 6),
+            feedbackLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            feedbackLabel.topAnchor.constraint(equalTo: previewLabel.bottomAnchor, constant: 4),
+        ])
+
+        showDisconnectedState()
+    }
+
+    // MARK: - Button styling
+
+    private func styleTealButton(_ btn: NSButton, enabled: Bool) {
+        let t = Self.teal
+        btn.layer?.cornerRadius = 5
+        btn.layer?.backgroundColor = t.withAlphaComponent(enabled ? 0.15 : 0.06).cgColor
+        btn.layer?.borderColor = t.withAlphaComponent(enabled ? 0.4 : 0.15).cgColor
+        btn.layer?.borderWidth = 0.5
+        btn.contentTintColor = t.withAlphaComponent(enabled ? 1.0 : 0.4)
+        btn.alphaValue = enabled ? 1.0 : 0.5
+    }
+
+    // MARK: - State transitions
+
+    private func showDisconnectedState() {
+        setStatusDot(.systemGray)
+        setStatusText("Not connected")
+        pickBtn.isHidden = true
+        disconnectBtn.isHidden = true
+        connectBtn.isHidden = false
+        connectBtn.isEnabled = true
+        styleTealButton(connectBtn, enabled: true)
+        previewSep.isHidden = true
+        previewLabel.stringValue = ""
+        feedbackLabel.isHidden = true
+    }
+
+    private func showConnectingState(_ msg: String) {
+        setStatusDot(.systemOrange)
+        setStatusText(msg)
+        pickBtn.isHidden = true
+        disconnectBtn.isHidden = true
+        connectBtn.isHidden = false
+        connectBtn.isEnabled = false
+        styleTealButton(connectBtn, enabled: false)
+        previewSep.isHidden = true
+    }
+
+    private func showConnectedState(hostname: String, navigating: Bool) {
+        if navigating {
+            setStatusDot(.systemOrange)
+            setStatusText("Navigate to a website")
+        } else {
+            setStatusDot(Self.teal)
+            setStatusText(hostname.isEmpty ? "Verbunden" : hostname)
+        }
+        connectBtn.isHidden = true
+        pickBtn.isHidden = false
+        pickBtn.isEnabled = !navigating
+        styleTealButton(pickBtn, enabled: !navigating)
+        disconnectBtn.isHidden = false
+        previewSep.isHidden = false
+    }
+
+    private func setStatusDot(_ color: NSColor) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            statusDot.animator().layer?.backgroundColor = color.cgColor
+        }
+    }
+
+    private func setStatusText(_ text: String) {
+        statusLabel.stringValue = text
+    }
+
+    // MARK: - Connection
+
+    func connect() {
+        isConnected = false
+        currentTargetId = nil
+        pollTimer?.invalidate(); pollTimer = nil
+        tabSearchTimer?.invalidate(); tabSearchTimer = nil
+        titlePollTimer?.invalidate(); titlePollTimer = nil
+        pickBtn.title = "Pick Element"
+        showConnectingState("Connecting...")
+        cdp.isAvailable { [weak self] available in
+            guard let self = self else { return }
+            if available {
+                self.connectToTab()
+            } else {
+                self.cdp.launchChrome(onStatus: { [weak self] msg in
+                    self?.showConnectingState(msg)
+                }) { [weak self] in self?.connectToTab() }
+            }
+        }
+    }
+
+    func disconnect() {
+        pollTimer?.invalidate(); pollTimer = nil
+        tabSearchTimer?.invalidate(); tabSearchTimer = nil
+        titlePollTimer?.invalidate(); titlePollTimer = nil
+        isConnected = false
+        cdp.onDisconnected = nil
+        pickBtn.title = "Pick Element"
+        let cleanup = "window.__qtPickerActive = false; document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';}); void 0;"
+        if let tid = currentTargetId {
+            cdp.evaluate(cleanup) { [weak self] _ in
+                self?.cdp.closeTab(targetId: tid) {
+                    self?.cdp.disconnect()
+                }
+            }
+        } else {
+            cdp.evaluate(cleanup) { [weak self] _ in self?.cdp.disconnect() }
+        }
+        currentTargetId = nil
+        showDisconnectedState()
+    }
+
+    private func connectToTab() {
+        cdp.getActiveTabWS { [weak self] wsURL in
+            guard let self = self else { return }
+            if let wsURL = wsURL {
+                self.doConnect(to: wsURL)
+            } else {
+                self.showConnectingState("Opening new tab...")
+                self.cdp.createBlankTab { [weak self] newWS in
+                    guard let self = self else { return }
+                    if let newWS = newWS {
+                        self.doConnect(to: newWS)
+                    } else {
+                        self.showDisconnectedState()
+                        self.setStatusText("Chrome not reachable")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Handles unexpected disconnection (WebSocket drop, tab closed externally).
+    /// Does NOT send cleanup JS or close the tab — connection is already gone.
+    private func handleUnexpectedDisconnect(message: String) {
+        guard isConnected else { return }
+        isConnected = false
+        pollTimer?.invalidate(); pollTimer = nil
+        titlePollTimer?.invalidate(); titlePollTimer = nil
+        currentTargetId = nil
+        cdp.disconnect()
+        showDisconnectedState()
+        setStatusText(message)
+    }
+
+    private func doConnect(to wsURL: String) {
+        currentTargetId = URL(string: wsURL)?.lastPathComponent
+        tabSearchTimer?.invalidate(); tabSearchTimer = nil
+        cdp.onDisconnected = { [weak self] in
+            self?.handleUnexpectedDisconnect(message: "Connection lost")
+        }
+        cdp.connect(wsURL: wsURL) { [weak self] success in
+            guard let self = self else { return }
+            if success {
+                self.isConnected = true
+                self.refreshTabTitle()
+                self.startTitlePolling()
+            } else {
+                self.showDisconnectedState()
+                self.setStatusText("Connection failed")
+                self.scheduleTabSearch()
+            }
+        }
+    }
+
+    private func refreshTabTitle() {
+        guard let tid = currentTargetId else { return }
+        cdp.getTabHostname(targetId: tid) { [weak self] hostname in
+            guard let self = self, self.isConnected else { return }
+            if let hostname = hostname {
+                // hostname == "" means about:blank (still navigating), non-empty = real site
+                self.showConnectedState(hostname: hostname, navigating: hostname.isEmpty)
+            } else {
+                // nil = tab not found in /json/list — tab was closed externally
+                self.handleUnexpectedDisconnect(message: "Tab was closed")
+            }
+        }
+    }
+
+    private func startTitlePolling() {
+        titlePollTimer?.invalidate()
+        titlePollTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+            self?.refreshTabTitle()
+        }
+    }
+
+    private func scheduleTabSearch() {
+        tabSearchTimer?.invalidate()
+        tabSearchTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+            guard let self = self, !self.isConnected else { return }
+            self.connectToTab()
+        }
+    }
+
+    // MARK: - Button actions
+
+    @objc private func doConnectBtn() { connect() }
+    @objc private func doDisconnect() { disconnect() }
+    @objc private func doClose() { onClose?() }
+
+    // MARK: - Picker
+
+    @objc private func startPicking() {
+        pickBtn.title = "Waiting for click..."; pickBtn.isEnabled = false
+        styleTealButton(pickBtn, enabled: false)
+        previewLabel.stringValue = ""; feedbackLabel.isHidden = true
+        cdp.evaluate("window.__qtPickedHTML = null; window.__qtPickerActive = false; void 0;") { _ in }
+        let pickerJS = """
+        (function() {
+          if (window.__qtPickerActive) return 'already_active';
+          window.__qtPickerActive = true; window.__qtPickedHTML = null;
+          var last = null;
+          function over(e) {
+            if (last && last !== e.target) { last.style.outline=''; last.style.outlineOffset=''; }
+            last = e.target; last.style.outline='2px solid #3DC9A0'; last.style.outlineOffset='-2px';
+          }
+          function out(e) { if (e.target===last){e.target.style.outline='';e.target.style.outlineOffset='';} }
+          function pick(e) {
+            e.preventDefault(); e.stopPropagation();
+            if (last){last.style.outline='';last.style.outlineOffset='';}
+            window.__qtPickedHTML=e.target.outerHTML; window.__qtPickerActive=false;
+            document.removeEventListener('mouseover',over,true);
+            document.removeEventListener('mouseout',out,true);
+            document.removeEventListener('click',pick,true);
+          }
+          document.addEventListener('mouseover',over,true);
+          document.addEventListener('mouseout',out,true);
+          document.addEventListener('click',pick,true);
+          return 'started';
+        })();
+        """
+        cdp.evaluate(pickerJS) { [weak self] _ in
+            self?.pollTimer?.invalidate()
+            self?.pollTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+                self?.cdp.evaluate("typeof window.__qtPickedHTML!=='undefined'&&window.__qtPickedHTML!==null?window.__qtPickedHTML:null") { [weak self] result in
+                    guard let self = self,
+                          let inner = (result?["result"] as? [String: Any]),
+                          let val = inner["value"] as? String, !val.isEmpty else { return }
+                    self.pollTimer?.invalidate(); self.pollTimer = nil
+                    self.onHTMLPicked(val)
+                }
+            }
+        }
+    }
+
+    private func onHTMLPicked(_ html: String) {
+        pickBtn.title = "Pick Element"; pickBtn.isEnabled = true
+        styleTealButton(pickBtn, enabled: true)
+        previewLabel.stringValue = String(html.prefix(300))
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(html, forType: .string)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            let src = CGEventSource(stateID: .hidSystemState)
+            let vDown = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: true)
+            let vUp   = CGEvent(keyboardEventSource: src, virtualKey: 0x09, keyDown: false)
+            vDown?.flags = .maskCommand; vUp?.flags = .maskCommand
+            vDown?.post(tap: .cghidEventTap); vUp?.post(tap: .cghidEventTap)
+        }
+        feedbackLabel.stringValue = "✓ Copied!"; feedbackLabel.isHidden = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            self?.feedbackLabel.isHidden = true
+        }
+    }
+
+    deinit {
+        pollTimer?.invalidate()
+        tabSearchTimer?.invalidate()
+        titlePollTimer?.invalidate()
+        cdp.disconnect()
     }
 }
 
@@ -10802,6 +11039,82 @@ class UpdateChecker {
     }
 }
 
+// MARK: - Onboarding Panel
+
+class OnboardingPanel: NSPanel {
+    private var player: AVPlayer?
+    private var playerView: AVPlayerView!
+    private var endObserver: Any?
+
+    static func showIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: "onboardingVideoShown") else { return }
+        guard let url = Bundle.main.url(forResource: "quickTERMINAL", withExtension: "mp4") else { return }
+        let panel = OnboardingPanel(url: url)
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    init(url: URL) {
+        let w: CGFloat = 480
+        let h: CGFloat = 300
+        // Center on main screen
+        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let x = screen.midX - w / 2
+        let y = screen.midY - h / 2
+        super.init(
+            contentRect: NSRect(x: x, y: y, width: w, height: h),
+            styleMask: [.nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        isMovableByWindowBackground = true
+        isReleasedWhenClosed = false
+        level = .floating
+        backgroundColor = .black
+        isOpaque = true
+
+        // Player
+        player = AVPlayer(url: url)
+        playerView = AVPlayerView(frame: NSRect(x: 0, y: 0, width: w, height: h))
+        playerView.player = player
+        playerView.controlsStyle = .none
+        playerView.autoresizingMask = [.width, .height]
+        contentView?.addSubview(playerView)
+
+        // Skip button (top-right)
+        let skipBtn = NSButton(frame: NSRect(x: w - 68, y: h - 28, width: 60, height: 22))
+        skipBtn.title = "✕ Skip"
+        skipBtn.bezelStyle = .inline
+        skipBtn.isBordered = false
+        skipBtn.font = .systemFont(ofSize: 11)
+        skipBtn.contentTintColor = NSColor(calibratedWhite: 0.6, alpha: 1.0)
+        skipBtn.autoresizingMask = [.minXMargin, .minYMargin]
+        skipBtn.target = self
+        skipBtn.action = #selector(dismiss)
+        contentView?.addSubview(skipBtn)
+
+        // Auto-close when video ends
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem,
+            queue: .main
+        ) { [weak self] _ in self?.dismiss() }
+
+        player?.play()
+    }
+
+    @objc private func dismiss() {
+        UserDefaults.standard.set(true, forKey: "onboardingVideoShown")
+        player?.pause()
+        if let obs = endObserver { NotificationCenter.default.removeObserver(obs) }
+        close()
+    }
+
+    deinit {
+        if let obs = endObserver { NotificationCenter.default.removeObserver(obs) }
+    }
+}
+
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -10856,6 +11169,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let gitDefaultRatioH: CGFloat = 0.30   // factory default: bottom panel
     var settingsOverlay: SettingsOverlay?
     var commandPalette: CommandPaletteView?
+    var webPickerSidebarView: WebPickerSidebarView?
+    var webPickerRightDivider: GitPanelDividerView?
     var helpViewer: HelpViewer?
     var perfOverlay: DiagnosticsOverlay?
     var parserOverlay: DiagnosticsOverlay?
@@ -10994,7 +11309,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Window — positioned under tray icon, restore saved size
         let savedW = UserDefaults.standard.double(forKey: "windowWidth")
         let savedH = UserDefaults.standard.double(forKey: "windowHeight")
-        let w: CGFloat = savedW > 100 ? CGFloat(savedW) : 720
+        let w: CGFloat = savedW > 100 ? CGFloat(savedW) : 860
         let h: CGFloat = savedH > 100 ? CGFloat(savedH) : 480
         let frame = NSRect(x: 0, y: 0, width: w, height: h)
 
@@ -11059,6 +11374,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         headerView.onSplitVertical = { [weak self] in self?.toggleSplit(vertical: true) }
         headerView.onSplitHorizontal = { [weak self] in self?.toggleSplit(vertical: false) }
         headerView.onGitToggle = { [weak self] in self?.toggleGitPanel() }
+        headerView.onWebPickerToggle = { [weak self] in self?.toggleWebPicker() }
         headerView.onDoubleClick = { [weak self] in self?.toggleFullscreen() }
 
         window.contentView?.addSubview(headerView)
@@ -11111,11 +11427,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.footerView.usageBadge.update(data: data)
             self?.footerView.needsLayout = true
             self?.usagePopover?.update(data: data)
+            self?.usagePopover?.setRefreshDone()
         }
         let showUsage = UserDefaults.standard.bool(forKey: "showAIUsage")
         footerView.usageBadge.isHidden = !showUsage
+        // Load cached data immediately so badge/popover show last known state on startup
+        AIUsageManager.shared.loadCachedData()
         if showUsage {
-            let intervals: [TimeInterval] = [30, 60, 300]
+            let intervals: [TimeInterval] = [300, 600, 1800]
             let idx = UserDefaults.standard.integer(forKey: "aiUsageRefreshIndex")
             AIUsageManager.shared.startPolling(interval: intervals[min(idx, 2)])
         }
@@ -11180,6 +11499,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         positionWindowUnderTrayIcon()
         window.alphaValue = 0
         window.orderOut(nil)
+
+        // First-launch onboarding video (plays once, never again)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            OnboardingPanel.showIfNeeded()
+        }
     }
 
     func termFrame() -> NSRect {
@@ -11571,7 +11895,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             for tv in termViews { tv.userCursorStyle = 0; tv.updateFontSize(10.0) }
 
             // 6. Reset window size/position and center under tray icon
-            let defaultSize = NSSize(width: 720, height: 480)
+            let defaultSize = NSSize(width: 860, height: 480)
             var newFrame = window.frame
             newFrame.size = defaultSize
             // Center under tray icon
@@ -11620,7 +11944,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let on = value as? Bool ?? false
             footerView.usageBadge.isHidden = !on
             if on {
-                let intervals: [TimeInterval] = [30, 60, 300]
+                let intervals: [TimeInterval] = [300, 600, 1800]
                 let idx = UserDefaults.standard.integer(forKey: "aiUsageRefreshIndex")
                 AIUsageManager.shared.startPolling(interval: intervals[min(idx, 2)])
             } else {
@@ -11629,7 +11953,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             footerView.needsLayout = true
         case "aiUsageRefreshIndex":
-            let intervals: [TimeInterval] = [30, 60, 300]
+            let intervals: [TimeInterval] = [300, 600, 1800]
             let idx = value as? Int ?? 1
             AIUsageManager.shared.updateInterval(intervals[min(idx, 2)])
         default: break
@@ -11660,6 +11984,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             y: footerH + 4,
             width: popW, height: popH))
         pop.update(data: AIUsageManager.shared.latestData)
+        pop.onRefresh = { AIUsageManager.shared.fetchUsage() }
         contentView.addSubview(pop)
         usagePopover = pop
 
@@ -11837,6 +12162,74 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    func toggleWebPicker() {
+        if webPickerSidebarView != nil {
+            hideWebPickerSidebar()
+        } else {
+            showWebPickerSidebar()
+        }
+    }
+
+    private func showWebPickerSidebar() {
+        guard activeTab >= 0, activeTab < splitContainers.count else { return }
+        guard let superview = splitContainers[activeTab].superview else { return }
+
+        let view = WebPickerSidebarView()
+        view.onClose = { [weak self] in self?.toggleWebPicker() }
+        view.alphaValue = 0
+        superview.addSubview(view)
+        webPickerSidebarView = view
+
+        // Only need our own vertical divider when git is NOT in .right (otherwise reuse git's)
+        let pos = activeTab < tabGitPositions.count ? tabGitPositions[activeTab] : .none
+        if pos != .right {
+            let div = GitPanelDividerView()
+            div.isVertical = true
+            div.wantsLayer = true
+            div.layer?.backgroundColor = GitPanelDividerView.normalColor
+            div.alphaValue = 0
+            div.onDrag = { [weak self] delta in self?.handleWebPickerDividerDrag(delta) }
+            superview.addSubview(div)
+            webPickerRightDivider = div
+        }
+
+        layoutGitPanel()
+        headerView.setWebPickerActive(true)
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            view.animator().alphaValue = 1
+            webPickerRightDivider?.animator().alphaValue = 1
+        })
+        view.connect()
+    }
+
+    private func hideWebPickerSidebar() {
+        webPickerSidebarView?.disconnect()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            self.webPickerSidebarView?.animator().alphaValue = 0
+            self.webPickerRightDivider?.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            self?.webPickerSidebarView?.removeFromSuperview()
+            self?.webPickerSidebarView = nil
+            self?.webPickerRightDivider?.removeFromSuperview()
+            self?.webPickerRightDivider = nil
+            self?.headerView.setWebPickerActive(false)
+            self?.layoutGitPanel()
+        })
+    }
+
+    func handleWebPickerDividerDrag(_ delta: CGFloat) {
+        guard activeTab >= 0, activeTab < tabGitRatiosV.count else { return }
+        let tf = termFrame()
+        var ratio = tabGitRatiosV[activeTab]
+        ratio += (-delta / tf.width)
+        ratio = max(0.15, min(0.55, ratio))
+        tabGitRatiosV[activeTab] = ratio
+        layoutGitPanel()
+    }
+
     // MARK: - Git Panel
 
     func toggleGitPanel() {
@@ -11916,35 +12309,73 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let container = splitContainers[activeTab]
         let tf = termFrame()
 
-        let pos = activeTab < tabGitPositions.count ? tabGitPositions[activeTab] : .none
-        let panel = activeTab < tabGitPanels.count ? tabGitPanels[activeTab] : nil
-        let divider = activeTab < tabGitDividers.count ? tabGitDividers[activeTab] : nil
-        let ratio = activeTab < tabGitRatios.count ? tabGitRatios[activeTab] : gitDefaultRatioH
+        let pos     = activeTab < tabGitPositions.count ? tabGitPositions[activeTab] : .none
+        let gitPanel  = activeTab < tabGitPanels.count ? tabGitPanels[activeTab] : nil
+        let gitDiv    = activeTab < tabGitDividers.count ? tabGitDividers[activeTab] : nil
+        let ratio     = activeTab < tabGitRatios.count ? tabGitRatios[activeTab] : gitDefaultRatioH
+        let picker    = webPickerSidebarView
         let divThick: CGFloat = 2
+        let pickerFixedH: CGFloat = 180   // WebPicker takes a fixed 180px at top of right column
 
-        if pos == .none || panel == nil {
-            container.frame = tf
-            return
+        // ── Determine right sidebar ──────────────────────────────────────────
+        let hasGitRight   = pos == .right && gitPanel != nil
+        let hasPickerRight = picker != nil
+        let hasRight = hasGitRight || hasPickerRight
+
+        // Right column width: prefer git's ratio; fall back to saved V-ratio for picker-only
+        let rightRatio: CGFloat
+        if hasGitRight {
+            rightRatio = ratio
+        } else if hasPickerRight {
+            rightRatio = activeTab < tabGitRatiosV.count ? tabGitRatiosV[activeTab] : gitDefaultRatioV
+        } else {
+            rightRatio = 0
+        }
+        let rightW  = hasRight ? tf.width * rightRatio : 0
+        let termW   = tf.width - (hasRight ? rightW + divThick : 0)
+        let sidebarX = tf.origin.x + termW + divThick
+
+        // ── Bottom git (does not affect horizontal layout) ───────────────────
+        let hasBottom = pos == .bottom && gitPanel != nil
+        let bottomH   = hasBottom ? tf.height * ratio : 0
+        let bottomDiv: CGFloat = hasBottom ? divThick : 0
+
+        let termH = tf.height - bottomH - bottomDiv
+        let termY = tf.origin.y + bottomH + bottomDiv
+
+        container.frame = NSRect(x: tf.origin.x, y: termY, width: termW, height: termH)
+
+        if hasBottom {
+            gitPanel?.isHorizontal = true
+            gitDiv?.isVertical = false
+            gitPanel?.frame = NSRect(x: tf.origin.x, y: tf.origin.y, width: termW, height: bottomH)
+            gitDiv?.frame   = NSRect(x: tf.origin.x, y: tf.origin.y + bottomH, width: termW, height: divThick)
         }
 
-        divider?.isVertical = (pos == .right)
-        panel?.isHorizontal = (pos == .bottom)
+        // ── Right sidebar vertical divider ───────────────────────────────────
+        if hasRight {
+            if hasGitRight {
+                gitDiv?.isVertical = true
+                gitDiv?.frame = NSRect(x: tf.origin.x + termW, y: tf.origin.y, width: divThick, height: tf.height)
+            } else {
+                webPickerRightDivider?.frame = NSRect(x: tf.origin.x + termW, y: tf.origin.y, width: divThick, height: tf.height)
+            }
+        }
 
-        switch pos {
-        case .right:
-            let gitW = tf.width * ratio
-            let termW = tf.width - gitW - divThick
-            container.frame = NSRect(x: tf.origin.x, y: tf.origin.y, width: termW, height: tf.height)
-            divider?.frame = NSRect(x: tf.origin.x + termW, y: tf.origin.y, width: divThick, height: tf.height)
-            panel?.frame = NSRect(x: tf.origin.x + termW + divThick, y: tf.origin.y, width: gitW, height: tf.height)
-        case .bottom:
-            let gitH = tf.height * ratio
-            let termH = tf.height - gitH - divThick
-            container.frame = NSRect(x: tf.origin.x, y: tf.origin.y + gitH + divThick, width: tf.width, height: termH)
-            divider?.frame = NSRect(x: tf.origin.x, y: tf.origin.y + gitH, width: tf.width, height: divThick)
-            panel?.frame = NSRect(x: tf.origin.x, y: tf.origin.y, width: tf.width, height: gitH)
-        case .none:
-            break
+        // ── Right sidebar content ────────────────────────────────────────────
+        if hasGitRight {
+            gitPanel?.isHorizontal = false
+            if let pv = picker {
+                // Both: picker on top (fixed height), git fills rest
+                let gitSideH = max(60, tf.height - pickerFixedH - 1)
+                pv.frame      = NSRect(x: sidebarX, y: tf.origin.y + gitSideH + 1, width: rightW, height: pickerFixedH)
+                gitPanel?.frame = NSRect(x: sidebarX, y: tf.origin.y, width: rightW, height: gitSideH)
+            } else {
+                gitPanel?.frame = NSRect(x: sidebarX, y: tf.origin.y, width: rightW, height: tf.height)
+            }
+        } else if let pv = picker {
+            // Only picker, no git on right
+            pv.frame = NSRect(x: sidebarX, y: tf.origin.y, width: rightW, height: tf.height)
         }
     }
 
@@ -12154,6 +12585,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.startUpdateDownload(release: release)
             },
             PaletteCommand(title: "Auto-Check Updates (\(onOff("autoCheckUpdates")))", shortcut: "") { [weak self] in self?.promptToggle("Auto-Check Updates", key: "autoCheckUpdates") },
+            PaletteCommand(title: "WebPicker", shortcut: "") { [weak self] in self?.toggleWebPicker() },
             PaletteCommand(title: "Git", shortcut: "") { [weak self] in self?.toggleGitPanel() },
         ]
     }
@@ -12707,7 +13139,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func resetWindowSize() {
-        let defaultSize = NSSize(width: 720, height: 480)
+        let defaultSize = NSSize(width: 860, height: 480)
         var newFrame = window.frame
         newFrame.size = defaultSize
         // Center under tray icon
