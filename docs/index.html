@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>quickTERMINAL — A 10k-line single-file terminal emulator for macOS</title>
-<meta name="description" content="A blazing-fast terminal emulator for macOS. 10,000+ lines of pure Swift, zero dependencies, native Cocoa rendering at 60 FPS. Free download. Lives in your menu bar with global hotkey. WebPicker, onboarding video.">
+<title>quickTERMINAL — A 17k-line single-file terminal emulator for macOS</title>
+<meta name="description" content="A blazing-fast terminal emulator for macOS. 17,000+ lines of pure Swift, zero dependencies, native Cocoa rendering at 60 FPS. Free download. SSH Manager, color themes, tray detach, WebPicker. Lives in your menu bar with global hotkey.">
 <meta name="keywords" content="terminal emulator, macOS terminal, Swift terminal, command line, developer tools, iTerm2 alternative, Terminal.app alternative, menu bar terminal, open source terminal, macOS developer tools">
 <meta name="author" content="Levent Ersen (LEVOGNE)">
 <meta name="robots" content="index, follow">
@@ -12,7 +12,7 @@
 
 <!-- Open Graph / Facebook -->
 <meta property="og:title" content="quickTERMINAL — Fast Terminal Emulator for macOS">
-<meta property="og:description" content="10,000+ lines of pure Swift. One file. Zero dependencies. 4.8 MB. Free for personal use.">
+<meta property="og:description" content="17,000+ lines of pure Swift. One file. Zero dependencies. 4.8 MB. SSH Manager, themes, shortcuts, SHA256-verified auto-updater. Free for personal use.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://levogne.github.io/quickTerminal/">
 <meta property="og:image" content="https://raw.githubusercontent.com/LEVOGNE/quickTerminal/main/quickTERMINAL.gif">
@@ -24,7 +24,7 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="quickTERMINAL — Terminal Emulator for macOS">
-<meta name="twitter:description" content="10,000+ lines. One Swift file. Zero dependencies. Native 60 FPS rendering. Free download.">
+<meta name="twitter:description" content="17,000+ lines. One Swift file. Zero dependencies. SSH Manager, color themes, SHA256-verified auto-updater. Free download.">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/LEVOGNE/quickTerminal/main/quickTERMINAL.gif">
 
 <!-- Favicon -->
@@ -39,10 +39,10 @@
   "name": "quickTERMINAL",
   "operatingSystem": "macOS",
   "applicationCategory": "DeveloperApplication",
-  "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 10,000+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
+  "description": "A blazing-fast terminal emulator for macOS, written from scratch in a single Swift file. 17,000+ lines, zero dependencies, native Cocoa rendering at 60 FPS.",
   "url": "https://levogne.github.io/quickTerminal/",
   "downloadUrl": "https://github.com/LEVOGNE/quickTerminal/releases/latest",
-  "softwareVersion": "1.3.0",
+  "softwareVersion": "1.4.0",
   "fileSize": "4.8 MB",
   "author": {
     "@type": "Person",
@@ -56,7 +56,7 @@
     "description": "Free for personal use"
   },
   "screenshot": "https://raw.githubusercontent.com/LEVOGNE/quickTerminal/main/quickTERMINAL.png",
-  "releaseNotes": "WebPicker (Chrome CDP element picker), onboarding video, English UI, robustness improvements, Git panel enhancements",
+  "releaseNotes": "SSH Manager, color themes (Dark/Light/OLED/System), Ctrl+1-9 tab shortcuts, Ctrl+⌥+1-3 window presets, tray detach/reattach, Follow All Spaces, right-click context menu, 10-language localization update, SHA256-verified auto-updater, updater security hardening",
   "programmingLanguage": "Swift"
 }
 </script>
@@ -763,6 +763,124 @@ section {
   border-radius: 4px;
 }
 
+/* ═══ CHANGELOG SECTION ═══ */
+.changelog-section { background: var(--bg-deep); border-top: 1px solid var(--border); }
+
+.changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.changelog-entry {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.changelog-entry:last-child { border-bottom: none; }
+.changelog-entry:hover { background: rgba(255,255,255,0.02); }
+
+.changelog-left {
+  padding: 1.6rem 1.8rem;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.changelog-ver {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--green-glow);
+  letter-spacing: -0.02em;
+}
+
+.changelog-date {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.changelog-tag {
+  display: inline-block;
+  margin-top: 0.4rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  width: fit-content;
+}
+.changelog-tag.latest { background: rgba(0,255,136,0.12); color: var(--green-glow); border: 1px solid rgba(0,255,136,0.25); }
+.changelog-tag.feature { background: rgba(0,212,255,0.10); color: var(--cyan); border: 1px solid rgba(0,212,255,0.2); }
+.changelog-tag.fix { background: rgba(255,170,0,0.10); color: var(--amber); border: 1px solid rgba(255,170,0,0.2); }
+.changelog-tag.init { background: rgba(255,255,255,0.06); color: var(--text-muted); border: 1px solid var(--border); }
+
+.changelog-right {
+  padding: 1.6rem 2rem;
+}
+
+.changelog-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.8rem;
+}
+
+.changelog-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.changelog-item {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.changelog-item::before {
+  content: '·';
+  color: var(--green-muted);
+  flex-shrink: 0;
+}
+
+.changelog-item strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.changelog-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.changelog-link:hover { color: var(--green-glow); }
+
+@media (max-width: 640px) {
+  .changelog-entry { grid-template-columns: 1fr; }
+  .changelog-left { border-right: none; border-bottom: 1px solid var(--border); padding: 1.2rem 1.4rem; }
+  .changelog-right { padding: 1.2rem 1.4rem; }
+}
+
 /* ═══ CTA SECTION ═══ */
 .cta-section {
   text-align: center;
@@ -938,7 +1056,7 @@ footer {
 
   <div class="hero-badge">
     <span class="dot"></span>
-    v1.3.0 — WebPicker, Onboarding Video & More
+    v1.4.0 — SSH Manager, Themes, Shortcuts & More
   </div>
 
   <h1>
@@ -951,7 +1069,7 @@ footer {
   </p>
 
   <div class="hero-stats">
-    <span class="hero-stat"><strong>10,000+</strong> lines</span>
+    <span class="hero-stat"><strong>17,000+</strong> lines</span>
     <span class="hero-stat"><strong>1</strong> file</span>
     <span class="hero-stat"><strong>0</strong> dependencies</span>
     <span class="hero-stat"><strong>4.8 MB</strong> app</span>
@@ -982,10 +1100,10 @@ footer {
         <noscript>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">neofetch --minimal</span></div>
           <div class="terminal-line"><span class="output">  macOS 15.2 Sequoia</span></div>
-          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">quickTERMINAL v1.3.0</span></span></div>
+          <div class="terminal-line"><span class="output">  Terminal: <span class="highlight">quickTERMINAL v1.4.0</span></span></div>
           <div class="terminal-line"><span class="output">  Shell: zsh 5.9</span></div>
           <div class="terminal-line"><span class="prompt">~ </span><span class="cmd">quickterminal --info</span></div>
-          <div class="terminal-line"><span class="output">  <span class="amber">10,247</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">4.8 MB</span></span></div>
+          <div class="terminal-line"><span class="output">  <span class="amber">17,000+</span> lines | <span class="amber">1</span> file | <span class="amber">0</span> deps | <span class="amber">4.8 MB</span></span></div>
           <div class="terminal-line"><span class="output">  Parser: 13-state FSM | Render: 60 FPS CGContext</span></div>
           <div class="terminal-line"><span class="output">  Colors: 24-bit TrueColor | Graphics: Sixel</span></div>
         </noscript>
@@ -1077,6 +1195,21 @@ footer {
         <h3>Onboarding Video</h3>
         <p>First-launch intro video plays automatically in a floating panel. Closes when done, never shown again — zero friction for new users.</p>
       </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128274;</div>
+        <h3>SSH Manager</h3>
+        <p>Save SSH connections (host, user, port, key file). Connect with one click — opens a new tab and starts the session. Profiles persist across restarts.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#127912;</div>
+        <h3>Color Themes</h3>
+        <p>Four built-in terminal color schemes: Dark, Light, OLED Black, and System — which automatically follows macOS Dark/Light Mode.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">&#128204;</div>
+        <h3>Tray Detach &amp; Reattach</h3>
+        <p>Float the terminal freely on any monitor with full 8-edge resize. Reattach from the tray right-click menu — snaps back under the icon instantly.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -1086,7 +1219,7 @@ footer {
   <div class="section-pad">
     <div class="numbers-grid reveal">
       <div class="number-item">
-        <div class="value">10k+</div>
+        <div class="value">17k+</div>
         <div class="label">Lines of Code</div>
       </div>
       <div class="number-item">
@@ -1184,7 +1317,7 @@ footer {
       <div class="install-card">
         <h3>Direct Download</h3>
         <div class="install-cmd" onclick="window.open('https://github.com/LEVOGNE/quickTerminal/releases/latest', '_blank')">
-          <span>Download quickTERMINAL_v1.3.0.zip</span>
+          <span>Download quickTERMINAL_v1.4.0.zip</span>
           <button class="copy-btn" aria-label="Download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
@@ -1206,6 +1339,118 @@ footer {
   </div>
 </section>
 
+<!-- ═══ CHANGELOG ═══ -->
+<section id="changelog" class="changelog-section">
+  <div class="section-pad reveal">
+    <div class="section-label">// Changelog</div>
+    <h2 class="section-title">Release history.</h2>
+    <p class="section-desc">Every version, documented. Shipped fast, built to last.</p>
+
+    <div class="changelog-list">
+
+      <!-- v1.4.0 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.4.0</span>
+          <span class="changelog-date">2026-03-14</span>
+          <span class="changelog-tag latest">Latest</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Developer UX &amp; Customization</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>SSH Manager</strong> — floating sidebar, save/connect/delete profiles, one-click connect</div>
+            <div class="changelog-item"><strong>Color Themes</strong> — Dark, Light, OLED Black, System (auto-follows macOS)</div>
+            <div class="changelog-item"><strong>Keyboard Shortcuts</strong> — Ctrl+1–9 switch tabs, Ctrl+⌥+1–3 window presets</div>
+            <div class="changelog-item"><strong>Tray Detach / Reattach</strong> — float freely on desktop, all 8 resize handles</div>
+            <div class="changelog-item"><strong>Follow All Spaces</strong> — window visible across all macOS Spaces</div>
+            <div class="changelog-item"><strong>Right-click Context Menu</strong> — Copy, Paste, Select All</div>
+            <div class="changelog-item"><strong>10-Language Localization</strong> — EN, DE, TR, ES, FR, IT, AR, JA, ZH, RU</div>
+            <div class="changelog-item"><strong>Updater Security</strong> — SHA256 sidecar verification, HTTPS + host allowlist, bundle-ID guard</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.3.0 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.3.0</span>
+          <span class="changelog-date">2026-03-12</span>
+          <span class="changelog-tag feature">Feature</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Developer Tools &amp; Onboarding</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>WebPicker</strong> — CDP-based Chrome element picker, connect/disconnect toggle, DOM selection → clipboard</div>
+            <div class="changelog-item"><strong>Onboarding Video</strong> — first-launch AVKit panel (480×300), plays once, skip button</div>
+            <div class="changelog-item"><strong>Full English UI</strong> — all UI strings translated: Git, WebPicker, auth, feedback, errors</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.2.0 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.2.0</span>
+          <span class="changelog-date">2026-03-10</span>
+          <span class="changelog-tag feature">Feature</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">UX and Terminal Fidelity</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>Git Panel</strong> — branch, status, diff, staged changes, commit history, GitHub CI status</div>
+            <div class="changelog-item"><strong>Claude Code Badge</strong> — live session &amp; weekly usage limits, auto-connected</div>
+            <div class="changelog-item"><strong>Drag &amp; Drop</strong> — drop files from Finder → shell-escaped path at cursor</div>
+            <div class="changelog-item"><strong>Custom Tab Names</strong> — double-click to rename, persists across sessions</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.1.0 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.1.0</span>
+          <span class="changelog-date">2026-03-08</span>
+          <span class="changelog-tag feature">Feature</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Packaging &amp; Distribution</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>Session Restore</strong> — tabs, shells, splits, working directories</div>
+            <div class="changelog-item"><strong>quickBAR</strong> — 40-command Spotlight-style palette (double-tap Ctrl)</div>
+            <div class="changelog-item"><strong>Multi-Tab</strong> — color coding, drag-to-reorder, inline rename</div>
+            <div class="changelog-item"><strong>Split Panes</strong> — vertical and horizontal with draggable divider</div>
+            <div class="changelog-item"><strong>Auto-Updater</strong> — GitHub Releases check every 72h, session-preserving restart</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- v1.0.0 -->
+      <div class="changelog-entry">
+        <div class="changelog-left">
+          <span class="changelog-ver">v1.0.0</span>
+          <span class="changelog-date">2026-03-01</span>
+          <span class="changelog-tag init">Initial</span>
+        </div>
+        <div class="changelog-right">
+          <div class="changelog-title">Initial Release</div>
+          <div class="changelog-items">
+            <div class="changelog-item"><strong>VT100/VT220/xterm</strong> — 13-state FSM parser, built from scratch</div>
+            <div class="changelog-item"><strong>60 FPS Rendering</strong> — CGContext, 24-bit TrueColor, Sixel graphics</div>
+            <div class="changelog-item"><strong>Menu Bar App</strong> — no dock icon, global hotkey Ctrl+&lt;</div>
+            <div class="changelog-item"><strong>Single Swift file</strong> — zero dependencies, 4.8 MB app bundle</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <a href="https://github.com/LEVOGNE/quickTerminal/releases" class="changelog-link" target="_blank">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      View all releases on GitHub
+    </a>
+  </div>
+</section>
+
 <!-- ═══ CTA ═══ -->
 <section class="cta-section">
   <div class="section-pad reveal">
@@ -1216,7 +1461,7 @@ footer {
     <div class="hero-actions">
       <a href="https://github.com/LEVOGNE/quickTerminal/releases/latest" class="btn-primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download v1.3.0
+        Download v1.4.0
       </a>
       <a href="https://github.com/LEVOGNE/quickTerminal" class="btn-secondary" target="_blank">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -1251,12 +1496,12 @@ footer {
 const termLines = [
   { prompt: '~ ', cmd: 'neofetch --minimal', delay: 0 },
   { output: '  macOS 15.2 Sequoia', delay: 400 },
-  { output: '  Terminal: <span class="highlight">quickTERMINAL v1.3.0</span>', delay: 600 },
+  { output: '  Terminal: <span class="highlight">quickTERMINAL v1.4.0</span>', delay: 600 },
   { output: '  Shell: zsh 5.9', delay: 800 },
   { output: '  Resolution: 2560x1600', delay: 1000 },
   { output: '', delay: 1200 },
   { prompt: '~ ', cmd: 'quickterminal --info', delay: 1400 },
-  { output: '  <span class="amber">13,200</span> lines  |  <span class="amber">1</span> file  |  <span class="amber">0</span> deps  |  <span class="amber">4.8 MB</span>', delay: 1800 },
+  { output: '  <span class="amber">17,000+</span> lines  |  <span class="amber">1</span> file  |  <span class="amber">0</span> deps  |  <span class="amber">4.8 MB</span>', delay: 1800 },
   { output: '  Parser: 13-state FSM  |  Render: 60 FPS CGContext', delay: 2000 },
   { output: '  Colors: 24-bit TrueColor  |  Graphics: Sixel', delay: 2200 },
   { output: '', delay: 2400 },

@@ -10,19 +10,19 @@
 
 **A blazing-fast, single-file terminal emulator for macOS.**
 
-*Zero dependencies. Pure Swift. Lives in your menu bar. Built-in Git panel, Claude Code integration & auto-updater. 4.8 MB app bundle.*
+*Zero dependencies. Pure Swift. Lives in your menu bar. Built-in SSH Manager, Git panel, Claude Code integration & auto-updater. 4.8 MB app bundle.*
 
 <br>
 
 ![macOS](https://img.shields.io/badge/macOS-12%2B-black?style=for-the-badge&logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-5.9-F05138?style=for-the-badge&logo=swift&logoColor=white)
-![Lines](https://img.shields.io/badge/13000%2B_Lines-One_File-blue?style=for-the-badge)
+![Lines](https://img.shields.io/badge/17000%2B_Lines-One_File-blue?style=for-the-badge)
 ![App](https://img.shields.io/badge/App-4.8_MB-purple?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Free_for_Personal_Use-green?style=for-the-badge)
 
 <br>
 
-[**Download quickTerminal.app (v1.3.0)**](https://github.com/LEVOGNE/quickTerminal/releases/latest) · [**Website**](https://levogne.github.io/quickTerminal/)
+[**Download quickTerminal.app (v1.4.0)**](https://github.com/LEVOGNE/quickTerminal/releases/latest) · [**Website**](https://levogne.github.io/quickTerminal/)
 
 ---
 
@@ -64,7 +64,7 @@
 ## Why quickTERMINAL?
 
 > [!IMPORTANT]
-> **13,000+ lines. One file. 4.8 MB app. Full terminal emulation.**
+> **17,000+ lines. One file. 4.8 MB app. Full terminal emulation.**
 >
 > No Electron. No WebView. No libvte. No SwiftTerm.
 > Written from scratch with a hand-rolled VT parser, direct PTY management,
@@ -138,11 +138,15 @@
 | :question: | **Mode Query** | DECRQM — query private and ANSI terminal modes |
 | :wheelchair: | **Accessibility** | VoiceOver support — screen reader access to terminal content |
 | :bar_chart: | **Diagnostics** | Built-in performance monitor and parser state viewer |
-| :arrows_counterclockwise: | **Auto-Update** | Built-in update system — checks GitHub Releases every 72h, downloads + installs + restarts seamlessly |
+| :arrows_counterclockwise: | **Auto-Update** | Built-in update system — checks GitHub Releases every 72h, SHA256-verified download, installs + restarts seamlessly |
 | :octocat: | **Git Integration** | Built-in Git panel — branch, status, diff, commit history with GitHub API support |
 | :bar_chart: | **Claude Code Usage** | Live Claude Code subscription usage in footer — session %, weekly limits, auto-connected |
 | :globe_with_meridians: | **WebPicker** | CDP-based DOM element picker — connect to Chrome, hover-select any element, copies outerHTML to clipboard |
 | :clapper: | **Onboarding Video** | First-launch intro video panel — plays once automatically, never shown again |
+| :lock: | **SSH Manager** | Save SSH profiles (host, user, port, key file), connect with one click in a new tab, delete profiles. Persistent via UserDefaults |
+| :art: | **Color Themes** | 4 terminal color schemes: Dark (default), Light, OLED Black, System (follows macOS appearance automatically) |
+| :earth_americas: | **Follow All Spaces** | Window appears on all macOS Spaces simultaneously — toggle in Settings |
+| :pushpin: | **Tray Detach / Reattach** | Float the terminal freely on desktop with all 8 resize handles. Reattach snaps it back under the tray icon |
 
 <br>
 
@@ -300,8 +304,12 @@ IND  NEL  HTS  RI  DCS  CSI  OSC  ST (8-bit C1)
 | :octocat: | **Git Panel** | Built-in Git panel with branch, status, diff, and commit history |
 | :bar_chart: | **Claude Code Usage** | Live usage badge in footer — auto-connects to Claude Code, shows session & weekly limits |
 | :shield: | **Crash Reporting** | Automatic crash logs to `~/.quickterminal/crash.log` |
-| :arrows_counterclockwise: | **Auto-Update** | Checks GitHub Releases every 72h, one-click install with progress bar, session-preserving restart |
+| :arrows_counterclockwise: | **Auto-Update** | Checks GitHub Releases every 72h, SHA256-verified download, one-click install with progress bar, session-preserving restart |
 | :globe_with_meridians: | **WebPicker** | Floating sidebar for Chrome CDP element picking — connect, select DOM elements, auto-paste HTML |
+| :lock: | **SSH Manager** | Floating sidebar — save SSH profiles, connect with one click in a new tab |
+| :art: | **Color Themes** | 4 terminal themes: Dark, Light, OLED Black, System — System auto-follows macOS appearance |
+| :earth_americas: | **Follow All Spaces** | Window shown on all macOS Spaces, configurable in Settings |
+| :pushpin: | **Detach / Reattach** | Float window freely on desktop with full 8-edge resize; snap back to tray from right-click menu |
 
 <br>
 
@@ -361,6 +369,8 @@ Each shell gets:
 | <kbd>⌘</kbd> <kbd>T</kbd> | New tab |
 | <kbd>⌘</kbd> <kbd>W</kbd> | Close tab |
 | <kbd>⌘</kbd> <kbd>←</kbd> / <kbd>→</kbd> | Switch tabs |
+| <kbd>Ctrl</kbd> + <kbd>1</kbd>–<kbd>9</kbd> | Switch to tab 1–9 directly |
+| <kbd>Ctrl</kbd> <kbd>⇧</kbd> + <kbd>1</kbd>–<kbd>9</kbd> | Rename tab 1–9 (inline) |
 | <kbd>⌘</kbd> <kbd>D</kbd> | Split pane vertical |
 | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>D</kbd> | Split pane horizontal |
 | <kbd>Alt</kbd> + <kbd>Tab</kbd> | Switch split pane focus |
@@ -369,6 +379,14 @@ Each shell gets:
 | <kbd>⌘</kbd> <kbd>V</kbd> | Paste |
 | <kbd>⌘</kbd> <kbd>A</kbd> | Select all |
 | Double-tap <kbd>Ctrl</kbd> | quickBAR |
+
+### Window Size Presets
+
+| Shortcut | Size |
+|:---|---|
+| <kbd>Ctrl</kbd> <kbd>⌥</kbd> <kbd>1</kbd> | Compact — 620 × 340 |
+| <kbd>Ctrl</kbd> <kbd>⌥</kbd> <kbd>2</kbd> | Medium — 860 × 480 (default) |
+| <kbd>Ctrl</kbd> <kbd>⌥</kbd> <kbd>3</kbd> | Large — 1200 × 680 |
 
 ### Terminal Navigation
 
@@ -532,6 +550,9 @@ Each shell gets:
 | Copy on Select | On/Off | On |
 | Auto-Start at Login | On/Off | Off |
 | Auto-Check Updates | On/Off | On |
+| Follow All Spaces | On/Off | Off |
+| **Appearance** | | |
+| Color Theme | Dark / Light / OLED / System | Dark |
 | **Claude Code** | | |
 | Show Usage Badge | On/Off | On |
 | Refresh Interval | 30s / 1m / 5m | 1m |
@@ -555,7 +576,7 @@ quickTerminal.app (4.8 MB)
 │   │   └── quickTERMINAL.mp4 ·· Onboarding video (first-launch, plays once)
 │   └── Info.plist ················· LSUIElement=true (menu bar app)
 
-quickTerminal.swift (single file, ~13000 lines)
+quickTerminal.swift (single file, ~17000 lines)
 │
 ├── Terminal ·················· VT parser + state machine + grid
 │   ├── Cell ················· Character + attributes + width + hyperlink
@@ -573,8 +594,9 @@ quickTerminal.swift (single file, ~13000 lines)
 │
 ├── UpdateChecker ············· Auto-update system
 │   ├── GitHub API ··········· Check releases every 72h
-│   ├── Download ············· Progress-tracked ZIP download
-│   └── Self-replace ········· Unzip, swap .app, rollback on failure, restart
+│   ├── Download ············· Progress-tracked ZIP download (HTTPS + host-allowlist enforced)
+│   ├── SHA256 verify ········ Sidecar checksum file verified before install
+│   └── Self-replace ········· Unzip, bundle-ID guard, swap .app, rollback on failure, restart
 │
 ├── GitPanelView ·············· Built-in Git integration
 │   ├── Branch + Status ······ Current branch, changed/staged files
@@ -599,6 +621,8 @@ quickTerminal.swift (single file, ~13000 lines)
 │
 ├── WebPickerSidebarView ·· Chrome CDP element picker with connect/disconnect
 ├── ChromeCDPClient ········ WebSocket CDP client for Chrome DevTools Protocol
+├── SSHManagerView ·········· SSH profile sidebar — save, connect, delete SSH profiles
+├── SSHProfile ·············· Codable model: label, user, host, port, keyFile, connectCommand
 └── OnboardingPanel ········ First-launch video panel (plays once, AVKit)
 │
 └── Build Pipeline
@@ -666,7 +690,7 @@ quickTERMINAL is source-available with a dual license:
 
 See [LICENSE](./LICENSE) for details. Contact: **l.ersen@icloud.com**
 
-> **13,000+ lines of Swift. One file. Zero dependencies. 4.8 MB app. Full VT emulation + auto-updater.**
+> **17,000+ lines of Swift. One file. Zero dependencies. 4.8 MB app. Full VT emulation + SSH Manager + SHA256-verified auto-updater.**
 
 ### Contributing
 
@@ -699,9 +723,9 @@ This project follows [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 <img src="icon.png" width="64" alt="quickTERMINAL">
 
-### quickTERMINAL v1.3.0
+### quickTERMINAL v1.4.0
 
-*13,000+ lines. One file. Zero dependencies. Git panel. Claude Code usage. Auto-updater.*
+*17,000+ lines. One file. Zero dependencies. SSH Manager. Git panel. Color Themes. SHA256-verified auto-updater.*
 
 *Built with obsessive attention to every escape sequence, every pixel, every frame.*
 

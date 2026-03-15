@@ -17,9 +17,9 @@
 
 <br>
 
-![Version](https://img.shields.io/badge/Version-1.3.0-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-1.4.0-blue?style=for-the-badge)
 ![Commands](https://img.shields.io/badge/Commands-40-brightgreen?style=for-the-badge)
-![Shortcuts](https://img.shields.io/badge/Shortcuts-25%2B-orange?style=for-the-badge)
+![Shortcuts](https://img.shields.io/badge/Shortcuts-35%2B-orange?style=for-the-badge)
 ![App](https://img.shields.io/badge/App-4.8_MB-purple?style=for-the-badge)
 
 <br>
@@ -114,6 +114,17 @@
 |:---:|---|---|
 | :globe_with_meridians: | **WebPicker** | Toggle WebPicker sidebar — connect to Chrome via CDP, pick DOM elements |
 
+### :lock: SSH Manager
+
+| | Command | Description |
+|:---:|---|---|
+| :lock: | **SSH** | Toggle SSH Manager sidebar — save SSH profiles, connect with one click |
+
+> [!NOTE]
+> Saves profiles with label, user@host, port, and optional identity file.
+> Click ▶ to open a new tab and start the SSH connection.
+> Profiles persist across sessions via UserDefaults.
+
 > [!NOTE]
 > Connects to Chrome (with --remote-debugging-port=9222). Auto-starts Chrome if needed.
 > States: Disconnected → Connecting → Ready → Picking. Shows live hostname.
@@ -145,6 +156,7 @@
 | :eye: | **Hide on Deactivate (on/off)** | Off |
 | :electric_plug: | **Launch at Login (on/off)** | Off |
 | :arrows_counterclockwise: | **Auto-Check Updates (on/off)** | On |
+| :earth_americas: | **Follow All Spaces (on/off)** | Off |
 
 ### :arrows_counterclockwise: Update
 
@@ -189,6 +201,8 @@
 | <kbd>⌘</kbd> <kbd>T</kbd> | :heavy_plus_sign: New tab |
 | <kbd>⌘</kbd> <kbd>W</kbd> | :heavy_multiplication_x: Close tab |
 | <kbd>⌘</kbd> <kbd>←</kbd> / <kbd>→</kbd> | :left_right_arrow: Switch between tabs |
+| <kbd>Ctrl</kbd> + <kbd>1</kbd>–<kbd>9</kbd> | :1234: Switch to tab 1–9 directly |
+| <kbd>Ctrl</kbd> <kbd>⇧</kbd> + <kbd>1</kbd>–<kbd>9</kbd> | :pencil2: Rename tab 1–9 (inline edit) |
 | <kbd>⌘</kbd> <kbd>D</kbd> | :arrow_right: Split pane vertical |
 | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>D</kbd> | :arrow_down: Split pane horizontal |
 | <kbd>Alt</kbd> + <kbd>Tab</kbd> | :arrows_counterclockwise: Switch split pane focus |
@@ -197,6 +211,17 @@
 | <kbd>⌘</kbd> <kbd>V</kbd> | :paperclip: Paste from clipboard |
 | <kbd>⌘</kbd> <kbd>A</kbd> | :pencil2: Select all |
 | Double-tap <kbd>Ctrl</kbd> | :mag: Open quickBAR |
+
+### :desktop_computer: Window Size Presets
+
+| Shortcut | Size | Description |
+|:---|:---:|---|
+| <kbd>Ctrl</kbd> <kbd>⌥</kbd> <kbd>1</kbd> | 620 × 340 | Compact — minimal footprint |
+| <kbd>Ctrl</kbd> <kbd>⌥</kbd> <kbd>2</kbd> | 860 × 480 | Medium — default size |
+| <kbd>Ctrl</kbd> <kbd>⌥</kbd> <kbd>3</kbd> | 1200 × 680 | Large — spacious workspace |
+
+> [!NOTE]
+> All presets animate with a spring transition and center on the current screen.
 
 ---
 
@@ -291,6 +316,7 @@
 | :keyboard: Font Family | System monospace | Auto |
 | :flashlight: Cursor Style | Underline / Beam / Block | Underline |
 | :sparkles: Cursor Blink | On / Off | Off |
+| :art: Color Theme | Dark / Light / OLED / System | Dark |
 
 ### :zap: Behavior
 
@@ -303,6 +329,7 @@
 | :clipboard: Copy on Select | On / Off | On |
 | :electric_plug: Auto-Start at Login | On / Off | Off |
 | :arrows_counterclockwise: Auto-Check Updates | On / Off | On |
+| :earth_americas: Follow All Spaces | On / Off | Off |
 
 ### :art: Shell & Theme
 
@@ -340,8 +367,8 @@
 
 ![Built with Swift](https://img.shields.io/badge/Built_with-Swift-F05138?style=flat-square&logo=swift&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-macOS-000000?style=flat-square&logo=apple&logoColor=white)
-![quickTERMINAL](https://img.shields.io/badge/quickTERMINAL-v1.3.0-blue?style=flat-square)
-![Lines](https://img.shields.io/badge/10000%2B_Lines-One_File-blue?style=flat-square)
+![quickTERMINAL](https://img.shields.io/badge/quickTERMINAL-v1.4.0-blue?style=flat-square)
+![Lines](https://img.shields.io/badge/17000%2B_Lines-One_File-blue?style=flat-square)
 ![App](https://img.shields.io/badge/App-4.8_MB-brightgreen?style=flat-square)
 
 </div>

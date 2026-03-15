@@ -6,7 +6,7 @@ Security fixes are prioritized for the latest release line.
 
 | Version | Supported |
 |---|---|
-| 1.0.x (latest) | Yes |
+| 1.4.x (latest) | Yes |
 | older versions | No |
 
 ## Reporting a Vulnerability

@@ -1,10 +1,10 @@
 #!/bin/bash
 # Build quickTerminal.zip for GitHub Releases
-# NOTE: Keep VERSION in sync with kAppVersion in quickTerminal.swift
 set -e
 cd "$(dirname "$0")"
 
-VERSION="1.3.0"
+VERSION="$(sed -nE 's/^let kAppVersion = "([^"]+)".*/\1/p' quickTerminal.swift | head -n1)"
+[ -n "$VERSION" ] || { echo "ERROR: kAppVersion not found in quickTerminal.swift"; exit 1; }
 ZIP_NAME="quickTERMINAL_v${VERSION}.zip"
 
 echo "=== Building ${ZIP_NAME} (v${VERSION}) ==="

@@ -10,7 +10,7 @@ import AVKit
 
 // MARK: - Version
 
-let kAppVersion = "1.3.0"
+let kAppVersion = "1.4.0"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -66,6 +66,791 @@ struct Cell {
     var hyperlink: String? = nil  // OSC 8 hyperlink URL
 }
 
+struct CursorState {
+    var x: Int = 0
+    var y: Int = 0
+    var pendingWrap: Bool = false
+}
+
+// MARK: - Localization
+
+extension Notification.Name {
+    static let appLanguageChanged = Notification.Name("qtLanguageChanged")
+}
+
+enum Loc {
+    static var lang: String {
+        get { UserDefaults.standard.string(forKey: "appLanguage").flatMap { $0.isEmpty ? nil : $0 } ?? Loc.systemLang }
+        set { UserDefaults.standard.set(newValue, forKey: "appLanguage") }
+    }
+    static var systemLang: String {
+        let code = String((Locale.preferredLanguages.first ?? "en").prefix(2))
+        return supported.contains(code) ? code : "en"
+    }
+    static let supported = ["en","de","tr","es","fr","it","ar","ja","zh","ru"]
+    static let flags     = ["en":"🇬🇧","de":"🇩🇪","tr":"🇹🇷","es":"🇪🇸","fr":"🇫🇷",
+                            "it":"🇮🇹","ar":"🇸🇦","ja":"🇯🇵","zh":"🇨🇳","ru":"🇷🇺"]
+    static let names     = ["en":"English","de":"Deutsch","tr":"Türkçe","es":"Español",
+                            "fr":"Français","it":"Italiano","ar":"العربية",
+                            "ja":"日本語","zh":"中文","ru":"Русский"]
+
+    static func t(_ k: String) -> String {
+        strings[lang]?[k] ?? strings["en"]![k] ?? k
+    }
+
+    // MARK: Settings
+    static var language: String     { t("language") }
+    static var opacity: String      { t("opacity") }
+    static var blur: String         { t("blur") }
+    static var fontSize: String     { t("fontSize") }
+    static var cursor: String       { t("cursor") }
+    static var cursorBlink: String  { t("cursorBlink") }
+    static var font: String         { t("font") }
+    static var syntaxHighlight: String { t("syntaxHighlight") }
+    static var defaultShell: String { t("defaultShell") }
+    static var colorThemeSection: String { t("colorThemeSection") }
+    static var windowSection: String { t("windowSection") }
+    static var alwaysOnTop: String  { t("alwaysOnTop") }
+    static var followAllSpaces: String { t("followAllSpaces") }
+    static var autoDim: String      { t("autoDim") }
+    static var hideOnClickOutside: String { t("hideOnClickOutside") }
+    static var hideOnDeactivate: String   { t("hideOnDeactivate") }
+    static var copyOnSelect: String { t("copyOnSelect") }
+    static var launchAtLogin: String { t("launchAtLogin") }
+    static var autoCheckUpdates: String { t("autoCheckUpdates") }
+    static var webpickerSection: String { t("webpickerSection") }
+    static var browser: String      { t("browser") }
+    static var claudeSection: String { t("claudeSection") }
+    static var showUsageBadge: String { t("showUsageBadge") }
+    static var refresh: String      { t("refresh") }
+    static var status: String       { t("status") }
+    static var connected: String    { t("connected") }
+    static var noToken: String      { t("noToken") }
+    static var resetToDefaults: String { t("resetToDefaults") }
+    static var sure: String         { t("sure") }
+    static var sendFeedback: String { t("sendFeedback") }
+    static var sent: String         { t("sent") }
+    // MARK: WebPicker
+    static var notConnected: String { t("notConnected") }
+    static var connecting: String   { t("connecting") }
+    static var openingTab: String   { t("openingTab") }
+    static var navigateTo: String   { t("navigateTo") }
+    static var verbunden: String    { t("verbunden") }
+    static var disconnect: String   { t("disconnect") }
+    static var pickElement: String  { t("pickElement") }
+    static var connectToChrome: String { t("connectToChrome") }
+    static var resetMarks: String   { t("resetMarks") }
+    static var picks: String        { t("picks") }
+    static var chromeNotReachable: String { t("chromeNotReachable") }
+    static var connectionLost: String { t("connectionLost") }
+    static var connectionFailed: String { t("connectionFailed") }
+    static var tabClosed: String    { t("tabClosed") }
+    static var waitingForClick: String { t("waitingForClick") }
+    // MARK: Git
+    static var noProjectYet: String { t("noProjectYet") }
+    static var clickToStartTracking: String { t("clickToStartTracking") }
+    static var startTracking: String { t("startTracking") }
+    static var changedFiles: String { t("changedFiles") }
+    static var whatChanged: String  { t("whatChanged") }
+    static var commitPlaceholder: String { t("commitPlaceholder") }
+    static var save: String         { t("save") }
+    static var notConnectedGH: String { t("notConnectedGH") }
+    static var pasteToken: String   { t("pasteToken") }
+    static var connect: String      { t("connect") }
+    static var createToken: String  { t("createToken") }
+    static var uploadGH: String     { t("uploadGH") }
+    static var updateGH: String     { t("updateGH") }
+    static var logout: String       { t("logout") }
+    static var createProject: String { t("createProject") }
+    static var projectNamePlaceholder: String { t("projectNamePlaceholder") }
+    static var visibility: String   { t("visibility") }
+    static var public_: String      { t("public_") }
+    static var private_: String     { t("private_") }
+    static var createAndUpload: String { t("createAndUpload") }
+    static var cancel: String       { t("cancel") }
+    static var noTracking: String   { t("noTracking") }
+    static var allSaved: String     { t("allSaved") }
+    static func filesChanged(_ n: Int) -> String { String(format: t("filesChanged"), n, n == 1 ? "" : t("filesChangedPlural")) }
+    static var describeChanges: String { t("describeChanges") }
+    static var invalidToken: String { t("invalidToken") }
+    static var savedMsg: String     { t("savedMsg") }
+    static var uploaded: String     { t("uploaded") }
+    static var updated: String      { t("updated") }
+    static var projectCreated: String { t("projectCreated") }
+    static var creating: String     { t("creating") }
+    static var checking: String     { t("checking") }
+    static var notYetUploaded: String { t("notYetUploaded") }
+    static func aheadBehind(_ a: Int, _ b: Int) -> String { String(format: t("aheadBehind"), a, b) }
+    static func aheadOnly(_ a: Int) -> String { String(format: t("aheadOnly"), a, a == 1 ? "" : "s") }
+    static func behindOnly(_ b: Int) -> String { String(format: t("behindOnly"), b, b == 1 ? "" : "s") }
+    static var upToDate: String     { t("upToDate") }
+    // MARK: Toasts / Alerts
+    static var noUpdateAvailable: String { t("noUpdateAvailable") }
+    static var updateAvailable: String { t("updateAvailable") }
+    static var onlyWithAppBundle: String { t("onlyWithAppBundle") }
+    static var alreadyUpToDate: String { t("alreadyUpToDate") }
+    static var checkFailed: String  { t("checkFailed") }
+    static var updateInstalled: String { t("updateInstalled") }
+    static var fullDiskAccess: String { t("fullDiskAccess") }
+    static var fullDiskAccessMsg: String { t("fullDiskAccessMsg") }
+    static var openSettings: String { t("openSettings") }
+    static var later: String        { t("later") }
+    // MARK: Context Menu
+    static var copy: String         { t("copy") }
+    static var paste: String        { t("paste") }
+    static var selectAll: String    { t("selectAll") }
+    static var clear: String        { t("clear") }
+    static var newTab: String       { t("newTab") }
+    static var showHide: String     { t("showHide") }
+    static var detachWindow: String { t("detachWindow") }
+    static var reattachWindow: String { t("reattachWindow") }
+    static var quitApp: String      { t("quitApp") }
+    static var splitVertical: String   { t("splitVertical") }
+    static var splitHorizontal: String { t("splitHorizontal") }
+    static var panels: String       { t("panels") }
+
+    // MARK: SSH
+    static var sshNewConn: String   { t("sshNewConn") }
+    static var sshNoSaved: String   { t("sshNoSaved") }
+    static var sshNamePh: String    { t("sshNamePh") }
+    static var sshConnPh: String    { t("sshConnPh") }
+    static var sshKeyPh: String     { t("sshKeyPh") }
+
+    // MARK: - Translation Table
+    static let strings: [String: [String: String]] = [
+        "en": [
+            "language": "LANGUAGE",
+            "opacity": "Opacity", "blur": "Blur", "fontSize": "Font Size",
+            "cursor": "Cursor", "cursorBlink": "Cursor Blink", "font": "Font",
+            "syntaxHighlight": "Syntax Highlighting", "defaultShell": "Default Shell",
+            "colorThemeSection": "COLOR THEME",
+            "windowSection": "Window", "alwaysOnTop": "Always on Top", "followAllSpaces": "Follow All Spaces", "autoDim": "Auto-Dim",
+            "hideOnClickOutside": "Hide on Click Outside", "hideOnDeactivate": "Hide on Deactivate",
+            "copyOnSelect": "Copy on Select", "launchAtLogin": "Launch at Login",
+            "autoCheckUpdates": "Auto-Check Updates", "webpickerSection": "WebPicker",
+            "browser": "Browser", "claudeSection": "Claude Code", "showUsageBadge": "Show Usage Badge",
+            "refresh": "Refresh", "status": "Status", "connected": "Connected",
+            "noToken": "No Claude Code Token", "resetToDefaults": "Reset to Defaults",
+            "sure": "Sure?", "sendFeedback": "Send Feedback", "sent": "✓ Sent!",
+            "notConnected": "Not connected", "connecting": "Connecting...",
+            "openingTab": "Opening new tab...", "navigateTo": "Navigate to a website",
+            "verbunden": "Connected", "disconnect": "⏏ Disconnect",
+            "pickElement": "✦  Pick Element", "connectToChrome": "  ⊕  Connect to Chrome",
+            "resetMarks": "⌫ Reset Marks", "picks": "PICKS",
+            "chromeNotReachable": "Chrome not reachable", "connectionLost": "Connection lost",
+            "connectionFailed": "Connection failed", "tabClosed": "Tab was closed",
+            "waitingForClick": "Waiting for click...",
+            "noProjectYet": "No project tracking yet",
+            "clickToStartTracking": "Click the button to start tracking this folder.",
+            "startTracking": "Start Tracking", "changedFiles": "CHANGED FILES",
+            "whatChanged": "WHAT DID YOU CHANGE?",
+            "commitPlaceholder": "e.g. Improved login page, fixed bug...",
+            "save": "💾  Save", "notConnectedGH": "🔗  Not connected to GitHub",
+            "pasteToken": "Paste GitHub token (ghp_...)", "connect": "Connect",
+            "createToken": "Create token →", "uploadGH": "↑  Upload to GitHub",
+            "updateGH": "↓  Update", "logout": "Logout",
+            "createProject": "Create new GitHub project", "projectNamePlaceholder": "project-name",
+            "visibility": "Visibility:", "public_": "Public", "private_": "Private",
+            "createAndUpload": "✔  Create & Upload", "cancel": "Cancel",
+            "noTracking": "No tracking — start it with the button",
+            "allSaved": "✅  All saved — nothing to do",
+            "filesChanged": "%d file%@ changed", "filesChangedPlural": "s",
+            "describeChanges": "Please describe what you changed first.",
+            "invalidToken": "Invalid token — please try again",
+            "savedMsg": "✓  Saved", "uploaded": "✓  Uploaded!", "updated": "✓  Updated!",
+            "projectCreated": "✓  Project created & uploaded to GitHub!",
+            "creating": "Creating...", "checking": "Checking...",
+            "notYetUploaded": "Not yet uploaded",
+            "aheadBehind": "↑ %d to push, ↓ %d to pull",
+            "aheadOnly": "↑ %d change%@ to push", "behindOnly": "↓ %d new change%@ available",
+            "upToDate": "✓  All up to date",
+            "noUpdateAvailable": "No update available",
+            "updateAvailable": "%@ available — click to install",
+            "onlyWithAppBundle": "Only works with .app bundle",
+            "alreadyUpToDate": "Already up to date (v%@)",
+            "checkFailed": "Check failed — try again later",
+            "updateInstalled": "Update installed — restarting…",
+            "fullDiskAccess": "Full Disk Access",
+            "fullDiskAccessMsg": "quickTERMINAL works best with Full Disk Access so your shell can navigate the entire filesystem.\n\nGrant access in:\nSystem Settings → Privacy & Security → Full Disk Access",
+            "openSettings": "Open Settings", "later": "Later",
+            "copy": "Copy", "paste": "Paste", "selectAll": "Select All", "clear": "Clear",
+            "newTab": "New Tab", "splitVertical": "Split Vertical", "splitHorizontal": "Split Horizontal", "panels": "Panels",
+            "showHide": "Show / Hide", "detachWindow": "Detach Window", "reattachWindow": "Reattach Window", "quitApp": "Quit quickTerminal",
+            "sshNewConn": "NEW CONNECTION", "sshNoSaved": "No saved connections",
+            "sshNamePh": "Name  (optional, e.g. Production)",
+            "sshConnPh": "user@host  or  user@host:port  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (optional – leave empty for password auth)",
+        ],
+        "de": [
+            "language": "SPRACHE",
+            "opacity": "Deckkraft", "blur": "Unschärfe", "fontSize": "Schriftgröße",
+            "cursor": "Cursor", "cursorBlink": "Cursor blinkt", "font": "Schrift",
+            "syntaxHighlight": "Syntax-Hervorhebung", "defaultShell": "Standard-Shell",
+            "colorThemeSection": "FARBSCHEMA",
+            "windowSection": "Fenster", "alwaysOnTop": "Immer im Vordergrund", "followAllSpaces": "Allen Spaces folgen", "autoDim": "Auto-Dimmen",
+            "hideOnClickOutside": "Bei Klick außen ausblenden", "hideOnDeactivate": "Bei Deaktivierung ausblenden",
+            "copyOnSelect": "Kopieren bei Auswahl", "launchAtLogin": "Beim Start öffnen",
+            "autoCheckUpdates": "Updates automatisch prüfen", "webpickerSection": "WebPicker",
+            "browser": "Browser", "claudeSection": "Claude Code", "showUsageBadge": "Nutzungs-Badge anzeigen",
+            "refresh": "Aktualisieren", "status": "Status", "connected": "Verbunden",
+            "noToken": "Kein Claude Code Token", "resetToDefaults": "Auf Standard zurücksetzen",
+            "sure": "Sicher?", "sendFeedback": "Feedback senden", "sent": "✓ Gesendet!",
+            "notConnected": "Nicht verbunden", "connecting": "Verbinde...",
+            "openingTab": "Neuen Tab öffnen...", "navigateTo": "Webseite aufrufen",
+            "verbunden": "Verbunden", "disconnect": "⏏ Trennen",
+            "pickElement": "✦  Element wählen", "connectToChrome": "  ⊕  Mit Chrome verbinden",
+            "resetMarks": "⌫ Markierungen löschen", "picks": "AUSWAHL",
+            "chromeNotReachable": "Chrome nicht erreichbar", "connectionLost": "Verbindung unterbrochen",
+            "connectionFailed": "Verbindung fehlgeschlagen", "tabClosed": "Tab wurde geschlossen",
+            "waitingForClick": "Warte auf Klick...",
+            "noProjectYet": "Noch kein Projekt-Tracking",
+            "clickToStartTracking": "Klicke auf den Button um diesen Ordner zu verfolgen.",
+            "startTracking": "Tracking starten", "changedFiles": "GEÄNDERTE DATEIEN",
+            "whatChanged": "WAS HAST DU GEÄNDERT?",
+            "commitPlaceholder": "z.B. Login-Seite verbessert, Bug behoben...",
+            "save": "💾  Speichern", "notConnectedGH": "🔗  Nicht mit GitHub verbunden",
+            "pasteToken": "GitHub Token einfügen (ghp_...)", "connect": "Verbinden",
+            "createToken": "Token erstellen →", "uploadGH": "↑  Auf GitHub hochladen",
+            "updateGH": "↓  Aktualisieren", "logout": "Abmelden",
+            "createProject": "Neues GitHub-Projekt erstellen", "projectNamePlaceholder": "projekt-name",
+            "visibility": "Sichtbarkeit:", "public_": "Öffentlich", "private_": "Privat",
+            "createAndUpload": "✔  Erstellen & Hochladen", "cancel": "Abbrechen",
+            "noTracking": "Kein Tracking — starte es mit dem Button",
+            "allSaved": "✅  Alles gespeichert — nichts zu tun",
+            "filesChanged": "%d Datei%@ geändert", "filesChangedPlural": "en",
+            "describeChanges": "Bitte beschreibe zuerst was du geändert hast.",
+            "invalidToken": "Ungültiger Token — bitte erneut versuchen",
+            "savedMsg": "✓  Gespeichert", "uploaded": "✓  Hochgeladen!", "updated": "✓  Aktualisiert!",
+            "projectCreated": "✓  Projekt erstellt & auf GitHub hochgeladen!",
+            "creating": "Erstelle...", "checking": "Prüfe...",
+            "notYetUploaded": "Noch nicht hochgeladen",
+            "aheadBehind": "↑ %d zu senden, ↓ %d zu holen",
+            "aheadOnly": "↑ %d Änderung%@ zu pushen", "behindOnly": "↓ %d neue Änderung%@ verfügbar",
+            "upToDate": "✓  Alles auf dem aktuellen Stand",
+            "noUpdateAvailable": "Kein Update verfügbar",
+            "updateAvailable": "%@ verfügbar — zum Installieren klicken",
+            "onlyWithAppBundle": "Nur mit .app Bundle möglich",
+            "alreadyUpToDate": "Bereits aktuell (v%@)",
+            "checkFailed": "Prüfung fehlgeschlagen — später erneut versuchen",
+            "updateInstalled": "Update installiert — startet neu…",
+            "fullDiskAccess": "Vollständiger Festplattenzugriff",
+            "fullDiskAccessMsg": "quickTERMINAL funktioniert am besten mit vollständigem Festplattenzugriff.\n\nZugriff gewähren unter:\nSystemeinstellungen → Datenschutz & Sicherheit → Voller Festplattenzugriff",
+            "openSettings": "Einstellungen öffnen", "later": "Später",
+            "copy": "Kopieren", "paste": "Einfügen", "selectAll": "Alles auswählen", "clear": "Leeren",
+            "newTab": "Neuer Tab", "splitVertical": "Vertikal teilen", "splitHorizontal": "Horizontal teilen", "panels": "Panels",
+            "showHide": "Einblenden / Ausblenden", "detachWindow": "Fenster lösen", "reattachWindow": "Fenster andocken", "quitApp": "quickTerminal beenden",
+            "sshNewConn": "NEUE VERBINDUNG", "sshNoSaved": "Keine gespeicherten Verbindungen",
+            "sshNamePh": "Name  (optional, z.B. Produktion)",
+            "sshConnPh": "user@host  oder  user@host:port  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (optional – leer lassen für Passwort-Auth)",
+        ],
+        "tr": [
+            "language": "DİL",
+            "opacity": "Saydamlık", "blur": "Bulanıklık", "fontSize": "Yazı Boyutu",
+            "cursor": "İmleç", "cursorBlink": "İmleç Yanıp Sönme", "font": "Yazı Tipi",
+            "syntaxHighlight": "Sözdizimi Vurgulama", "defaultShell": "Varsayılan Kabuk",
+            "colorThemeSection": "RENK TEMASI",
+            "windowSection": "Pencere", "alwaysOnTop": "Her Zaman Üstte", "followAllSpaces": "Tüm Alanlarda Görün", "autoDim": "Otomatik Karart",
+            "hideOnClickOutside": "Dış Tıklamada Gizle", "hideOnDeactivate": "Devre Dışında Gizle",
+            "copyOnSelect": "Seçimde Kopyala", "launchAtLogin": "Girişte Başlat",
+            "autoCheckUpdates": "Güncellemeleri Otomatik Kontrol Et", "webpickerSection": "WebPicker",
+            "browser": "Tarayıcı", "claudeSection": "Claude Code", "showUsageBadge": "Kullanım Rozeti",
+            "refresh": "Yenile", "status": "Durum", "connected": "Bağlı",
+            "noToken": "Claude Code Token Yok", "resetToDefaults": "Varsayılanlara Sıfırla",
+            "sure": "Emin misin?", "sendFeedback": "Geri Bildirim Gönder", "sent": "✓ Gönderildi!",
+            "notConnected": "Bağlı değil", "connecting": "Bağlanıyor...",
+            "openingTab": "Yeni sekme açılıyor...", "navigateTo": "Bir web sitesine git",
+            "verbunden": "Bağlı", "disconnect": "⏏ Bağlantıyı Kes",
+            "pickElement": "✦  Öğe Seç", "connectToChrome": "  ⊕  Chrome'a Bağlan",
+            "resetMarks": "⌫ İşaretleri Sıfırla", "picks": "SEÇİMLER",
+            "chromeNotReachable": "Chrome erişilemiyor", "connectionLost": "Bağlantı kesildi",
+            "connectionFailed": "Bağlantı başarısız", "tabClosed": "Sekme kapatıldı",
+            "waitingForClick": "Tıklama bekleniyor...",
+            "noProjectYet": "Henüz proje takibi yok",
+            "clickToStartTracking": "Bu klasörü takip etmek için düğmeye tıklayın.",
+            "startTracking": "Takibi Başlat", "changedFiles": "DEĞİŞEN DOSYALAR",
+            "whatChanged": "NE DEĞİŞTİRDİN?",
+            "commitPlaceholder": "örn. Giriş sayfası iyileştirildi, hata düzeltildi...",
+            "save": "💾  Kaydet", "notConnectedGH": "🔗  GitHub'a bağlı değil",
+            "pasteToken": "GitHub tokenini yapıştır (ghp_...)", "connect": "Bağlan",
+            "createToken": "Token oluştur →", "uploadGH": "↑  GitHub'a Yükle",
+            "updateGH": "↓  Güncelle", "logout": "Çıkış Yap",
+            "createProject": "Yeni GitHub projesi oluştur", "projectNamePlaceholder": "proje-adı",
+            "visibility": "Görünürlük:", "public_": "Genel", "private_": "Özel",
+            "createAndUpload": "✔  Oluştur & Yükle", "cancel": "İptal",
+            "noTracking": "Takip yok — düğmeyle başlat",
+            "allSaved": "✅  Hepsi kaydedildi — yapılacak bir şey yok",
+            "filesChanged": "%d dosya%@ değişti", "filesChangedPlural": "",
+            "describeChanges": "Lütfen önce ne değiştirdiğini açıkla.",
+            "invalidToken": "Geçersiz token — lütfen tekrar dene",
+            "savedMsg": "✓  Kaydedildi", "uploaded": "✓  Yüklendi!", "updated": "✓  Güncellendi!",
+            "projectCreated": "✓  Proje oluşturuldu & GitHub'a yüklendi!",
+            "creating": "Oluşturuluyor...", "checking": "Kontrol ediliyor...",
+            "notYetUploaded": "Henüz yüklenmedi",
+            "aheadBehind": "↑ %d gönderilecek, ↓ %d alınacak",
+            "aheadOnly": "↑ %d değişiklik%@ gönderilecek", "behindOnly": "↓ %d yeni değişiklik%@ mevcut",
+            "upToDate": "✓  Her şey güncel",
+            "noUpdateAvailable": "Güncelleme yok",
+            "updateAvailable": "%@ mevcut — yüklemek için tıkla",
+            "onlyWithAppBundle": "Yalnızca .app paketi ile çalışır",
+            "alreadyUpToDate": "Zaten güncel (v%@)",
+            "checkFailed": "Kontrol başarısız — daha sonra tekrar dene",
+            "updateInstalled": "Güncelleme yüklendi — yeniden başlatılıyor…",
+            "fullDiskAccess": "Tam Disk Erişimi",
+            "fullDiskAccessMsg": "quickTERMINAL, tam disk erişimiyle en iyi şekilde çalışır.\n\nErişim ver:\nSistem Ayarları → Gizlilik ve Güvenlik → Tam Disk Erişimi",
+            "openSettings": "Ayarları Aç", "later": "Sonra",
+            "copy": "Kopyala", "paste": "Yapıştır", "selectAll": "Tümünü Seç", "clear": "Temizle",
+            "newTab": "Yeni Sekme", "splitVertical": "Dikey Böl", "splitHorizontal": "Yatay Böl", "panels": "Paneller",
+            "showHide": "Göster / Gizle", "detachWindow": "Pencereyi Ayır", "reattachWindow": "Pencereyi Yerleştir", "quitApp": "quickTerminal'i Kapat",
+            "sshNewConn": "YENİ BAĞLANTI", "sshNoSaved": "Kayıtlı bağlantı yok",
+            "sshNamePh": "Ad  (isteğe bağlı, örn. Üretim)",
+            "sshConnPh": "kullanıcı@host  veya  kullanıcı@host:port  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (isteğe bağlı – şifre için boş bırakın)",
+        ],
+        "es": [
+            "language": "IDIOMA",
+            "opacity": "Opacidad", "blur": "Desenfoque", "fontSize": "Tamaño de Fuente",
+            "cursor": "Cursor", "cursorBlink": "Parpadeo del Cursor", "font": "Fuente",
+            "syntaxHighlight": "Resaltado de Sintaxis", "defaultShell": "Shell Predeterminado",
+            "colorThemeSection": "TEMA DE COLOR",
+            "windowSection": "Ventana", "alwaysOnTop": "Siempre Visible", "followAllSpaces": "Seguir Todos los Espacios", "autoDim": "Auto-Atenuar",
+            "hideOnClickOutside": "Ocultar al Hacer Clic Fuera", "hideOnDeactivate": "Ocultar al Desactivar",
+            "copyOnSelect": "Copiar al Seleccionar", "launchAtLogin": "Iniciar al Entrar",
+            "autoCheckUpdates": "Buscar Actualizaciones Automáticamente", "webpickerSection": "WebPicker",
+            "browser": "Navegador", "claudeSection": "Claude Code", "showUsageBadge": "Mostrar Insignia de Uso",
+            "refresh": "Actualizar", "status": "Estado", "connected": "Conectado",
+            "noToken": "Sin Token de Claude Code", "resetToDefaults": "Restablecer Valores",
+            "sure": "¿Seguro?", "sendFeedback": "Enviar Comentarios", "sent": "✓ ¡Enviado!",
+            "notConnected": "No conectado", "connecting": "Conectando...",
+            "openingTab": "Abriendo nueva pestaña...", "navigateTo": "Navegar a un sitio web",
+            "verbunden": "Conectado", "disconnect": "⏏ Desconectar",
+            "pickElement": "✦  Seleccionar Elemento", "connectToChrome": "  ⊕  Conectar a Chrome",
+            "resetMarks": "⌫ Borrar Marcas", "picks": "SELECCIONES",
+            "chromeNotReachable": "Chrome no disponible", "connectionLost": "Conexión perdida",
+            "connectionFailed": "Conexión fallida", "tabClosed": "Pestaña cerrada",
+            "waitingForClick": "Esperando clic...",
+            "noProjectYet": "Aún sin seguimiento de proyecto",
+            "clickToStartTracking": "Haz clic en el botón para rastrear esta carpeta.",
+            "startTracking": "Iniciar Seguimiento", "changedFiles": "ARCHIVOS CAMBIADOS",
+            "whatChanged": "¿QUÉ CAMBIASTE?",
+            "commitPlaceholder": "ej. Mejoré la página de inicio, arreglé un error...",
+            "save": "💾  Guardar", "notConnectedGH": "🔗  No conectado a GitHub",
+            "pasteToken": "Pegar token de GitHub (ghp_...)", "connect": "Conectar",
+            "createToken": "Crear token →", "uploadGH": "↑  Subir a GitHub",
+            "updateGH": "↓  Actualizar", "logout": "Cerrar Sesión",
+            "createProject": "Crear nuevo proyecto GitHub", "projectNamePlaceholder": "nombre-proyecto",
+            "visibility": "Visibilidad:", "public_": "Público", "private_": "Privado",
+            "createAndUpload": "✔  Crear y Subir", "cancel": "Cancelar",
+            "noTracking": "Sin seguimiento — inicia con el botón",
+            "allSaved": "✅  Todo guardado — nada que hacer",
+            "filesChanged": "%d archivo%@ cambiado", "filesChangedPlural": "s",
+            "describeChanges": "Por favor describe primero qué cambiaste.",
+            "invalidToken": "Token inválido — por favor inténtalo de nuevo",
+            "savedMsg": "✓  Guardado", "uploaded": "✓  ¡Subido!", "updated": "✓  ¡Actualizado!",
+            "projectCreated": "✓  ¡Proyecto creado y subido a GitHub!",
+            "creating": "Creando...", "checking": "Verificando...",
+            "notYetUploaded": "Aún no subido",
+            "aheadBehind": "↑ %d por enviar, ↓ %d por recibir",
+            "aheadOnly": "↑ %d cambio%@ por enviar", "behindOnly": "↓ %d cambio%@ nuevo disponible",
+            "upToDate": "✓  Todo al día",
+            "noUpdateAvailable": "No hay actualización disponible",
+            "updateAvailable": "%@ disponible — haz clic para instalar",
+            "onlyWithAppBundle": "Solo funciona con paquete .app",
+            "alreadyUpToDate": "Ya actualizado (v%@)",
+            "checkFailed": "Verificación fallida — intenta más tarde",
+            "updateInstalled": "Actualización instalada — reiniciando…",
+            "fullDiskAccess": "Acceso Completo al Disco",
+            "fullDiskAccessMsg": "quickTERMINAL funciona mejor con Acceso Completo al Disco.\n\nOtorgar acceso en:\nAjustes del Sistema → Privacidad y Seguridad → Acceso Completo al Disco",
+            "openSettings": "Abrir Ajustes", "later": "Después",
+            "copy": "Copiar", "paste": "Pegar", "selectAll": "Seleccionar Todo", "clear": "Limpiar",
+            "newTab": "Nueva Pestaña", "splitVertical": "División Vertical", "splitHorizontal": "División Horizontal", "panels": "Paneles",
+            "showHide": "Mostrar / Ocultar", "detachWindow": "Desacoplar Ventana", "reattachWindow": "Acoplar Ventana", "quitApp": "Salir de quickTerminal",
+            "sshNewConn": "NUEVA CONEXIÓN", "sshNoSaved": "No hay conexiones guardadas",
+            "sshNamePh": "Nombre  (opcional, p.ej. Producción)",
+            "sshConnPh": "usuario@host  o  usuario@host:puerto  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (opcional – dejar vacío para auth por contraseña)",
+        ],
+        "fr": [
+            "language": "LANGUE",
+            "opacity": "Opacité", "blur": "Flou", "fontSize": "Taille de Police",
+            "cursor": "Curseur", "cursorBlink": "Clignotement du Curseur", "font": "Police",
+            "syntaxHighlight": "Coloration Syntaxique", "defaultShell": "Shell par Défaut",
+            "colorThemeSection": "THÈME DE COULEUR",
+            "windowSection": "Fenêtre", "alwaysOnTop": "Toujours au Premier Plan", "followAllSpaces": "Suivre Tous les Espaces", "autoDim": "Assombrissement Auto",
+            "hideOnClickOutside": "Masquer au Clic Extérieur", "hideOnDeactivate": "Masquer à la Désactivation",
+            "copyOnSelect": "Copier à la Sélection", "launchAtLogin": "Lancer à la Connexion",
+            "autoCheckUpdates": "Vérifier les MàJ Automatiquement", "webpickerSection": "WebPicker",
+            "browser": "Navigateur", "claudeSection": "Claude Code", "showUsageBadge": "Afficher Badge d'Utilisation",
+            "refresh": "Actualiser", "status": "Statut", "connected": "Connecté",
+            "noToken": "Pas de Token Claude Code", "resetToDefaults": "Réinitialiser",
+            "sure": "Sûr ?", "sendFeedback": "Envoyer un Commentaire", "sent": "✓ Envoyé !",
+            "notConnected": "Non connecté", "connecting": "Connexion...",
+            "openingTab": "Ouverture d'un nouvel onglet...", "navigateTo": "Naviguer vers un site web",
+            "verbunden": "Connecté", "disconnect": "⏏ Déconnecter",
+            "pickElement": "✦  Sélectionner Élément", "connectToChrome": "  ⊕  Connecter à Chrome",
+            "resetMarks": "⌫ Effacer Marques", "picks": "SÉLECTIONS",
+            "chromeNotReachable": "Chrome inaccessible", "connectionLost": "Connexion perdue",
+            "connectionFailed": "Connexion échouée", "tabClosed": "Onglet fermé",
+            "waitingForClick": "En attente de clic...",
+            "noProjectYet": "Pas encore de suivi de projet",
+            "clickToStartTracking": "Cliquez sur le bouton pour suivre ce dossier.",
+            "startTracking": "Démarrer le Suivi", "changedFiles": "FICHIERS MODIFIÉS",
+            "whatChanged": "QU'AVEZ-VOUS MODIFIÉ ?",
+            "commitPlaceholder": "ex. Page de connexion améliorée, bug corrigé...",
+            "save": "💾  Sauvegarder", "notConnectedGH": "🔗  Non connecté à GitHub",
+            "pasteToken": "Coller le token GitHub (ghp_...)", "connect": "Connecter",
+            "createToken": "Créer un token →", "uploadGH": "↑  Envoyer sur GitHub",
+            "updateGH": "↓  Mettre à Jour", "logout": "Déconnexion",
+            "createProject": "Créer un nouveau projet GitHub", "projectNamePlaceholder": "nom-projet",
+            "visibility": "Visibilité :", "public_": "Public", "private_": "Privé",
+            "createAndUpload": "✔  Créer et Envoyer", "cancel": "Annuler",
+            "noTracking": "Pas de suivi — démarrez avec le bouton",
+            "allSaved": "✅  Tout sauvegardé — rien à faire",
+            "filesChanged": "%d fichier%@ modifié", "filesChangedPlural": "s",
+            "describeChanges": "Veuillez d'abord décrire ce que vous avez modifié.",
+            "invalidToken": "Token invalide — veuillez réessayer",
+            "savedMsg": "✓  Sauvegardé", "uploaded": "✓  Envoyé !", "updated": "✓  Mis à jour !",
+            "projectCreated": "✓  Projet créé et envoyé sur GitHub !",
+            "creating": "Création...", "checking": "Vérification...",
+            "notYetUploaded": "Pas encore envoyé",
+            "aheadBehind": "↑ %d à envoyer, ↓ %d à récupérer",
+            "aheadOnly": "↑ %d changement%@ à envoyer", "behindOnly": "↓ %d nouveau changement%@ disponible",
+            "upToDate": "✓  Tout à jour",
+            "noUpdateAvailable": "Pas de mise à jour disponible",
+            "updateAvailable": "%@ disponible — cliquez pour installer",
+            "onlyWithAppBundle": "Fonctionne uniquement avec le bundle .app",
+            "alreadyUpToDate": "Déjà à jour (v%@)",
+            "checkFailed": "Vérification échouée — réessayez plus tard",
+            "updateInstalled": "Mise à jour installée — redémarrage…",
+            "fullDiskAccess": "Accès Complet au Disque",
+            "fullDiskAccessMsg": "quickTERMINAL fonctionne mieux avec l'Accès Complet au Disque.\n\nAccorder l'accès dans :\nRéglages Système → Confidentialité et Sécurité → Accès Complet au Disque",
+            "openSettings": "Ouvrir les Réglages", "later": "Plus tard",
+            "copy": "Copier", "paste": "Coller", "selectAll": "Tout Sélectionner", "clear": "Effacer",
+            "newTab": "Nouvel Onglet", "splitVertical": "Division Verticale", "splitHorizontal": "Division Horizontale", "panels": "Panneaux",
+            "showHide": "Afficher / Masquer", "detachWindow": "Détacher Fenêtre", "reattachWindow": "Réattacher Fenêtre", "quitApp": "Quitter quickTerminal",
+            "sshNewConn": "NOUVELLE CONNEXION", "sshNoSaved": "Aucune connexion enregistrée",
+            "sshNamePh": "Nom  (optionnel, ex. Production)",
+            "sshConnPh": "utilisateur@hôte  ou  utilisateur@hôte:port  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (optionnel – laisser vide pour auth par mot de passe)",
+        ],
+        "it": [
+            "language": "LINGUA",
+            "opacity": "Opacità", "blur": "Sfocatura", "fontSize": "Dimensione Font",
+            "cursor": "Cursore", "cursorBlink": "Lampeggio Cursore", "font": "Font",
+            "syntaxHighlight": "Evidenziazione Sintassi", "defaultShell": "Shell Predefinita",
+            "colorThemeSection": "TEMA COLORI",
+            "windowSection": "Finestra", "alwaysOnTop": "Sempre in Primo Piano", "followAllSpaces": "Segui Tutti gli Spazi", "autoDim": "Oscuramento Auto",
+            "hideOnClickOutside": "Nascondi al Clic Esterno", "hideOnDeactivate": "Nascondi alla Disattivazione",
+            "copyOnSelect": "Copia alla Selezione", "launchAtLogin": "Avvia all'Accesso",
+            "autoCheckUpdates": "Controlla Aggiornamenti Auto", "webpickerSection": "WebPicker",
+            "browser": "Browser", "claudeSection": "Claude Code", "showUsageBadge": "Mostra Badge Utilizzo",
+            "refresh": "Aggiorna", "status": "Stato", "connected": "Connesso",
+            "noToken": "Nessun Token Claude Code", "resetToDefaults": "Ripristina Impostazioni",
+            "sure": "Sicuro?", "sendFeedback": "Invia Feedback", "sent": "✓ Inviato!",
+            "notConnected": "Non connesso", "connecting": "Connessione...",
+            "openingTab": "Apertura nuova scheda...", "navigateTo": "Naviga verso un sito web",
+            "verbunden": "Connesso", "disconnect": "⏏ Disconnetti",
+            "pickElement": "✦  Seleziona Elemento", "connectToChrome": "  ⊕  Connetti a Chrome",
+            "resetMarks": "⌫ Cancella Segni", "picks": "SELEZIONI",
+            "chromeNotReachable": "Chrome non raggiungibile", "connectionLost": "Connessione persa",
+            "connectionFailed": "Connessione fallita", "tabClosed": "Scheda chiusa",
+            "waitingForClick": "In attesa del clic...",
+            "noProjectYet": "Nessun tracciamento progetto",
+            "clickToStartTracking": "Clicca il pulsante per tracciare questa cartella.",
+            "startTracking": "Avvia Tracciamento", "changedFiles": "FILE MODIFICATI",
+            "whatChanged": "COSA HAI MODIFICATO?",
+            "commitPlaceholder": "es. Migliorata pagina login, corretto bug...",
+            "save": "💾  Salva", "notConnectedGH": "🔗  Non connesso a GitHub",
+            "pasteToken": "Incolla token GitHub (ghp_...)", "connect": "Connetti",
+            "createToken": "Crea token →", "uploadGH": "↑  Carica su GitHub",
+            "updateGH": "↓  Aggiorna", "logout": "Disconnetti",
+            "createProject": "Crea nuovo progetto GitHub", "projectNamePlaceholder": "nome-progetto",
+            "visibility": "Visibilità:", "public_": "Pubblico", "private_": "Privato",
+            "createAndUpload": "✔  Crea e Carica", "cancel": "Annulla",
+            "noTracking": "Nessun tracciamento — avvia con il pulsante",
+            "allSaved": "✅  Tutto salvato — niente da fare",
+            "filesChanged": "%d file%@ modificato", "filesChangedPlural": "",
+            "describeChanges": "Per favore descrivi prima cosa hai modificato.",
+            "invalidToken": "Token non valido — riprova",
+            "savedMsg": "✓  Salvato", "uploaded": "✓  Caricato!", "updated": "✓  Aggiornato!",
+            "projectCreated": "✓  Progetto creato e caricato su GitHub!",
+            "creating": "Creazione...", "checking": "Verifica...",
+            "notYetUploaded": "Non ancora caricato",
+            "aheadBehind": "↑ %d da inviare, ↓ %d da ricevere",
+            "aheadOnly": "↑ %d modifica%@ da inviare", "behindOnly": "↓ %d nuova modifica%@ disponibile",
+            "upToDate": "✓  Tutto aggiornato",
+            "noUpdateAvailable": "Nessun aggiornamento disponibile",
+            "updateAvailable": "%@ disponibile — clicca per installare",
+            "onlyWithAppBundle": "Funziona solo con bundle .app",
+            "alreadyUpToDate": "Già aggiornato (v%@)",
+            "checkFailed": "Verifica fallita — riprova più tardi",
+            "updateInstalled": "Aggiornamento installato — riavvio…",
+            "fullDiskAccess": "Accesso Completo al Disco",
+            "fullDiskAccessMsg": "quickTERMINAL funziona meglio con Accesso Completo al Disco.\n\nConcedi accesso in:\nImpostazioni di Sistema → Privacy e Sicurezza → Accesso Completo al Disco",
+            "openSettings": "Apri Impostazioni", "later": "Dopo",
+            "copy": "Copia", "paste": "Incolla", "selectAll": "Seleziona Tutto", "clear": "Pulisci",
+            "newTab": "Nuova Scheda", "splitVertical": "Divisione Verticale", "splitHorizontal": "Divisione Orizzontale", "panels": "Pannelli",
+            "showHide": "Mostra / Nascondi", "detachWindow": "Sgancia Finestra", "reattachWindow": "Aggancia Finestra", "quitApp": "Esci da quickTerminal",
+            "sshNewConn": "NUOVA CONNESSIONE", "sshNoSaved": "Nessuna connessione salvata",
+            "sshNamePh": "Nome  (opzionale, es. Produzione)",
+            "sshConnPh": "utente@host  o  utente@host:porta  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (opzionale – lasciare vuoto per auth con password)",
+        ],
+        "ar": [
+            "language": "اللغة",
+            "opacity": "الشفافية", "blur": "التمويه", "fontSize": "حجم الخط",
+            "cursor": "المؤشر", "cursorBlink": "وميض المؤشر", "font": "الخط",
+            "syntaxHighlight": "تمييز البنية", "defaultShell": "الصدفة الافتراضية",
+            "colorThemeSection": "نمط الألوان",
+            "windowSection": "النافذة", "alwaysOnTop": "دائماً في المقدمة", "followAllSpaces": "متابعة جميع الفضاءات", "autoDim": "تعتيم تلقائي",
+            "hideOnClickOutside": "إخفاء عند النقر خارجاً", "hideOnDeactivate": "إخفاء عند التعطيل",
+            "copyOnSelect": "نسخ عند التحديد", "launchAtLogin": "تشغيل عند تسجيل الدخول",
+            "autoCheckUpdates": "فحص التحديثات تلقائياً", "webpickerSection": "منتقي الويب",
+            "browser": "المتصفح", "claudeSection": "كلود كود", "showUsageBadge": "إظهار شارة الاستخدام",
+            "refresh": "تحديث", "status": "الحالة", "connected": "متصل",
+            "noToken": "لا يوجد رمز كلود كود", "resetToDefaults": "إعادة تعيين الافتراضيات",
+            "sure": "متأكد؟", "sendFeedback": "إرسال ملاحظات", "sent": "✓ تم الإرسال!",
+            "notConnected": "غير متصل", "connecting": "جاري الاتصال...",
+            "openingTab": "فتح تبويب جديد...", "navigateTo": "التنقل إلى موقع",
+            "verbunden": "متصل", "disconnect": "⏏ قطع الاتصال",
+            "pickElement": "✦  اختر عنصراً", "connectToChrome": "  ⊕  الاتصال بكروم",
+            "resetMarks": "⌫ إعادة تعيين العلامات", "picks": "الاختيارات",
+            "chromeNotReachable": "كروم غير متاح", "connectionLost": "انقطع الاتصال",
+            "connectionFailed": "فشل الاتصال", "tabClosed": "تم إغلاق التبويب",
+            "waitingForClick": "في انتظار النقر...",
+            "noProjectYet": "لا يوجد تتبع للمشروع بعد",
+            "clickToStartTracking": "انقر على الزر لبدء تتبع هذا المجلد.",
+            "startTracking": "بدء التتبع", "changedFiles": "الملفات المعدلة",
+            "whatChanged": "ماذا غيرت؟",
+            "commitPlaceholder": "مثال: تحسين صفحة الدخول، إصلاح خطأ...",
+            "save": "💾  حفظ", "notConnectedGH": "🔗  غير متصل بـ GitHub",
+            "pasteToken": "لصق رمز GitHub (ghp_...)", "connect": "اتصال",
+            "createToken": "إنشاء رمز ←", "uploadGH": "↑  رفع إلى GitHub",
+            "updateGH": "↓  تحديث", "logout": "تسجيل الخروج",
+            "createProject": "إنشاء مشروع GitHub جديد", "projectNamePlaceholder": "اسم-المشروع",
+            "visibility": "الرؤية:", "public_": "عام", "private_": "خاص",
+            "createAndUpload": "✔  إنشاء ورفع", "cancel": "إلغاء",
+            "noTracking": "لا تتبع — ابدأ بالزر",
+            "allSaved": "✅  تم حفظ الكل — لا شيء للفعل",
+            "filesChanged": "%d ملف%@ معدل", "filesChangedPlural": "",
+            "describeChanges": "يرجى وصف ما غيرته أولاً.",
+            "invalidToken": "رمز غير صالح — يرجى المحاولة مرة أخرى",
+            "savedMsg": "✓  تم الحفظ", "uploaded": "✓  تم الرفع!", "updated": "✓  تم التحديث!",
+            "projectCreated": "✓  تم إنشاء المشروع ورفعه إلى GitHub!",
+            "creating": "جاري الإنشاء...", "checking": "جاري الفحص...",
+            "notYetUploaded": "لم يُرفع بعد",
+            "aheadBehind": "↑ %d للإرسال، ↓ %d للاستلام",
+            "aheadOnly": "↑ %d تغيير%@ للإرسال", "behindOnly": "↓ %d تغيير%@ جديد متاح",
+            "upToDate": "✓  كل شيء محدث",
+            "noUpdateAvailable": "لا يوجد تحديث",
+            "updateAvailable": "%@ متاح — انقر للتثبيت",
+            "onlyWithAppBundle": "يعمل فقط مع حزمة .app",
+            "alreadyUpToDate": "محدث بالفعل (v%@)",
+            "checkFailed": "فشل الفحص — حاول لاحقاً",
+            "updateInstalled": "تم تثبيت التحديث — إعادة التشغيل…",
+            "fullDiskAccess": "الوصول الكامل للقرص",
+            "fullDiskAccessMsg": "quickTERMINAL يعمل بشكل أفضل مع الوصول الكامل للقرص.\n\nامنح الوصول في:\nإعدادات النظام → الخصوصية والأمان → الوصول الكامل للقرص",
+            "openSettings": "فتح الإعدادات", "later": "لاحقاً",
+            "copy": "نسخ", "paste": "لصق", "selectAll": "تحديد الكل", "clear": "مسح",
+            "newTab": "تبويب جديد", "splitVertical": "تقسيم عمودي", "splitHorizontal": "تقسيم أفقي", "panels": "الألواح",
+            "showHide": "إظهار / إخفاء", "detachWindow": "فصل النافذة", "reattachWindow": "إرساء النافذة", "quitApp": "إنهاء quickTerminal",
+            "sshNewConn": "اتصال جديد", "sshNoSaved": "لا توجد اتصالات محفوظة",
+            "sshNamePh": "الاسم  (اختياري، مثل: الإنتاج)",
+            "sshConnPh": "مستخدم@مضيف  أو  مستخدم@مضيف:منفذ  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (اختياري – اتركه فارغاً لاستخدام كلمة المرور)",
+        ],
+        "ja": [
+            "language": "言語",
+            "opacity": "透明度", "blur": "ぼかし", "fontSize": "フォントサイズ",
+            "cursor": "カーソル", "cursorBlink": "カーソル点滅", "font": "フォント",
+            "syntaxHighlight": "シンタックスハイライト", "defaultShell": "デフォルトシェル",
+            "colorThemeSection": "カラーテーマ",
+            "windowSection": "ウィンドウ", "alwaysOnTop": "常に最前面", "followAllSpaces": "全スペースに表示", "autoDim": "自動暗転",
+            "hideOnClickOutside": "外クリックで非表示", "hideOnDeactivate": "非アクティブ時に非表示",
+            "copyOnSelect": "選択時にコピー", "launchAtLogin": "ログイン時に起動",
+            "autoCheckUpdates": "自動更新確認", "webpickerSection": "WebPicker",
+            "browser": "ブラウザ", "claudeSection": "Claude Code", "showUsageBadge": "使用バッジを表示",
+            "refresh": "更新", "status": "ステータス", "connected": "接続済み",
+            "noToken": "Claude Codeトークンなし", "resetToDefaults": "デフォルトにリセット",
+            "sure": "確認?", "sendFeedback": "フィードバック送信", "sent": "✓ 送信済み!",
+            "notConnected": "未接続", "connecting": "接続中...",
+            "openingTab": "新しいタブを開いています...", "navigateTo": "ウェブサイトに移動",
+            "verbunden": "接続済み", "disconnect": "⏏ 切断",
+            "pickElement": "✦  要素を選択", "connectToChrome": "  ⊕  Chromeに接続",
+            "resetMarks": "⌫ マークをリセット", "picks": "選択",
+            "chromeNotReachable": "Chromeに接続できません", "connectionLost": "接続が切断されました",
+            "connectionFailed": "接続に失敗しました", "tabClosed": "タブが閉じられました",
+            "waitingForClick": "クリック待機中...",
+            "noProjectYet": "まだプロジェクト追跡なし",
+            "clickToStartTracking": "このフォルダを追跡するにはボタンをクリックしてください。",
+            "startTracking": "追跡を開始", "changedFiles": "変更されたファイル",
+            "whatChanged": "何を変更しましたか?",
+            "commitPlaceholder": "例: ログインページを改善、バグを修正...",
+            "save": "💾  保存", "notConnectedGH": "🔗  GitHubに未接続",
+            "pasteToken": "GitHubトークンを貼り付け (ghp_...)", "connect": "接続",
+            "createToken": "トークンを作成 →", "uploadGH": "↑  GitHubにアップロード",
+            "updateGH": "↓  更新", "logout": "ログアウト",
+            "createProject": "新しいGitHubプロジェクトを作成", "projectNamePlaceholder": "プロジェクト名",
+            "visibility": "公開範囲:", "public_": "公開", "private_": "非公開",
+            "createAndUpload": "✔  作成してアップロード", "cancel": "キャンセル",
+            "noTracking": "追跡なし — ボタンで開始",
+            "allSaved": "✅  すべて保存済み — 何もなし",
+            "filesChanged": "%dファイル%@変更", "filesChangedPlural": "",
+            "describeChanges": "まず何を変更したか説明してください。",
+            "invalidToken": "無効なトークン — もう一度試してください",
+            "savedMsg": "✓  保存しました", "uploaded": "✓  アップロード完了!", "updated": "✓  更新完了!",
+            "projectCreated": "✓  プロジェクトを作成してGitHubにアップロードしました!",
+            "creating": "作成中...", "checking": "確認中...",
+            "notYetUploaded": "まだアップロードされていません",
+            "aheadBehind": "↑ %d件を送信、↓ %d件を受信",
+            "aheadOnly": "↑ %d件%@の変更を送信", "behindOnly": "↓ %d件%@の新しい変更あり",
+            "upToDate": "✓  すべて最新",
+            "noUpdateAvailable": "更新はありません",
+            "updateAvailable": "%@ 利用可能 — クリックしてインストール",
+            "onlyWithAppBundle": ".appバンドルでのみ機能します",
+            "alreadyUpToDate": "すでに最新です (v%@)",
+            "checkFailed": "確認に失敗 — 後でもう一度試してください",
+            "updateInstalled": "更新がインストールされました — 再起動中…",
+            "fullDiskAccess": "フルディスクアクセス",
+            "fullDiskAccessMsg": "quickTERMINALはフルディスクアクセスで最もよく動作します。\n\nアクセスを許可:\nシステム設定 → プライバシーとセキュリティ → フルディスクアクセス",
+            "openSettings": "設定を開く", "later": "後で",
+            "copy": "コピー", "paste": "ペースト", "selectAll": "すべて選択", "clear": "クリア",
+            "newTab": "新しいタブ", "splitVertical": "縦分割", "splitHorizontal": "横分割", "panels": "パネル",
+            "showHide": "表示 / 非表示", "detachWindow": "ウィンドウを分離", "reattachWindow": "ウィンドウを固定", "quitApp": "quickTerminal を終了",
+            "sshNewConn": "新規接続", "sshNoSaved": "保存された接続がありません",
+            "sshNamePh": "名前  (任意、例: 本番)",
+            "sshConnPh": "ユーザー@ホスト  または  ユーザー@ホスト:ポート  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (任意 – パスワード認証は空のまま)",
+        ],
+        "zh": [
+            "language": "语言",
+            "opacity": "不透明度", "blur": "模糊", "fontSize": "字体大小",
+            "cursor": "光标", "cursorBlink": "光标闪烁", "font": "字体",
+            "syntaxHighlight": "语法高亮", "defaultShell": "默认 Shell",
+            "colorThemeSection": "颜色主题",
+            "windowSection": "窗口", "alwaysOnTop": "始终置顶", "followAllSpaces": "跟随所有空间", "autoDim": "自动变暗",
+            "hideOnClickOutside": "点击外部时隐藏", "hideOnDeactivate": "失活时隐藏",
+            "copyOnSelect": "选中即复制", "launchAtLogin": "登录时启动",
+            "autoCheckUpdates": "自动检查更新", "webpickerSection": "WebPicker",
+            "browser": "浏览器", "claudeSection": "Claude Code", "showUsageBadge": "显示使用徽章",
+            "refresh": "刷新", "status": "状态", "connected": "已连接",
+            "noToken": "无 Claude Code 令牌", "resetToDefaults": "恢复默认设置",
+            "sure": "确定?", "sendFeedback": "发送反馈", "sent": "✓ 已发送!",
+            "notConnected": "未连接", "connecting": "连接中...",
+            "openingTab": "正在打开新标签页...", "navigateTo": "导航到网站",
+            "verbunden": "已连接", "disconnect": "⏏ 断开连接",
+            "pickElement": "✦  选择元素", "connectToChrome": "  ⊕  连接到 Chrome",
+            "resetMarks": "⌫ 重置标记", "picks": "已选择",
+            "chromeNotReachable": "Chrome 无法访问", "connectionLost": "连接已断开",
+            "connectionFailed": "连接失败", "tabClosed": "标签页已关闭",
+            "waitingForClick": "等待点击...",
+            "noProjectYet": "尚无项目跟踪",
+            "clickToStartTracking": "点击按钮开始跟踪此文件夹。",
+            "startTracking": "开始跟踪", "changedFiles": "已更改的文件",
+            "whatChanged": "你改了什么?",
+            "commitPlaceholder": "例如：改进登录页面，修复了错误...",
+            "save": "💾  保存", "notConnectedGH": "🔗  未连接到 GitHub",
+            "pasteToken": "粘贴 GitHub 令牌 (ghp_...)", "connect": "连接",
+            "createToken": "创建令牌 →", "uploadGH": "↑  上传到 GitHub",
+            "updateGH": "↓  更新", "logout": "退出登录",
+            "createProject": "创建新 GitHub 项目", "projectNamePlaceholder": "项目名称",
+            "visibility": "可见性:", "public_": "公开", "private_": "私有",
+            "createAndUpload": "✔  创建并上传", "cancel": "取消",
+            "noTracking": "无跟踪 — 用按钮开始",
+            "allSaved": "✅  全部已保存 — 无需操作",
+            "filesChanged": "%d 个文件%@已更改", "filesChangedPlural": "",
+            "describeChanges": "请先描述您更改了什么。",
+            "invalidToken": "令牌无效 — 请重试",
+            "savedMsg": "✓  已保存", "uploaded": "✓  已上传!", "updated": "✓  已更新!",
+            "projectCreated": "✓  项目已创建并上传到 GitHub!",
+            "creating": "创建中...", "checking": "检查中...",
+            "notYetUploaded": "尚未上传",
+            "aheadBehind": "↑ %d 待推送，↓ %d 待拉取",
+            "aheadOnly": "↑ %d 个%@更改待推送", "behindOnly": "↓ %d 个%@新更改可用",
+            "upToDate": "✓  一切都是最新的",
+            "noUpdateAvailable": "没有可用更新",
+            "updateAvailable": "%@ 可用 — 点击安装",
+            "onlyWithAppBundle": "仅适用于 .app 包",
+            "alreadyUpToDate": "已是最新版本 (v%@)",
+            "checkFailed": "检查失败 — 请稍后重试",
+            "updateInstalled": "更新已安装 — 正在重启…",
+            "fullDiskAccess": "完全磁盘访问",
+            "fullDiskAccessMsg": "quickTERMINAL 在完全磁盘访问下运行最佳。\n\n在以下位置授予访问权限：\n系统设置 → 隐私与安全性 → 完全磁盘访问",
+            "openSettings": "打开设置", "later": "稍后",
+            "copy": "复制", "paste": "粘贴", "selectAll": "全选", "clear": "清除",
+            "newTab": "新标签页", "splitVertical": "垂直分割", "splitHorizontal": "水平分割", "panels": "面板",
+            "showHide": "显示 / 隐藏", "detachWindow": "分离窗口", "reattachWindow": "重新固定窗口", "quitApp": "退出 quickTerminal",
+            "sshNewConn": "新建连接", "sshNoSaved": "没有保存的连接",
+            "sshNamePh": "名称  (可选，例如 生产)",
+            "sshConnPh": "用户@主机  或  用户@主机:端口  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (可选 – 留空则使用密码认证)",
+        ],
+        "ru": [
+            "language": "ЯЗЫК",
+            "opacity": "Прозрачность", "blur": "Размытие", "fontSize": "Размер шрифта",
+            "cursor": "Курсор", "cursorBlink": "Мигание курсора", "font": "Шрифт",
+            "syntaxHighlight": "Подсветка синтаксиса", "defaultShell": "Оболочка по умолчанию",
+            "colorThemeSection": "ЦВЕТОВАЯ ТЕМА",
+            "windowSection": "Окно", "alwaysOnTop": "Всегда поверх", "followAllSpaces": "На всех рабочих столах", "autoDim": "Авто-затемнение",
+            "hideOnClickOutside": "Скрыть при клике вне", "hideOnDeactivate": "Скрыть при деактивации",
+            "copyOnSelect": "Копировать при выборе", "launchAtLogin": "Запуск при входе",
+            "autoCheckUpdates": "Автопроверка обновлений", "webpickerSection": "WebPicker",
+            "browser": "Браузер", "claudeSection": "Claude Code", "showUsageBadge": "Показать значок",
+            "refresh": "Обновить", "status": "Статус", "connected": "Подключено",
+            "noToken": "Нет токена Claude Code", "resetToDefaults": "Сбросить настройки",
+            "sure": "Уверен?", "sendFeedback": "Отправить отзыв", "sent": "✓ Отправлено!",
+            "notConnected": "Не подключено", "connecting": "Подключение...",
+            "openingTab": "Открытие новой вкладки...", "navigateTo": "Перейти на сайт",
+            "verbunden": "Подключено", "disconnect": "⏏ Отключить",
+            "pickElement": "✦  Выбрать элемент", "connectToChrome": "  ⊕  Подключиться к Chrome",
+            "resetMarks": "⌫ Сбросить метки", "picks": "ВЫБОРКИ",
+            "chromeNotReachable": "Chrome недоступен", "connectionLost": "Соединение потеряно",
+            "connectionFailed": "Ошибка подключения", "tabClosed": "Вкладка закрыта",
+            "waitingForClick": "Ожидание клика...",
+            "noProjectYet": "Отслеживание проекта не начато",
+            "clickToStartTracking": "Нажмите кнопку чтобы отслеживать эту папку.",
+            "startTracking": "Начать отслеживание", "changedFiles": "ИЗМЕНЁННЫЕ ФАЙЛЫ",
+            "whatChanged": "ЧТО ВЫ ИЗМЕНИЛИ?",
+            "commitPlaceholder": "напр. Улучшена страница входа, исправлена ошибка...",
+            "save": "💾  Сохранить", "notConnectedGH": "🔗  Не подключено к GitHub",
+            "pasteToken": "Вставьте токен GitHub (ghp_...)", "connect": "Подключить",
+            "createToken": "Создать токен →", "uploadGH": "↑  Загрузить на GitHub",
+            "updateGH": "↓  Обновить", "logout": "Выйти",
+            "createProject": "Создать новый проект GitHub", "projectNamePlaceholder": "имя-проекта",
+            "visibility": "Видимость:", "public_": "Публичный", "private_": "Приватный",
+            "createAndUpload": "✔  Создать и загрузить", "cancel": "Отмена",
+            "noTracking": "Нет отслеживания — начните с кнопки",
+            "allSaved": "✅  Всё сохранено — нечего делать",
+            "filesChanged": "%d файл%@ изменён", "filesChangedPlural": "",
+            "describeChanges": "Сначала опишите что вы изменили.",
+            "invalidToken": "Неверный токен — попробуйте ещё раз",
+            "savedMsg": "✓  Сохранено", "uploaded": "✓  Загружено!", "updated": "✓  Обновлено!",
+            "projectCreated": "✓  Проект создан и загружен на GitHub!",
+            "creating": "Создание...", "checking": "Проверка...",
+            "notYetUploaded": "Ещё не загружено",
+            "aheadBehind": "↑ %d отправить, ↓ %d получить",
+            "aheadOnly": "↑ %d изменение%@ отправить", "behindOnly": "↓ %d новое изменение%@ доступно",
+            "upToDate": "✓  Всё актуально",
+            "noUpdateAvailable": "Обновлений нет",
+            "updateAvailable": "%@ доступно — нажмите для установки",
+            "onlyWithAppBundle": "Работает только с .app",
+            "alreadyUpToDate": "Уже актуально (v%@)",
+            "checkFailed": "Проверка не удалась — попробуйте позже",
+            "updateInstalled": "Обновление установлено — перезапуск…",
+            "fullDiskAccess": "Полный доступ к диску",
+            "fullDiskAccessMsg": "quickTERMINAL работает лучше с полным доступом к диску.\n\nРазрешить в:\nНастройки системы → Конфиденциальность и безопасность → Полный доступ к диску",
+            "openSettings": "Открыть настройки", "later": "Позже",
+            "copy": "Копировать", "paste": "Вставить", "selectAll": "Выбрать всё", "clear": "Очистить",
+            "newTab": "Новая вкладка", "splitVertical": "Разделить вертикально", "splitHorizontal": "Разделить горизонтально", "panels": "Панели",
+            "showHide": "Показать / Скрыть", "detachWindow": "Открепить окно", "reattachWindow": "Прикрепить окно", "quitApp": "Выйти из quickTerminal",
+            "sshNewConn": "НОВОЕ ПОДКЛЮЧЕНИЕ", "sshNoSaved": "Нет сохранённых подключений",
+            "sshNamePh": "Имя  (необязательно, напр. Продакшн)",
+            "sshConnPh": "пользователь@хост  или  пользователь@хост:порт  *",
+            "sshKeyPh": "~/.ssh/id_rsa  (необязательно – оставьте пустым для пароля)",
+        ],
+    ]
+}
+
 // MARK: - Unicode Width
 
 /// Returns the display width of a Unicode scalar (1 or 2 columns).
@@ -114,11 +899,11 @@ let kAnsiColors: [(CGFloat, CGFloat, CGFloat)] = [
     (0.50, 0.55, 1.00), (1.00, 0.35, 1.00), (0.35, 1.00, 1.00), (1.00, 1.00, 1.00),
 ]
 
-let kDefaultBG = NSColor(calibratedRed: 0.11, green: 0.11, blue: 0.13, alpha: 1.0)
-let kDefaultFG = NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.85, alpha: 1.0)
-let kTermBgCGColor = NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.08, alpha: 0.28).cgColor
-let kSelectionCGColor = NSColor(calibratedRed: 0.3, green: 0.5, blue: 0.8, alpha: 0.4).cgColor
-let kCursorCGColor = NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0).cgColor
+var kDefaultBG = NSColor(calibratedRed: 0.11, green: 0.11, blue: 0.13, alpha: 1.0)
+var kDefaultFG = NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.85, alpha: 1.0)
+var kTermBgCGColor = NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.08, alpha: 0.28).cgColor
+var kSelectionCGColor = NSColor(calibratedRed: 0.3, green: 0.5, blue: 0.8, alpha: 0.4).cgColor
+var kCursorCGColor = NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0).cgColor
 let kHyperlinkCGColor = NSColor(calibratedRed: 0.4, green: 0.6, blue: 1.0, alpha: 0.8).cgColor
 
 func nsColorFromAnsi(_ index: Int) -> NSColor {
@@ -138,7 +923,7 @@ func nsColorFromAnsi(_ index: Int) -> NSColor {
     return kDefaultFG
 }
 
-let kAnsiColorCache: [NSColor] = (0..<256).map { nsColorFromAnsi($0) }
+var kAnsiColorCache: [NSColor] = (0..<256).map { nsColorFromAnsi($0) }
 
 private func nsColorFromRGB(_ rgb: (UInt8, UInt8, UInt8)) -> NSColor {
     NSColor(calibratedRed: CGFloat(rgb.0) / 255.0, green: CGFloat(rgb.1) / 255.0,
@@ -170,6 +955,101 @@ func bgColor(for attrs: TextAttrs, terminal t: Terminal? = nil) -> NSColor {
     return kAnsiColorCache[attrs.bg]
 }
 
+// MARK: - Themes
+
+struct TerminalTheme {
+    let id: String
+    let defaultBG: NSColor
+    let defaultFG: NSColor
+    let termBgAlpha: CGFloat
+    let selectionColor: NSColor
+    let cursorColor: NSColor
+    let ansiColors: [(CGFloat, CGFloat, CGFloat)]
+    let visualMaterial: NSVisualEffectView.Material
+
+    static let dark = TerminalTheme(
+        id: "dark",
+        defaultBG: NSColor(calibratedRed: 0.11, green: 0.11, blue: 0.13, alpha: 1.0),
+        defaultFG: NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),
+        termBgAlpha: 0.28,
+        selectionColor: NSColor(calibratedRed: 0.3, green: 0.5, blue: 0.8, alpha: 0.4),
+        cursorColor: NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0),
+        ansiColors: kAnsiColors,
+        visualMaterial: .hudWindow
+    )
+
+    static let light: TerminalTheme = {
+        var c = kAnsiColors
+        c[0]  = (0.05, 0.05, 0.05)
+        c[7]  = (0.40, 0.40, 0.42)
+        c[15] = (0.15, 0.15, 0.18)
+        return TerminalTheme(
+            id: "light",
+            defaultBG: NSColor(calibratedRed: 0.96, green: 0.96, blue: 0.97, alpha: 1.0),
+            defaultFG: NSColor(calibratedRed: 0.10, green: 0.10, blue: 0.13, alpha: 1.0),
+            termBgAlpha: 0.15,
+            selectionColor: NSColor(calibratedRed: 0.2, green: 0.4, blue: 0.8, alpha: 0.3),
+            cursorColor: NSColor(calibratedRed: 0.2, green: 0.4, blue: 0.8, alpha: 1.0),
+            ansiColors: c,
+            visualMaterial: .sheet
+        )
+    }()
+
+    static let oledBlack = TerminalTheme(
+        id: "oled",
+        defaultBG: NSColor(calibratedRed: 0.0, green: 0.0, blue: 0.0, alpha: 1.0),
+        defaultFG: NSColor(calibratedRed: 0.90, green: 0.90, blue: 0.90, alpha: 1.0),
+        termBgAlpha: 0.98,
+        selectionColor: NSColor(calibratedRed: 0.3, green: 0.5, blue: 0.8, alpha: 0.4),
+        cursorColor: NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0),
+        ansiColors: kAnsiColors,
+        visualMaterial: .underWindowBackground
+    )
+}
+
+var activeTheme: TerminalTheme = .dark
+
+func applyTheme(_ t: TerminalTheme) {
+    activeTheme = t
+    kDefaultBG = t.defaultBG
+    kDefaultFG = t.defaultFG
+    // Explicit overlay colors — light and oled need nearly-opaque fills
+    switch t.id {
+    case "light":
+        kTermBgCGColor = NSColor(calibratedRed: 0.94, green: 0.94, blue: 0.96, alpha: 0.95).cgColor
+    case "oled":
+        kTermBgCGColor = NSColor(calibratedRed: 0.0, green: 0.0, blue: 0.0, alpha: 0.99).cgColor
+    default: // dark + system-resolved dark/light
+        kTermBgCGColor = NSColor(calibratedRed: 0.05, green: 0.05, blue: 0.08, alpha: 0.28).cgColor
+    }
+    kSelectionCGColor = t.selectionColor.cgColor
+    kCursorCGColor = t.cursorColor.cgColor
+    kAnsiColorCache = (0..<256).map { i in
+        if i < t.ansiColors.count {
+            let (r, g, b) = t.ansiColors[i]
+            return NSColor(calibratedRed: r, green: g, blue: b, alpha: 1)
+        }
+        return nsColorFromAnsi(i)
+    }
+}
+
+func resolveSystemTheme() -> TerminalTheme {
+    // System light → use light theme but mark id as "light" so applyTheme picks the right overlay color
+    if NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .aqua {
+        return .light
+    }
+    return .dark
+}
+
+/// For system theme we also need to update appearance on visual effect
+func applySystemThemeAppearance(to visualEffect: NSVisualEffectView) {
+    if NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .aqua {
+        visualEffect.appearance = NSAppearance(named: .aqua)
+    } else {
+        visualEffect.appearance = NSAppearance(named: .darkAqua)
+    }
+}
+
 // MARK: - Terminal Engine
 
 // MARK: - Parser Diagnostics
@@ -190,9 +1070,8 @@ struct ParserDiagnostics {
             unhandledMap[seq] = unhandled.count
             unhandled.append((seq: seq, count: 1))
             if unhandled.count > 50 {
-                let removed = unhandled.removeFirst()
-                unhandledMap.removeValue(forKey: removed.seq)
-                // Reindex
+                unhandled.removeFirst()
+                // Rebuild map (all indices shift by -1 after removeFirst)
                 unhandledMap.removeAll()
                 for (i, entry) in unhandled.enumerated() { unhandledMap[entry.seq] = i }
             }
@@ -204,31 +1083,32 @@ class Terminal {
     var diag = ParserDiagnostics()
     var cols: Int
     var rows: Int
-    var cursorX = 0
-    var cursorY = 0
+    var cursor      = CursorState()
+    var savedCursor = CursorState()
+    var altCursor   = CursorState()
+    // Computed shims — all existing callers remain unchanged
+    var cursorX: Int      { get { cursor.x }           set { cursor.x = newValue } }
+    var cursorY: Int      { get { cursor.y }           set { cursor.y = newValue } }
+    var pendingWrap: Bool { get { cursor.pendingWrap } set { cursor.pendingWrap = newValue } }
     var grid: [[Cell]]
     var lineAttrs: [UInt8]   // per-line: 0=normal, 1=double-width(DECDWL), 2=DH-top(DECDHL), 3=DH-bottom(DECDHL)
     var attrs = TextAttrs()
-    var savedX = 0, savedY = 0
     var savedAttrs = TextAttrs()
     var savedG0IsGraphics = false
     var savedG1IsGraphics = false
     var savedUseG1 = false
     var savedOriginMode = false
     var savedAutoWrap = true
-    var savedPendingWrap = false
     var scrollTop = 0
     var scrollBottom: Int
     var scrollback: [[Cell]] = []
     var altGrid: [[Cell]]? = nil
     var altLineAttrs: [UInt8]? = nil
-    var altX = 0, altY = 0
     var cursorVisible = true
     var insertMode = false    // IRM: insert mode (SM 4 / RM 4)
     var appCursorMode = false
     var appKeypadMode = false
     var autoWrapMode = true
-    var pendingWrap = false   // deferred wrap: set when char fills last column, wrap on next printable
     var originMode = false
     var reverseVideoMode = false
     var leftRightMarginMode = false
@@ -459,18 +1339,16 @@ class Terminal {
             case 0x5F, 0x5E, 0x58: // _ APC, ^ PM, X SOS — consume until ST
                 pstate = .dcsPass
             case 0x37: // ESC 7 — DECSC (save cursor + attrs)
-                savedX = cursorX; savedY = cursorY
+                savedCursor = cursor
                 savedAttrs = attrs; savedG0IsGraphics = charsetG0IsGraphics
                 savedG1IsGraphics = charsetG1IsGraphics; savedUseG1 = useG1
                 savedOriginMode = originMode; savedAutoWrap = autoWrapMode
-                savedPendingWrap = pendingWrap
                 pstate = .ground
             case 0x38: // ESC 8 — DECRC (restore cursor + attrs)
-                cursorX = savedX; cursorY = savedY
+                cursor = savedCursor
                 attrs = savedAttrs; charsetG0IsGraphics = savedG0IsGraphics
                 charsetG1IsGraphics = savedG1IsGraphics; useG1 = savedUseG1
                 originMode = savedOriginMode; autoWrapMode = savedAutoWrap
-                pendingWrap = savedPendingWrap
                 pstate = .ground
             case 0x44: lf(); pstate = .ground                                     // ESC D — index (IND)
             case 0x4D: rlf(); pstate = .ground                                    // ESC M — reverse index (RI)
@@ -650,7 +1528,7 @@ class Terminal {
 
     /// Effective column count for a line (halved for double-width/height lines)
     func effectiveCols(row: Int) -> Int {
-        (row >= 0 && row < rows && lineAttrs[row] > 0) ? max(1, cols / 2) : cols
+        (row >= 0 && row < rows && lineAttrs[row] & 0x03 > 0) ? max(1, cols / 2) : cols
     }
 
     func put(_ s: Unicode.Scalar) {
@@ -679,9 +1557,13 @@ class Terminal {
         }
         let isWide = (w == 2)
         // Deferred wrap: if pending wrap flag is set, wrap now before placing next printable char
-        if pendingWrap && autoWrapMode { cursorX = 0; pendingWrap = false; lf() }
+        if pendingWrap && autoWrapMode {
+            lineAttrs[cursorY] |= 0x08  // mark as soft-wrapped (auto-wrap, not hard newline)
+            cursorX = 0; pendingWrap = false; lf()
+        }
         // Wide char at last column: wrap early (can't fit 2 cells)
         if isWide && autoWrapMode && cursorX == eCols - 1 {
+            lineAttrs[cursorY] |= 0x08  // mark as soft-wrapped
             grid[cursorY][cursorX] = Cell(char: " ", attrs: attrs, width: 1)
             cursorX = 0; pendingWrap = false; lf()
         }
@@ -724,20 +1606,23 @@ class Terminal {
         let useHMargins = leftRightMarginMode && (leftMargin > 0 || rightMargin < cols - 1)
         for _ in 0..<n {
             if useHMargins {
-                // Scroll only within horizontal margins
+                // H-margin scroll: only cell content within the margin shifts.
+                // Rows themselves stay in place → do NOT copy lineAttrs (would corrupt DW/soft-wrap flags).
                 for i in scrollTop..<scrollBottom {
                     for x in leftMargin...rightMargin where x < cols {
                         grid[i][x] = grid[i + 1][x]
                     }
-                    lineAttrs[i] = lineAttrs[i + 1]
                 }
                 for x in leftMargin...rightMargin where x < cols {
                     grid[scrollBottom][x] = Cell()
                 }
-                lineAttrs[scrollBottom] = 0
             } else {
-                scrollback.append(grid[scrollTop])
-                if scrollback.count > 10000 { scrollback.removeFirst() }
+                // Full-row scroll: push to scrollback only at screen top on the main screen.
+                // Partial scroll regions (scrollTop > 0) and alt screen must NOT feed scrollback.
+                if altGrid == nil && scrollTop == 0 {
+                    scrollback.append(grid[scrollTop])
+                    if scrollback.count > 10000 { scrollback.removeFirst() }
+                }
                 for i in scrollTop..<scrollBottom {
                     grid[i] = grid[i + 1]
                     lineAttrs[i] = lineAttrs[i + 1]
@@ -746,11 +1631,13 @@ class Terminal {
                 lineAttrs[scrollBottom] = 0
             }
         }
-        // Clean up sixel images that scrolled off-screen
+        // Adjust sixel images: only move those inside the scroll region; discard if scrolled past top.
         if !sixelImages.isEmpty {
             sixelImages = sixelImages.compactMap { img in
+                if useHMargins { return img }  // H-margin: rows don't move
+                guard img.row >= scrollTop && img.row <= scrollBottom else { return img }
                 let newRow = img.row - n
-                return newRow >= 0 ? (row: newRow, col: img.col, image: img.image) : nil
+                return newRow >= scrollTop ? (row: newRow, col: img.col, image: img.image) : nil
             }
         }
     }
@@ -760,16 +1647,15 @@ class Terminal {
         let useHMargins = leftRightMarginMode && (leftMargin > 0 || rightMargin < cols - 1)
         for _ in 0..<n {
             if useHMargins {
+                // Only partial columns shift — do NOT copy lineAttrs (DW/soft-wrap are whole-row flags)
                 for i in stride(from: scrollBottom, to: scrollTop, by: -1) {
                     for x in leftMargin...rightMargin where x < cols {
                         grid[i][x] = grid[i - 1][x]
                     }
-                    lineAttrs[i] = lineAttrs[i - 1]
                 }
                 for x in leftMargin...rightMargin where x < cols {
                     grid[scrollTop][x] = Cell()
                 }
-                lineAttrs[scrollTop] = 0
             } else {
                 for i in stride(from: scrollBottom, to: scrollTop, by: -1) {
                     grid[i] = grid[i - 1]
@@ -1184,7 +2070,7 @@ class Terminal {
                     cursorY = originMode ? scrollTop : 0
                 }
             } else {
-                savedX = cursorX; savedY = cursorY  // SCOSC
+                savedCursor = cursor  // SCOSC
             }
         case 0x74: // t — window operations (XTWINOPS)
             let ps = p.first ?? 0
@@ -1209,7 +2095,7 @@ class Terminal {
                     onTitleChange?(title)
                 }
             }
-        case 0x75: cursorX = savedX; cursorY = savedY                             // u — SCORC
+        case 0x75: cursor = savedCursor                                            // u — SCORC
         default: diag.recordUnhandled("CSI \(String(format: "%c", f))")
         }
     }
@@ -1307,13 +2193,13 @@ class Terminal {
                 case 12: break // cursor blink
                 case 25: cursorVisible = true
                 case 47, 1047:
-                    altGrid = grid; altLineAttrs = lineAttrs; altX = cursorX; altY = cursorY
+                    altGrid = grid; altLineAttrs = lineAttrs; altCursor = cursor
                     grid = Self.emptyGrid(cols, rows); lineAttrs = Array(repeating: 0, count: rows)
                     cursorX = 0; cursorY = 0; scrollTop = 0; scrollBottom = rows - 1; pendingWrap = false
-                case 1048: savedX = cursorX; savedY = cursorY; savedPendingWrap = pendingWrap
+                case 1048: savedCursor = cursor
                 case 1049:
-                    savedX = cursorX; savedY = cursorY; savedPendingWrap = pendingWrap
-                    altGrid = grid; altLineAttrs = lineAttrs; altX = cursorX; altY = cursorY
+                    savedCursor = cursor; savedAttrs = attrs
+                    altGrid = grid; altLineAttrs = lineAttrs; altCursor = cursor
                     grid = Self.emptyGrid(cols, rows); lineAttrs = Array(repeating: 0, count: rows)
                     cursorX = 0; cursorY = 0; scrollTop = 0; scrollBottom = rows - 1; pendingWrap = false
                 case 1000: mouseMode = 1000  // X10 normal tracking
@@ -1338,18 +2224,18 @@ class Terminal {
                 case 25: cursorVisible = false
                 case 47, 1047:
                     if let ag = altGrid {
-                        grid = ag; cursorX = altX; cursorY = altY; altGrid = nil
+                        grid = ag; cursor = altCursor; cursor.pendingWrap = false; altGrid = nil
                         if let ala = altLineAttrs { lineAttrs = ala; altLineAttrs = nil }
                         scrollTop = 0; scrollBottom = rows - 1
                     }
-                case 1048: cursorX = savedX; cursorY = savedY; pendingWrap = savedPendingWrap
+                case 1048: cursor = savedCursor
                 case 1049:
                     if let ag = altGrid {
                         grid = ag; altGrid = nil
                         if let ala = altLineAttrs { lineAttrs = ala; altLineAttrs = nil }
                         scrollTop = 0; scrollBottom = rows - 1
                     }
-                    cursorX = savedX; cursorY = savedY; pendingWrap = savedPendingWrap
+                    cursor = savedCursor; attrs = savedAttrs
                 case 1000, 1002, 1003: mouseMode = 0
                 case 1004: focusReportingMode = false
                 case 1005, 1006: mouseEncoding = 0
@@ -1424,7 +2310,9 @@ class Terminal {
         switch mode {
         case 0: eraseCellsInRow(cursorY, from: cursorX, to: cols - 1)
         case 1: eraseCellsInRow(cursorY, from: 0, to: min(cursorX, cols - 1))
-        case 2: eraseFullRow(cursorY)
+        case 2:
+            eraseFullRow(cursorY)
+            lineAttrs[cursorY] &= ~UInt8(0x08)  // clear soft-wrap flag on full-line erase
         default: break
         }
     }
@@ -1560,13 +2448,201 @@ class Terminal {
 
     // MARK: Resize
 
+    /// Re-wrap soft-wrapped logical lines at a new column width.
+    /// Rows marked with lineAttrs bit 0x08 are soft-wrapped continuations that can be rejoined.
+    /// Hard-wrapped (non-joined) rows are only truncated/padded — never split into extra rows.
+    private func reflowGrid(
+        _ sourceGrid: [[Cell]], attrs sourceAttrs: [UInt8],
+        fromCols: Int, toCols: Int,
+        cursorRow: Int, cursorCol: Int
+    ) -> (grid: [[Cell]], attrs: [UInt8], cursorRow: Int, cursorCol: Int) {
+        guard fromCols != toCols, !sourceGrid.isEmpty else {
+            return (sourceGrid, sourceAttrs, cursorRow, cursorCol)
+        }
+
+        // Group visual rows into logical lines.
+        // 0x08 = currently soft-wrapped (row continues on next row).
+        // 0x10 = formerly soft-wrapped (fits in one row now, but can be re-split when narrowing).
+        // 0x00 = hard-wrapped (shell output, \n-terminated) — truncate, never split.
+        var logicalCells:     [[Cell]] = []
+        var logicalHasCursor: [Bool]   = []
+        var logicalCursorOff: [Int]    = []
+        var logicalIsReflow:  [Bool]   = []  // true → trim+re-wrap; false → truncate
+
+        var r = 0
+        while r < sourceGrid.count {
+            var cells     = Array(sourceGrid[r].prefix(fromCols))
+            var hasCursor = (r == cursorRow)
+            var cursorOff = hasCursor ? min(cursorCol, fromCols - 1) : 0
+            // 0x10 = "reflowable single row" — treat like a multi-row group
+            var isReflow  = r < sourceAttrs.count && (sourceAttrs[r] & 0x10) != 0
+
+            // Collect soft-wrapped continuation rows (0x08)
+            while r < sourceGrid.count - 1 && r < sourceAttrs.count && (sourceAttrs[r] & 0x08) != 0 {
+                r += 1
+                isReflow = true
+                if r == cursorRow {
+                    hasCursor = true
+                    cursorOff = cells.count + min(cursorCol, fromCols - 1)
+                }
+                cells += Array(sourceGrid[r].prefix(fromCols))
+            }
+
+            logicalCells.append(cells)
+            logicalHasCursor.append(hasCursor)
+            logicalCursorOff.append(cursorOff)
+            logicalIsReflow.append(isReflow)
+            r += 1
+        }
+
+        var newGrid:      [[Cell]] = []
+        var newAttrs:     [UInt8]  = []
+        var newCursorRow = 0
+        var newCursorCol = 0
+
+        for i in 0..<logicalCells.count {
+            let cells     = logicalCells[i]
+            let hasCursor = logicalHasCursor[i]
+            let cursorOff = logicalCursorOff[i]
+            let isReflow  = logicalIsReflow[i]
+
+            if !isReflow {
+                // Hard-wrapped single row: truncate or pad to toCols — never split.
+                // This preserves traditional terminal behavior for shell output (\n-terminated lines).
+                let end = min(toCols, cells.count)
+                var chunk = Array(cells[0..<end])
+                while chunk.count < toCols { chunk.append(Cell()) }
+                newGrid.append(chunk)
+                newAttrs.append(0x00)
+                if hasCursor {
+                    newCursorRow = newGrid.count - 1
+                    newCursorCol = min(cursorOff, toCols - 1)
+                }
+                continue
+            }
+
+            // Reflowable logical line: trim trailing blanks + re-wrap at toCols.
+            var mutableCells  = cells
+            var mutableCursor = cursorOff
+            var trimEnd = mutableCells.count
+            while trimEnd > 0 {
+                let c = mutableCells[trimEnd - 1]
+                if c.char == " " && c.attrs == TextAttrs() && c.hyperlink == nil && c.width == 1 {
+                    trimEnd -= 1
+                } else { break }
+            }
+            mutableCells = Array(mutableCells[0..<trimEnd])
+            if hasCursor && !mutableCells.isEmpty {
+                mutableCursor = min(mutableCursor, mutableCells.count - 1)
+            }
+
+            if mutableCells.isEmpty {
+                newGrid.append(Array(repeating: Cell(), count: toCols))
+                newAttrs.append(0x00)
+                if hasCursor { newCursorRow = newGrid.count - 1; newCursorCol = 0 }
+                continue
+            }
+
+            var offset = 0
+            repeat {
+                var end = min(offset + toCols, mutableCells.count)
+                // Don't split a wide-char pair (w=2 base + w=0 continuation) at chunk boundary.
+                if end > offset && end < mutableCells.count && mutableCells[end - 1].width == 2 {
+                    end -= 1  // wide char goes to next chunk; current chunk gets a padding space instead
+                }
+                var chunk     = Array(mutableCells[offset..<end])
+                let isWrapped = end < mutableCells.count
+
+                if hasCursor && mutableCursor >= offset && mutableCursor < offset + toCols {
+                    newCursorRow = newGrid.count
+                    newCursorCol = mutableCursor - offset
+                }
+
+                while chunk.count < toCols { chunk.append(Cell()) }
+                newGrid.append(chunk)
+                // Intermediate chunks: 0x08 (soft-wrapped, continues).
+                // Final chunk: 0x10 (reflowable — marks it can be re-split if terminal narrows again).
+                newAttrs.append(isWrapped ? 0x08 : 0x10)
+                offset = end  // advance by actual cells consumed (handles wide-char backed-off case)
+            } while offset < mutableCells.count
+        }
+
+        return (newGrid, newAttrs, newCursorRow, newCursorCol)
+    }
+
     func resize(_ newCols: Int, _ newRows: Int) {
         guard newCols > 0, newRows > 0, newCols != cols || newRows != rows else { return }
+
+        // Preserve content across vertical resize by using the scrollback buffer.
+        // Only applies to main screen (alt screen has no scrollback).
+        var workGrid = grid
+        var workLineAttrs = lineAttrs
+        var workCursorY = cursorY
+        var workRows = rows
+
+        if altGrid == nil {
+            if newRows < rows {
+                // Shrink: push rows above the cursor into scrollback so content isn't lost.
+                let overflow = rows - newRows
+                let pushable = min(overflow, workCursorY)
+                if pushable > 0 {
+                    for y in 0..<pushable {
+                        scrollback.append(workGrid[y])
+                        if scrollback.count > 10000 { scrollback.removeFirst() }
+                    }
+                    workGrid = Array(workGrid[pushable...])
+                    workLineAttrs = Array(workLineAttrs[pushable...])
+                    workCursorY -= pushable
+                    workRows -= pushable
+                }
+            } else if newRows > rows {
+                // Grow: pull rows from scrollback back onto the screen top.
+                let needed = newRows - rows
+                let available = min(needed, scrollback.count)
+                if available > 0 {
+                    let pulled = Array(scrollback.suffix(available))
+                    scrollback.removeLast(available)
+                    workGrid = pulled + workGrid
+                    workLineAttrs = Array(repeating: UInt8(0), count: available) + workLineAttrs
+                    workCursorY += available
+                    workRows += available
+                }
+            }
+        }
+
+        // Column reflow: re-wrap soft-wrapped logical lines at new column width (main screen only)
+        var workCursorX = cursorX
+        if altGrid == nil && newCols != cols && workRows > 0 {
+            let (rGrid, rAttrs, rCursorY, rCursorX) = reflowGrid(
+                workGrid, attrs: workLineAttrs,
+                fromCols: cols, toCols: newCols,
+                cursorRow: workCursorY, cursorCol: cursorX
+            )
+            workGrid      = rGrid
+            workLineAttrs = rAttrs
+            workCursorY   = rCursorY
+            workCursorX   = rCursorX
+            workRows      = rGrid.count
+
+            // Push excess rows from the top into scrollback if reflow expanded beyond newRows
+            if workRows > newRows {
+                let excess = workRows - newRows
+                for y in 0..<excess {
+                    scrollback.append(workGrid[y])
+                    if scrollback.count > 10000 { scrollback.removeFirst() }
+                }
+                workGrid      = Array(workGrid[excess...])
+                workLineAttrs = Array(workLineAttrs[excess...])
+                workCursorY   = max(0, workCursorY - excess)
+                workRows      = newRows
+            }
+        }
+
         var newGrid = Self.emptyGrid(newCols, newRows)
         var newLineAttrs = Array(repeating: UInt8(0), count: newRows)
-        for y in 0..<min(rows, newRows) {
-            for x in 0..<min(cols, newCols) { newGrid[y][x] = grid[y][x] }
-            newLineAttrs[y] = lineAttrs[y]
+        for y in 0..<min(workRows, newRows) {
+            for x in 0..<min(workGrid[y].count, newCols) { newGrid[y][x] = workGrid[y][x] }
+            if y < workLineAttrs.count { newLineAttrs[y] = workLineAttrs[y] }
         }
         if altGrid != nil {
             var newAlt = Self.emptyGrid(newCols, newRows)
@@ -1583,12 +2659,13 @@ class Terminal {
         grid = newGrid; lineAttrs = newLineAttrs; cols = newCols; rows = newRows
         scrollTop = 0; scrollBottom = newRows - 1
         leftMargin = 0; rightMargin = newCols - 1
-        cursorX = min(cursorX, newCols - 1)
+        cursorX = min(workCursorX, newCols - 1)
+        cursorY = min(workCursorY, newRows - 1)
+        pendingWrap = false
         // Extend tab stops to cover new columns if needed
         tabStops = tabStops.filter { $0 < newCols }
         let maxTab = tabStops.max() ?? -1
         for i in stride(from: ((maxTab / 8) + 1) * 8, to: newCols, by: 8) { tabStops.insert(i) }
-        cursorY = min(cursorY, newRows - 1)
     }
 }
 
@@ -1748,6 +2825,8 @@ class TerminalView: NSView {
     var scrollVelocity: CGFloat = 0
     var momentumTimer: Timer?
     var suppressResize = false
+    private var winSizeWorkItem: DispatchWorkItem?  // debounce TIOCSWINSZ during sidebar drag
+    private var isFirstResize = true               // fire TIOCSWINSZ immediately on first layout
     var source: DispatchSourceRead?
     var refreshTimer: Timer?
     var cursorBlinkOn = true
@@ -1755,20 +2834,10 @@ class TerminalView: NSView {
     var textBlinkVisible = true
     var textBlinkTimer: Timer?
     private var lastKeystrokeTime: TimeInterval = -.infinity
-
-    /// Returns true when a non-interactive foreground process (script) is running.
-    /// Interactive TUI apps (vim, claude, nano) set raw mode — we allow full input for those.
-    /// Simple scripts keep canonical mode — we suppress input to avoid escape sequence garbage.
-    var hasNonInteractiveProcess: Bool {
-        guard masterFd >= 0, childPid > 0 else { return false }
-        let fg = tcgetpgrp(masterFd)
-        guard fg > 0, fg != childPid else { return false }
-        // Check if terminal is in canonical mode (non-interactive script)
-        // Interactive TUI apps disable ICANON (raw mode) to handle input themselves
-        var t = termios()
-        guard tcgetattr(masterFd, &t) == 0 else { return false }
-        return (t.c_lflag & UInt(ICANON)) != 0
-    }
+    private var dimColorCache: [NSColor: NSColor] = [:]
+    private var a11yValueCache: String? = nil
+    private var bidiCacheData: [[Int]?] = []
+    private var bidiCacheValid: [Bool] = []
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -1960,7 +3029,8 @@ class TerminalView: NSView {
         textBlinkTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             guard let s = self else { return }
             s.textBlinkVisible.toggle()
-            s.needsDisplay = true
+            let hasBlinking = s.terminal.grid.contains { $0.contains { $0.attrs.blink > 0 } }
+            if hasBlinking { s.needsDisplay = true }
         }
     }
 
@@ -1971,8 +3041,10 @@ class TerminalView: NSView {
         blinkTimer?.invalidate()
         textBlinkTimer?.invalidate()
         momentumTimer?.invalidate()
-        source?.cancel()
-        if masterFd >= 0 { close(masterFd) }
+        winSizeWorkItem?.cancel()
+        source?.cancel()           // cancel handler closes masterFd
+        let pid = childPid
+        if pid > 0 { DispatchQueue.global().async { waitpid(pid, nil, 0) } }
     }
 
     // MARK: PTY
@@ -2074,12 +3146,16 @@ class TerminalView: NSView {
         isSwitching = true
         shellReady = false
         // Tear down old session — cancel handler will close the old fd
+        winSizeWorkItem?.cancel()
         let oldPid = childPid
         source?.cancel()
         source = nil
         masterFd = -1
         childPid = 0
-        if oldPid > 0 { kill(oldPid, SIGHUP) }
+        if oldPid > 0 {
+            kill(oldPid, SIGHUP)
+            DispatchQueue.global().async { waitpid(oldPid, nil, 0) }
+        }
         // Reset terminal
         terminal.fullReset()
         terminal.scrollback.removeAll()
@@ -2102,17 +3178,35 @@ class TerminalView: NSView {
     var onShellExit: (() -> Void)?
 
     func readPTY() {
+        // Capture source by reference so we only cancel THIS source, not a newer one
+        // that may have been installed by a concurrent switchShell().
+        let mySource = source
+        let fd = masterFd
         var buf = [UInt8](repeating: 0, count: 32768)
         while true {
-            let n = read(masterFd, &buf, buf.count)
+            let n = read(fd, &buf, buf.count)
             if n > 0 {
                 perf.readBytes += n; perf.readCount += 1
                 if !shellReady { shellReady = true }
+                let sbBefore = terminal.scrollback.count
                 terminal.process(Data(buf[0..<n]))
-                if smoothScrollY > 0 { smoothScrollY = 0; stopMomentum() }
+                // Keep viewport anchored when new rows arrive in scrollback
+                if smoothScrollY > 0 {
+                    let sbDelta = terminal.scrollback.count - sbBefore
+                    if sbDelta != 0 {
+                        smoothScrollY = max(0, smoothScrollY + CGFloat(sbDelta) * cellH)
+                        clampScrollY()
+                    }
+                }
                 dirty = true
+                for i in bidiCacheValid.indices { bidiCacheValid[i] = false }
+                a11yValueCache = nil
             } else {
                 if n == 0 || (errno != EAGAIN && errno != EINTR) {
+                    mySource?.cancel()
+                    if source === mySource { source = nil }
+                    let pid = childPid
+                    if pid > 0 { DispatchQueue.global().async { waitpid(pid, nil, 0) } }
                     if !isSwitching {
                         DispatchQueue.main.async { [weak self] in
                             guard let self = self else { return }
@@ -2130,21 +3224,22 @@ class TerminalView: NSView {
     }
 
     func writePTY(_ data: Data) {
-        guard masterFd >= 0 else { return }
+        let fd = masterFd
+        guard fd >= 0 else { return }
         perf.writeBytes += data.count; perf.writeCount += 1
         data.withUnsafeBytes { ptr in
             guard let base = ptr.baseAddress else { return }
             var off = 0
             var retries = 0
             while off < data.count {
-                let n = write(masterFd, base + off, data.count - off)
+                let n = write(fd, base + off, data.count - off)
                 if n > 0 {
                     off += n
                     retries = 0
                 } else if n < 0 && (errno == EAGAIN || errno == EINTR) {
                     retries += 1
                     perf.writeRetries += 1
-                    if retries > 50 { break } // 50ms max to avoid blocking main thread
+                    if retries > 5 { break } // 5ms max to avoid blocking main thread
                     usleep(1000)
                     continue
                 } else {
@@ -2202,8 +3297,8 @@ class TerminalView: NSView {
         let extraTop = subPixel > 0.001 ? 1 : 0
         let totalRows = terminal.rows + extraTop
 
-        // Pre-compute selection range (only for live view)
-        let selRange = !isScrolledBack ? selectionRange() : nil
+        // Pre-compute selection range (also shown when scrolled back so selection stays visible)
+        let selRange = selectionRange()
         let lastTextCols: [Int] = selRange != nil
             ? (0..<terminal.rows).map { lastTextCol(row: $0) }
             : []
@@ -2218,12 +3313,12 @@ class TerminalView: NSView {
         for vrow in 0..<totalRows {
             // Absolute index in combined buffer (scrollback + grid)
             let bufIdx = baseIndex - extraTop + vrow
-            let drawY = CGFloat(vrow - extraTop) * cellH + paddingY - subPixel
+            let drawY = CGFloat(vrow - extraTop) * cellH + paddingY + subPixel
 
             // Double-width/height line attributes
             let la: UInt8 = (!isScrolledBack && vrow >= 0 && vrow < terminal.rows) ? terminal.lineAttrs[vrow] : 0
-            let effectiveCols = (la > 0) ? max(1, terminal.cols / 2) : terminal.cols
-            if la > 0 {
+            let effectiveCols = (la & 0x03 > 0) ? max(1, terminal.cols / 2) : terminal.cols
+            if la & 0x03 > 0 {
                 ctx.saveGState()
                 if la >= 2 { // double-height (top or bottom)
                     ctx.clip(to: CGRect(x: 0, y: drawY, width: bounds.width, height: cellH))
@@ -2238,10 +3333,22 @@ class TerminalView: NSView {
                 }
             }
 
-            // BiDi: compute visual ordering for this row
+            // BiDi: compute visual ordering for this row (cached per row, invalidated on PTY read)
             let bidiOrder: [Int]?
             if !isScrolledBack && vrow >= 0 && vrow < terminal.rows {
-                bidiOrder = bidiVisualOrder(for: terminal.grid[vrow], cols: effectiveCols)
+                // Resize cache if terminal rows changed
+                if bidiCacheData.count != terminal.rows {
+                    bidiCacheData = Array(repeating: nil, count: terminal.rows)
+                    bidiCacheValid = Array(repeating: false, count: terminal.rows)
+                }
+                if bidiCacheValid[vrow] {
+                    bidiOrder = bidiCacheData[vrow]
+                } else {
+                    let computed = bidiVisualOrder(for: terminal.grid[vrow], cols: effectiveCols)
+                    bidiCacheData[vrow] = computed
+                    bidiCacheValid[vrow] = true
+                    bidiOrder = computed
+                }
             } else { bidiOrder = nil }
 
             for vpos in 0..<effectiveCols {
@@ -2265,10 +3372,12 @@ class TerminalView: NSView {
                 if cell.attrs.hidden { fg = bg }
 
                 var selected = false
-                if !isScrolledBack, let (lo, hi) = selRange {
-                    if vrow < lastTextCols.count {
-                        let cur = vrow * terminal.cols + col
-                        selected = cur >= lo && cur <= hi && col <= lastTextCols[vrow]
+                if let (lo, hi) = selRange {
+                    // When scrolled back, screen row 0 is at visual row lineOff
+                    let screenRow = isScrolledBack ? vrow - lineOff : vrow
+                    if screenRow >= 0, screenRow < terminal.rows, screenRow < lastTextCols.count {
+                        let cur = screenRow * terminal.cols + col
+                        selected = cur >= lo && cur <= hi && col <= lastTextCols[screenRow]
                     }
                 }
 
@@ -2289,11 +3398,21 @@ class TerminalView: NSView {
                     } else {
                         f = cell.attrs.italic ? italicFont : font
                     }
-                    let textColor = cell.attrs.dim ? fg.withAlphaComponent(0.5) : fg
-                    let nsStr = NSAttributedString(string: s, attributes: [
+                    let textColor: NSColor
+                    if cell.attrs.dim {
+                        if let cached = dimColorCache[fg] {
+                            textColor = cached
+                        } else {
+                            let c = fg.withAlphaComponent(0.5)
+                            dimColorCache[fg] = c
+                            textColor = c
+                        }
+                    } else {
+                        textColor = fg
+                    }
+                    NSAttributedString(string: s, attributes: [
                         .font: f, .foregroundColor: textColor
-                    ])
-                    nsStr.draw(at: NSPoint(x: x, y: drawY))
+                    ]).draw(at: NSPoint(x: x, y: drawY))
                 }
 
                 if cell.attrs.underline > 0 || cell.hyperlink != nil {
@@ -2375,7 +3494,7 @@ class TerminalView: NSView {
                     ctx.strokePath()
                 }
             }
-            if la > 0 { ctx.restoreGState() }
+            if la & 0x03 > 0 { ctx.restoreGState() }
         }
 
         ctx.restoreGState()
@@ -2398,7 +3517,7 @@ class TerminalView: NSView {
                     screenRow = hl.row
                 }
                 if screenRow < 0 || screenRow >= terminal.rows + extraTop { continue }
-                let hy = CGFloat(screenRow) * cellH + paddingY - subPixel + insetV
+                let hy = CGFloat(screenRow) * cellH + paddingY + subPixel + insetV
                 let hx = CGFloat(hl.col) * cellW + paddingX
                 let hw = CGFloat(hl.len) * cellW
                 let rect = CGRect(x: hx, y: hy, width: hw, height: cellH - insetV * 2)
@@ -2593,6 +3712,10 @@ class TerminalView: NSView {
         writePTY("\u{0C}") // Ctrl+L (form feed) → shell redraws prompt
     }
 
+    private static let numberKeyCodes: [UInt16: Int] = [
+        18:0, 19:1, 20:2, 21:3, 23:4, 22:5, 26:6, 28:7, 25:8
+    ]
+
     override func keyDown(with event: NSEvent) {
         guard shellReady else { return }
         if smoothScrollY > 0 { smoothScrollY = 0; scrollAccumulator = 0; stopMomentum(); dirty = true; needsDisplay = true }
@@ -2614,6 +3737,18 @@ class TerminalView: NSView {
                     d.switchToTab(next)
                 }
                 return
+            }
+            // Cmd+⌥+1/2/3/4: Fenster-Presets (muss vor Cmd+1-3 Shell-Switch stehen)
+            if flags.contains(.option) {
+                if let d = NSApp.delegate as? AppDelegate {
+                    switch event.keyCode {
+                    case 18: d.resetWindowSize();   return   // 1 → Default
+                    case 19: d.snapLeft();           return   // 2 → Links
+                    case 20: d.snapRight();          return   // 3 → Rechts
+                    case 21: d.toggleFullscreen();   return   // 4 → Vollbild
+                    default: break
+                    }
+                }
             }
             // Cmd+1/2/3 → switch shell (keyCode: 18=1, 19=2, 20=3)
             if event.keyCode == 18 { switchToShell1(nil); (NSApp.delegate as? AppDelegate)?.updateHeaderTabs(); (NSApp.delegate as? AppDelegate)?.updateFooter(); return }
@@ -2639,31 +3774,17 @@ class TerminalView: NSView {
                 super.keyDown(with: event); return
             }
         }
-        // When a foreground process (script) is running, only allow signal keys
-        if hasNonInteractiveProcess {
-            // Allow Alt+Tab for split pane switching (UI-level)
-            if flags.contains(.option) && event.keyCode == 48 {
-                if let d = NSApp.delegate as? AppDelegate { d.switchSplitPane() }
-                return
+        // Ctrl+1-9: Tab wechseln (nur Ctrl, kein Cmd/Shift/Option)
+        if flags == .control, let idx = Self.numberKeyCodes[event.keyCode] {
+            (NSApp.delegate as? AppDelegate)?.switchToTab(idx)
+            return
+        }
+        // Ctrl+Shift+1-9: Tab umbenennen
+        if flags == [.control, .shift], let idx = Self.numberKeyCodes[event.keyCode] {
+            if let d = NSApp.delegate as? AppDelegate, idx < d.termViews.count {
+                let title = idx < d.tabCustomNames.count ? (d.tabCustomNames[idx] ?? "") : ""
+                d.headerView.startEditingTab(at: idx, currentTitle: title)
             }
-            // Allow Shift+Arrow for text selection (UI-level)
-            if event.modifierFlags.contains(.shift) && !flags.contains(.command) && !flags.contains(.option) && !flags.contains(.control) {
-                if Self.arrowKeyCodes.contains(event.keyCode) {
-                    handleShiftArrow(keyCode: event.keyCode)
-                    return
-                }
-            }
-            // Only allow signal control keys to reach the PTY
-            if flags.contains(.control), let c = event.charactersIgnoringModifiers?.unicodeScalars.first {
-                switch c.value {
-                case 0x63: writePTY(Data([0x03])); needsDisplay = true; return // Ctrl+C (SIGINT)
-                case 0x7A: writePTY(Data([0x1A])); needsDisplay = true; return // Ctrl+Z (SIGTSTP)
-                case 0x5C: writePTY(Data([0x1C])); needsDisplay = true; return // Ctrl+\ (SIGQUIT)
-                case 0x64: writePTY(Data([0x04])); needsDisplay = true; return // Ctrl+D (EOF)
-                default: break
-                }
-            }
-            // Suppress all other input when a process is running
             return
         }
         if flags.contains(.option) {
@@ -2810,8 +3931,19 @@ class TerminalView: NSView {
 
     func gridPos(from event: NSEvent) -> (row: Int, col: Int) {
         let loc = convert(event.locationInWindow, from: nil)
-        let col = max(0, min(terminal.cols - 1, Int((loc.x - paddingX) / cellW)))
+        let visualCol = max(0, min(terminal.cols - 1, Int((loc.x - paddingX) / cellW)))
         let row = max(0, min(terminal.rows - 1, Int((loc.y - paddingY) / cellH)))
+        // Map visual column → logical column for BiDi rows
+        var col = visualCol
+        if row < terminal.rows, row < terminal.grid.count {
+            let order: [Int]?
+            if row < bidiCacheValid.count && bidiCacheValid[row] {
+                order = bidiCacheData[row]
+            } else {
+                order = bidiVisualOrder(for: terminal.grid[row], cols: terminal.cols)
+            }
+            if let o = order, visualCol < o.count { col = o[visualCol] }
+        }
         return (row, col)
     }
 
@@ -3033,41 +4165,92 @@ class TerminalView: NSView {
     override func menu(for event: NSEvent) -> NSMenu? {
         if terminal.mouseMode >= 1000 { return nil }
         let menu = NSMenu()
+        let del = NSApp.delegate as? AppDelegate
 
-        let copyItem = NSMenuItem(title: "Copy", action: #selector(copyText(_:)), keyEquivalent: "")
+        // ── Clipboard ────────────────────────────────────────────────────────
+        let copyItem = NSMenuItem(title: Loc.copy, action: #selector(copyText(_:)), keyEquivalent: "")
         copyItem.keyEquivalentModifierMask = []
         copyItem.isEnabled = (selStart != nil && selEnd != nil)
         menu.addItem(copyItem)
 
-        let pasteItem = NSMenuItem(title: "Paste", action: #selector(paste), keyEquivalent: "")
+        let pasteItem = NSMenuItem(title: Loc.paste, action: #selector(paste), keyEquivalent: "")
         pasteItem.keyEquivalentModifierMask = []
         menu.addItem(pasteItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        let selectAllItem = NSMenuItem(title: "Select All", action: #selector(selectAll(_:)), keyEquivalent: "")
+        // ── Edit ─────────────────────────────────────────────────────────────
+        let selectAllItem = NSMenuItem(title: Loc.selectAll, action: #selector(selectAll(_:)), keyEquivalent: "")
         selectAllItem.keyEquivalentModifierMask = []
         menu.addItem(selectAllItem)
 
-        let clearItem = NSMenuItem(title: "Clear", action: #selector(clearScrollback(_:)), keyEquivalent: "")
+        let clearItem = NSMenuItem(title: Loc.clear, action: #selector(clearScrollback(_:)), keyEquivalent: "")
         clearItem.keyEquivalentModifierMask = []
         menu.addItem(clearItem)
 
         menu.addItem(NSMenuItem.separator())
 
+        // ── Tabs ─────────────────────────────────────────────────────────────
+        let newTabItem = NSMenuItem(title: Loc.newTab, action: #selector(contextMenuNewTab), keyEquivalent: "")
+        menu.addItem(newTabItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // ── Split ─────────────────────────────────────────────────────────────
+        let splitVItem = NSMenuItem(title: Loc.splitVertical, action: #selector(contextMenuSplitV), keyEquivalent: "")
+        menu.addItem(splitVItem)
+
+        let splitHItem = NSMenuItem(title: Loc.splitHorizontal, action: #selector(contextMenuSplitH), keyEquivalent: "")
+        menu.addItem(splitHItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // ── Panels ────────────────────────────────────────────────────────────
+        let panelsMenu = NSMenu()
+        let gitOn: Bool = del.map { d in d.activeTab < d.tabGitPositions.count && d.tabGitPositions[d.activeTab] != .none } ?? false
+        let gitItem = NSMenuItem(title: "Git", action: #selector(contextMenuToggleGit), keyEquivalent: "")
+        gitItem.state = gitOn ? .on : .off
+        panelsMenu.addItem(gitItem)
+
+        let pickerOn = del?.webPickerSidebarView != nil
+        let pickerItem = NSMenuItem(title: "WebPicker", action: #selector(contextMenuTogglePicker), keyEquivalent: "")
+        pickerItem.state = pickerOn ? .on : .off
+        panelsMenu.addItem(pickerItem)
+
+        let sshOn = del?.sshManagerView != nil
+        let sshItem = NSMenuItem(title: "SSH", action: #selector(contextMenuToggleSSH), keyEquivalent: "")
+        sshItem.state = sshOn ? .on : .off
+        panelsMenu.addItem(sshItem)
+
+        let panelsParent = NSMenuItem(title: Loc.panels, action: nil, keyEquivalent: "")
+        panelsParent.submenu = panelsMenu
+        menu.addItem(panelsParent)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // ── Credits ───────────────────────────────────────────────────────────
         let footerItem = NSMenuItem()
         let footerAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 10, weight: .light),
             .foregroundColor: NSColor.gray
         ]
-        footerItem.attributedTitle = NSAttributedString(string: "quickTERMINAL v\(kAppVersion) — LEVOGNE", attributes: footerAttrs)
+        footerItem.attributedTitle = NSAttributedString(
+            string: "quickTERMINAL v\(kAppVersion) — LEVOGNE © 2026", attributes: footerAttrs)
         footerItem.isEnabled = false
         menu.addItem(footerItem)
 
         return menu
     }
 
+    @objc private func contextMenuNewTab()      { (NSApp.delegate as? AppDelegate)?.addTab() }
+    @objc private func contextMenuSplitV()      { (NSApp.delegate as? AppDelegate)?.toggleSplit(vertical: true) }
+    @objc private func contextMenuSplitH()      { (NSApp.delegate as? AppDelegate)?.toggleSplit(vertical: false) }
+    @objc private func contextMenuToggleGit()   { (NSApp.delegate as? AppDelegate)?.toggleGitPanel() }
+    @objc private func contextMenuTogglePicker(){ (NSApp.delegate as? AppDelegate)?.toggleWebPicker() }
+    @objc private func contextMenuToggleSSH()   { (NSApp.delegate as? AppDelegate)?.toggleSSHManager() }
+
     private var scrollAccumulator: CGFloat = 0
+    private var hScrollAccumulator: CGFloat = 0
 
     /// Accumulate scroll delta and return number of discrete lines (max 10), or nil if threshold not reached.
     private func consumeScrollLines(dy: CGFloat) -> Int? {
@@ -3076,6 +4259,14 @@ class TerminalView: NSView {
         guard lines > 0 else { return nil }
         scrollAccumulator = scrollAccumulator.truncatingRemainder(dividingBy: 3)
         return min(lines, 10)
+    }
+
+    private func consumeHScrollCols(dx: CGFloat) -> Int? {
+        hScrollAccumulator += dx
+        let cols = Int(abs(hScrollAccumulator) / 3)
+        guard cols > 0 else { return nil }
+        hScrollAccumulator = hScrollAccumulator.truncatingRemainder(dividingBy: 3)
+        return min(cols, 20)
     }
 
     private func clampScrollY() {
@@ -3109,54 +4300,87 @@ class TerminalView: NSView {
 
     override func scrollWheel(with event: NSEvent) {
         let dy = event.scrollingDeltaY != 0 ? event.scrollingDeltaY : event.deltaY
-        guard dy != 0 else { return }
+        let dx = event.scrollingDeltaX != 0 ? event.scrollingDeltaX : event.deltaX
+        guard dy != 0 || dx != 0 else { return }
 
         // Mouse tracking active → forward as mouse events (SGR or legacy)
         if terminal.mouseMode >= 1000 {
-            guard let lines = consumeScrollLines(dy: dy) else { return }
-            let pos = gridPos(from: event)
-            let button = dy < 0 ? 65 : 64
-            for _ in 0..<lines {
-                sendMouseEvent(button: button, x: pos.col, y: pos.row)
+            if dy != 0, let lines = consumeScrollLines(dy: dy) {
+                let pos = gridPos(from: event)
+                let button = dy < 0 ? 65 : 64
+                for _ in 0..<lines { sendMouseEvent(button: button, x: pos.col, y: pos.row) }
+            }
+            if dx != 0, let cols = consumeHScrollCols(dx: dx) {
+                let pos = gridPos(from: event)
+                let button = dx > 0 ? 67 : 66  // 66=wheel-right, 67=wheel-left
+                for _ in 0..<cols { sendMouseEvent(button: button, x: pos.col, y: pos.row) }
             }
             return
         }
 
-        // Alternate screen (TUI apps like claude, vim, htop) → arrow keys
+        // Alternate screen (TUI apps like vim, htop) → arrow keys
         if terminal.altGrid != nil {
-            guard let lines = consumeScrollLines(dy: dy) else { return }
-            let up = terminal.appCursorMode ? "\u{1B}OA" : "\u{1B}[A"
-            let down = terminal.appCursorMode ? "\u{1B}OB" : "\u{1B}[B"
-            let arrow = dy > 0 ? up : down
-            for _ in 0..<lines {
-                writePTY(arrow)
+            if dy != 0, let lines = consumeScrollLines(dy: dy) {
+                let up = terminal.appCursorMode ? "\u{1B}OA" : "\u{1B}[A"
+                let down = terminal.appCursorMode ? "\u{1B}OB" : "\u{1B}[B"
+                let arrow = dy > 0 ? up : down
+                for _ in 0..<lines { writePTY(arrow) }
+            }
+            if dx != 0, let cols = consumeHScrollCols(dx: dx) {
+                let left = terminal.appCursorMode ? "\u{1B}OD" : "\u{1B}[D"
+                let right = terminal.appCursorMode ? "\u{1B}OC" : "\u{1B}[C"
+                let arrow = dx < 0 ? left : right
+                for _ in 0..<cols { writePTY(arrow) }
             }
             return
         }
 
-        // Normal screen → smooth pixel scrollback with momentum
-        if event.phase == .began || event.phase == .changed {
-            stopMomentum()
-            smoothScrollY += dy * 1.8
-            clampScrollY()
-            needsDisplay = true
-        } else if event.momentumPhase == .changed {
-            smoothScrollY += dy * 1.8
-            clampScrollY()
-            needsDisplay = true
-        } else if event.phase == .ended || event.momentumPhase == .ended {
-            if smoothScrollY < cellH * 0.5 { smoothScrollY = 0 }
-            needsDisplay = true
-        } else if event.phase.rawValue == 0 && event.momentumPhase.rawValue == 0 {
-            // Discrete mouse wheel — use momentum animation
-            stopMomentum()
-            scrollVelocity += dy * 4.0
-            let maxVel = cellH * 20
-            scrollVelocity = max(-maxVel, min(maxVel, scrollVelocity))
-            smoothScrollY += scrollVelocity
-            clampScrollY()
-            startMomentumTimer()
-            needsDisplay = true
+        // Normal screen → smooth pixel scrollback with momentum (vertical)
+        if dy != 0 {
+            if event.phase == .began || event.phase == .changed {
+                stopMomentum()
+                smoothScrollY += dy * 1.8
+                clampScrollY()
+                needsDisplay = true
+            } else if event.momentumPhase == .changed {
+                smoothScrollY += dy * 1.8
+                clampScrollY()
+                needsDisplay = true
+            } else if event.phase == .ended || event.momentumPhase == .ended {
+                if smoothScrollY < cellH * 0.5 { smoothScrollY = 0 }
+                needsDisplay = true
+            } else if event.phase.rawValue == 0 && event.momentumPhase.rawValue == 0 {
+                // Discrete mouse wheel — use momentum animation
+                stopMomentum()
+                scrollVelocity += dy * 4.0
+                let maxVel = cellH * 20
+                scrollVelocity = max(-maxVel, min(maxVel, scrollVelocity))
+                smoothScrollY += scrollVelocity
+                clampScrollY()
+                startMomentumTimer()
+                needsDisplay = true
+            }
+        }
+
+        // Normal screen → horizontal swipe = cursor left/right in shell
+        if dx != 0, let cols = consumeHScrollCols(dx: dx) {
+            let left = terminal.appCursorMode ? "\u{1B}OD" : "\u{1B}[D"
+            let right = terminal.appCursorMode ? "\u{1B}OC" : "\u{1B}[C"
+            let arrow = dx < 0 ? left : right
+            for _ in 0..<cols { writePTY(arrow) }
+        }
+
+        // If user is actively dragging a selection, extend selEnd to current mouse position
+        if isDragging {
+            let mouseLoc = window?.mouseLocationOutsideOfEventStream ?? .zero
+            let viewLoc = convert(mouseLoc, from: nil)
+            let lineOff = scrollbackOffset
+            let visualRow = max(0, Int((viewLoc.y - paddingY) / cellH))
+            // TerminalView is flipped: row 0=top, rows-1=bottom
+            // When scrolled back lineOff lines, screen row 0 appears at visual row lineOff
+            let screenRow = max(0, min(terminal.rows - 1, visualRow - lineOff))
+            let col = max(0, min(terminal.cols - 1, Int((viewLoc.x - paddingX) / cellW)))
+            selEnd = (row: screenRow, col: col)
         }
     }
 
@@ -3302,20 +4526,21 @@ class TerminalView: NSView {
     override func accessibilityLabel() -> String? { "Terminal" }
 
     override func accessibilityValue() -> Any? {
-        // Return the visible screen content for VoiceOver
+        if let cached = a11yValueCache { return cached }
+        // Rebuild visible screen content for VoiceOver
         var lines: [String] = []
         for row in 0..<terminal.rows {
             var line = ""
             for col in 0..<terminal.cols {
                 line.append(String(terminal.grid[row][col].char))
             }
-            // Trim trailing whitespace
             while line.last?.isWhitespace == true { line.removeLast() }
             lines.append(line)
         }
-        // Remove trailing empty lines
         while lines.last?.isEmpty == true { lines.removeLast() }
-        return lines.joined(separator: "\n")
+        let result = lines.joined(separator: "\n")
+        a11yValueCache = result
+        return result
     }
 
     override func accessibilitySelectedText() -> String? {
@@ -3338,15 +4563,33 @@ class TerminalView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        guard !suppressResize else { return }
         let c = max(1, Int((newSize.width - paddingX * 2) / cellW))
         let r = max(1, Int((newSize.height - paddingY * 2) / cellH))
+        guard !suppressResize else { return }
         if c != terminal.cols || r != terminal.rows {
+            let sbBefore = terminal.scrollback.count
             terminal.resize(c, r)
+            // Keep viewport anchored if scrollback size changed during resize
+            let sbDelta = terminal.scrollback.count - sbBefore
+            if sbDelta != 0 && smoothScrollY > 0 {
+                smoothScrollY = max(0, smoothScrollY + CGFloat(sbDelta) * cellH)
+                clampScrollY()
+            }
+            selStart = nil; selEnd = nil  // clear stale selection after resize
+            dirty = true
+            let fd = masterFd
+            guard fd >= 0 else { return }
             var ws = winsize(ws_row: UInt16(r), ws_col: UInt16(c),
                              ws_xpixel: UInt16(newSize.width), ws_ypixel: UInt16(newSize.height))
-            _ = ioctl(masterFd, TIOCSWINSZ, &ws)
-            dirty = true
+            if isFirstResize {
+                isFirstResize = false
+                _ = ioctl(fd, TIOCSWINSZ, &ws)
+            } else {
+                winSizeWorkItem?.cancel()
+                let item = DispatchWorkItem { _ = ioctl(fd, TIOCSWINSZ, &ws) }
+                winSizeWorkItem = item
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: item)
+            }
         }
     }
 
@@ -3373,6 +4616,9 @@ class BorderlessWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 
+    /// Set to true when window is detached (floating) — enables top-edge resize
+    var isDetached = false
+
     /// Inset for iBeam cursor rect so native resize cursors show at edges
     static let edgeInset: CGFloat = 10
 
@@ -3391,7 +4637,10 @@ class BorderlessWindow: NSWindow {
         let l = p.x < e
         let r = p.x > b.width - e
         let bot = p.y < e
-        // Top edge disabled (arrow/tray area)
+        let top = isDetached && p.y > b.height - e   // top enabled only when detached
+        if top && l { return .topLeft }
+        if top && r { return .topRight }
+        if top { return .top }
         if bot && l { return .bottomLeft }
         if bot && r { return .bottomRight }
         if bot { return .bottom }
@@ -3552,7 +4801,9 @@ class BorderlessWindow: NSWindow {
 
     /// During live resize, prevent the window from shrinking past the Popover-Arrow.
     override func setFrame(_ frameRect: NSRect, display displayFlag: Bool) {
+        // Detached (free-floating) windows must never be constrained to the tray position.
         guard inLiveResize || activeEdge != .none,
+              !isDetached,
               let appDelegate = NSApp.delegate as? AppDelegate,
               let button = appDelegate.statusItem?.button,
               let btnWindow = button.window else {
@@ -3593,6 +4844,20 @@ class HoverButton: NSView {
     private let normalColor: NSColor
     private let hoverColor: NSColor
     var hoverScale: CGFloat = 1.0
+    var isActive: Bool = false
+
+    func setActive(_ active: Bool) {
+        isActive = active
+        guard !isHovered else { return }
+        let targetColor = active ? hoverColor : normalColor
+        let targetBg    = active ? hoverBg    : normalBg
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.25
+            ctx.allowsImplicitAnimation = true
+            label.animator().textColor = targetColor
+        }
+        animateBg(to: targetBg, duration: 0.25)
+    }
 
     init(title: String, fontSize: CGFloat, weight: NSFont.Weight,
          normalColor: NSColor, hoverColor: NSColor,
@@ -3658,9 +4923,10 @@ class HoverButton: NSView {
             scale.toValue = hoverScale
             scale.duration = 0.2
             scale.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.56, 0.64, 1.0)
-            scale.fillMode = .forwards
-            scale.isRemovedOnCompletion = false
             label.layer?.add(scale, forKey: "hoverScale")
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            label.layer?.transform = CATransform3DMakeScale(hoverScale, hoverScale, 1)
+            CATransaction.commit()
         }
     }
 
@@ -3668,19 +4934,22 @@ class HoverButton: NSView {
         isHovered = false
         isPressed = false
         NSCursor.pop()
+        let targetColor = isActive ? hoverColor : normalColor
+        let targetBg    = isActive ? hoverBg    : normalBg
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.25
             ctx.allowsImplicitAnimation = true
-            label.animator().textColor = normalColor
+            label.animator().textColor = targetColor
         }
-        animateBg(to: normalBg, duration: 0.25)
+        animateBg(to: targetBg, duration: 0.25)
         if hoverScale != 1.0 {
             let scale = CABasicAnimation(keyPath: "transform.scale")
             scale.toValue = 1.0
             scale.duration = 0.2
-            scale.fillMode = .forwards
-            scale.isRemovedOnCompletion = false
             label.layer?.add(scale, forKey: "hoverScale")
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            label.layer?.transform = CATransform3DIdentity
+            CATransaction.commit()
         }
     }
 
@@ -3696,10 +4965,12 @@ class HoverButton: NSView {
             animateBg(to: hoverBg, duration: 0.12)
             onClick?()
         } else {
-            animateBg(to: normalBg)
+            let targetColor = isActive ? hoverColor : normalColor
+            let targetBg    = isActive ? hoverBg    : normalBg
+            animateBg(to: targetBg)
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.25
-                label.animator().textColor = normalColor
+                label.animator().textColor = targetColor
             }
         }
     }
@@ -3713,6 +4984,10 @@ class HoverButton: NSView {
         layer?.add(anim, forKey: "bg")
         layer?.backgroundColor = color
     }
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { label.stringValue }
 }
 
 class TabCloseButton: NSView {
@@ -3798,6 +5073,10 @@ class TabCloseButton: NSView {
             ? NSColor(calibratedRed: 0.8, green: 0.2, blue: 0.2, alpha: 0.9)
             : NSColor(calibratedWhite: 0.12, alpha: 0.95), duration: 0.12)
     }
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { "Close Tab" }
 }
 
 class TabItemView: NSView {
@@ -4064,6 +5343,18 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         return super.hitTest(point)
     }
 
+    // ── Drag-to-move when window is detached ───────────────────────────────
+    private var dragOffset: NSPoint = .zero
+
+    override func mouseDragged(with event: NSEvent) {
+        guard (NSApp.delegate as? AppDelegate)?.isWindowDetached == true else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let loc = NSEvent.mouseLocation
+        window?.setFrameOrigin(NSPoint(x: loc.x - dragOffset.x, y: loc.y - dragOffset.y))
+    }
+
     var onTabClicked: ((Int) -> Void)?
     var onAddTab: (() -> Void)?
     var onCloseTab: ((Int) -> Void)?
@@ -4074,6 +5365,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     var onSplitHorizontal: (() -> Void)?
     var onGitToggle: (() -> Void)?
     var onWebPickerToggle: (() -> Void)?
+    var onSSHToggle: (() -> Void)?
 
     private var tabContainer = NSView()
     private let tabScrollView = NSScrollView()
@@ -4082,6 +5374,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     private var splitHBtn: SplitIconButton!
     private var gitBtn: HoverButton!
     private var webPickerBtn: HoverButton!
+    private var sshBtn: HoverButton!
     private let sep = NSView()
     private var lastTitles: [String] = []
     private var lastActiveIndex: Int = -1
@@ -4159,6 +5452,17 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         webPickerBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(webPickerBtn)
 
+        // SSH button
+        sshBtn = HoverButton(title: "SSH", fontSize: 9, weight: .bold,
+            normalColor: NSColor(calibratedWhite: 0.5, alpha: 1.0),
+            hoverColor: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 1.0),
+            hoverBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.12),
+            pressBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.25),
+            cornerRadius: 4)
+        sshBtn.onClick = { [weak self] in self?.onSSHToggle?() }
+        sshBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(sshBtn)
+
         // Separator line at bottom
         sep.wantsLayer = true
         sep.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
@@ -4187,10 +5491,15 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
             gitBtn.widthAnchor.constraint(equalToConstant: 30),
             gitBtn.heightAnchor.constraint(equalToConstant: 20),
 
-            webPickerBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -4),
+            webPickerBtn.trailingAnchor.constraint(equalTo: sshBtn.leadingAnchor, constant: -4),
             webPickerBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
             webPickerBtn.widthAnchor.constraint(equalToConstant: 30),
             webPickerBtn.heightAnchor.constraint(equalToConstant: 20),
+
+            sshBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -4),
+            sshBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            sshBtn.widthAnchor.constraint(equalToConstant: 30),
+            sshBtn.heightAnchor.constraint(equalToConstant: 20),
 
             addBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             addBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -4209,10 +5518,10 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     var onDoubleClick: (() -> Void)?
 
     override func mouseDown(with event: NSEvent) {
+        dragOffset = event.locationInWindow   // save for drag-to-move in detached mode
         if event.clickCount == 2 {
             onDoubleClick?()
         }
-        // Single click on empty header area: do nothing (no window drag)
     }
 
     override func resizeSubviews(withOldSize oldSize: NSSize) {
@@ -4297,23 +5606,25 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     }
 
     func setGitActive(_ active: Bool) {
-        if active {
-            gitBtn.label.textColor = NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 1.0)
-            gitBtn.layer?.backgroundColor = NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 0.15).cgColor
-        } else {
-            gitBtn.label.textColor = NSColor(calibratedWhite: 0.5, alpha: 1.0)
-            gitBtn.layer?.backgroundColor = NSColor.clear.cgColor
-        }
+        gitBtn.setActive(active)
     }
 
     func setWebPickerActive(_ active: Bool) {
-        if active {
-            webPickerBtn.label.textColor = NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 1.0)
-            webPickerBtn.layer?.backgroundColor = NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.15).cgColor
-        } else {
-            webPickerBtn.label.textColor = NSColor(calibratedWhite: 0.5, alpha: 1.0)
-            webPickerBtn.layer?.backgroundColor = NSColor.clear.cgColor
-        }
+        webPickerBtn.setActive(active)
+    }
+
+    func setSSHActive(_ active: Bool) {
+        sshBtn.setActive(active)
+    }
+
+    func setSplitActive(vertical: Bool, active: Bool) {
+        splitVBtn.setActive(vertical && active)
+        splitHBtn.setActive(!vertical && active)
+    }
+
+    func resetSplitButtons() {
+        splitVBtn.setActive(false)
+        splitHBtn.setActive(false)
     }
 
     // MARK: Inline Tab Rename
@@ -4683,6 +5994,27 @@ class SplitIconButton: NSView {
     private var isPressed = false
     private var iconLayer: CAShapeLayer!
     let isVertical: Bool
+    private(set) var isActive = false
+
+    func setActive(_ active: Bool) {
+        guard isActive != active else { return }
+        isActive = active
+        guard !isHovered else { return }
+        let targetColor = active
+            ? NSColor(calibratedRed: 0.3, green: 0.85, blue: 0.9, alpha: 0.7).cgColor
+            : NSColor(calibratedWhite: 1.0, alpha: 0.35).cgColor
+        let targetBg = active
+            ? NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
+            : NSColor.clear.cgColor
+        let colorAnim = CABasicAnimation(keyPath: "fillColor")
+        colorAnim.toValue = targetColor
+        colorAnim.duration = 0.25
+        iconLayer.add(colorAnim, forKey: "iconColor")
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        iconLayer.fillColor = targetColor
+        layer?.backgroundColor = targetBg
+        CATransaction.commit()
+    }
 
     init(vertical: Bool) {
         self.isVertical = vertical
@@ -4740,10 +6072,9 @@ class SplitIconButton: NSView {
 
         // Animate color to cyan/teal
         let colorAnim = CABasicAnimation(keyPath: "fillColor")
-        colorAnim.toValue = NSColor(calibratedRed: 0.3, green: 0.85, blue: 0.9, alpha: 0.9).cgColor
+        let hoverColor = NSColor(calibratedRed: 0.3, green: 0.85, blue: 0.9, alpha: 0.9).cgColor
+        colorAnim.toValue = hoverColor
         colorAnim.duration = 0.25
-        colorAnim.fillMode = .forwards
-        colorAnim.isRemovedOnCompletion = false
         iconLayer.add(colorAnim, forKey: "iconColor")
 
         // Subtle scale pop
@@ -4751,29 +6082,37 @@ class SplitIconButton: NSView {
         scale.toValue = 1.15
         scale.duration = 0.2
         scale.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.56, 0.64, 1.0)
-        scale.fillMode = .forwards
-        scale.isRemovedOnCompletion = false
         iconLayer.add(scale, forKey: "iconScale")
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        iconLayer.fillColor = hoverColor
+        iconLayer.transform = CATransform3DMakeScale(1.15, 1.15, 1)
+        CATransaction.commit()
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovered = false
         isPressed = false
-        layer?.backgroundColor = NSColor.clear.cgColor
+        let targetColor = isActive
+            ? NSColor(calibratedRed: 0.3, green: 0.85, blue: 0.9, alpha: 0.7).cgColor
+            : NSColor(calibratedWhite: 1.0, alpha: 0.35).cgColor
+        let targetBg = isActive
+            ? NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
+            : NSColor.clear.cgColor
+        layer?.backgroundColor = targetBg
 
         let colorAnim = CABasicAnimation(keyPath: "fillColor")
-        colorAnim.toValue = NSColor(calibratedWhite: 1.0, alpha: 0.35).cgColor
+        colorAnim.toValue = targetColor
         colorAnim.duration = 0.25
-        colorAnim.fillMode = .forwards
-        colorAnim.isRemovedOnCompletion = false
         iconLayer.add(colorAnim, forKey: "iconColor")
 
         let scale = CABasicAnimation(keyPath: "transform.scale")
         scale.toValue = 1.0
         scale.duration = 0.2
-        scale.fillMode = .forwards
-        scale.isRemovedOnCompletion = false
         iconLayer.add(scale, forKey: "iconScale")
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        iconLayer.fillColor = targetColor
+        iconLayer.transform = CATransform3DIdentity
+        CATransaction.commit()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -4785,10 +6124,14 @@ class SplitIconButton: NSView {
         isPressed = false
         let loc = convert(event.locationInWindow, from: nil)
         if bounds.contains(loc) { onClick?() }
-        layer?.backgroundColor = isHovered
+        layer?.backgroundColor = (isHovered || isActive)
             ? NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
             : NSColor.clear.cgColor
     }
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { isVertical ? "Split Vertically" : "Split Horizontally" }
 }
 
 class GearButton: NSView {
@@ -4869,20 +6212,22 @@ class GearButton: NSView {
 
         // Rotate gear icon 45° with spring feel
         let rotate = CABasicAnimation(keyPath: "transform.rotation.z")
-        rotate.toValue = CGFloat.pi / 4  // 45°
+        let hoverAngle = CGFloat.pi / 4
+        let hoverGearColor = NSColor(calibratedRed: 1.0, green: 0.78, blue: 0.28, alpha: 0.9).cgColor
+        rotate.toValue = hoverAngle
         rotate.duration = 0.35
         rotate.timingFunction = CAMediaTimingFunction(controlPoints: 0.34, 1.56, 0.64, 1.0)
-        rotate.fillMode = .forwards
-        rotate.isRemovedOnCompletion = false
         gearLayer.add(rotate, forKey: "gearRotate")
 
         // Animate color to warm amber/gold
         let colorAnim = CABasicAnimation(keyPath: "fillColor")
-        colorAnim.toValue = NSColor(calibratedRed: 1.0, green: 0.78, blue: 0.28, alpha: 0.9).cgColor
+        colorAnim.toValue = hoverGearColor
         colorAnim.duration = 0.3
-        colorAnim.fillMode = .forwards
-        colorAnim.isRemovedOnCompletion = false
         gearLayer.add(colorAnim, forKey: "gearColor")
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        gearLayer.setValue(hoverAngle, forKeyPath: "transform.rotation.z")
+        gearLayer.fillColor = hoverGearColor
+        CATransaction.commit()
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -4898,16 +6243,12 @@ class GearButton: NSView {
         rotate.toValue = 0
         rotate.duration = 0.3
         rotate.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        rotate.fillMode = .forwards
-        rotate.isRemovedOnCompletion = false
         gearLayer.add(rotate, forKey: "gearRotate")
 
         // Animate color back to dim white
         let colorAnim = CABasicAnimation(keyPath: "fillColor")
         colorAnim.toValue = NSColor(calibratedWhite: 1.0, alpha: 0.35).cgColor
         colorAnim.duration = 0.3
-        colorAnim.fillMode = .forwards
-        colorAnim.isRemovedOnCompletion = false
         gearLayer.add(colorAnim, forKey: "gearColor")
 
         // Set actual layer values so state is clean
@@ -5001,8 +6342,10 @@ class QuitButton: NSView {
         for sl in [arcLayer!, lineLayer!] {
             let c = CABasicAnimation(keyPath: "strokeColor")
             c.toValue = red; c.duration = 0.25
-            c.fillMode = .forwards; c.isRemovedOnCompletion = false
             sl.add(c, forKey: "color")
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            sl.strokeColor = red
+            CATransaction.commit()
         }
         // Line bounces up → down → back
         let bounce = CAKeyframeAnimation(keyPath: "transform.translation.y")
@@ -5014,7 +6357,6 @@ class QuitButton: NSView {
             CAMediaTimingFunction(controlPoints: 0.34, 1.56, 0.64, 1.0),
             CAMediaTimingFunction(name: .easeOut),
         ]
-        bounce.fillMode = .forwards; bounce.isRemovedOnCompletion = false
         lineLayer.add(bounce, forKey: "drop")
     }
 
@@ -5026,12 +6368,13 @@ class QuitButton: NSView {
         for sl in [arcLayer!, lineLayer!] {
             let c = CABasicAnimation(keyPath: "strokeColor")
             c.toValue = dim; c.duration = 0.25
-            c.fillMode = .forwards; c.isRemovedOnCompletion = false
             sl.add(c, forKey: "color")
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            sl.strokeColor = dim
+            CATransaction.commit()
         }
         let up = CABasicAnimation(keyPath: "transform.translation.y")
         up.toValue = 0; up.duration = 0.25
-        up.fillMode = .forwards; up.isRemovedOnCompletion = false
         lineLayer.add(up, forKey: "drop")
     }
 
@@ -5850,39 +7193,57 @@ class SettingsOverlay: NSView {
         let rowH: CGFloat = 28
         var rows: [NSView] = []
 
+        // Language
+        rows.append(makeSectionHeader(Loc.language))
+        rows.append(makeLanguageRow())
+
+        // Color Theme
+        rows.append(makeSectionHeader(Loc.colorThemeSection))
+        let themeIdx = UserDefaults.standard.integer(forKey: "colorTheme")
+        let colorThemeRow = ColorThemeRow(selected: themeIdx)
+        colorThemeRow.onChanged = { [weak self] key, idx in
+            UserDefaults.standard.set(idx, forKey: key)
+            self?.onChanged?(key, idx)
+            self?.updateResetButtonState()
+        }
+        colorThemeRow.onPreview = { idx in
+            (NSApp.delegate as? AppDelegate)?.previewTheme(idx)
+        }
+        rows.append(colorThemeRow)
+
         // Visual
-        rows.append(makeSliderRow(label: "Opacity", min: 0.3, max: 1.0,
+        rows.append(makeSliderRow(label: Loc.opacity, min: 0.3, max: 1.0,
             value: UserDefaults.standard.double(forKey: "windowOpacity"),
             fmt: "%0.f%%", fmtScale: 100, key: "windowOpacity"))
 
-        rows.append(makeSliderRow(label: "Blur", min: 0.0, max: 1.0,
+        rows.append(makeSliderRow(label: Loc.blur, min: 0.0, max: 1.0,
             value: UserDefaults.standard.double(forKey: "blurIntensity"),
             fmt: "%0.f%%", fmtScale: 100, key: "blurIntensity"))
 
-        rows.append(makeSliderRow(label: "Font Size", min: 8, max: 18,
+        rows.append(makeSliderRow(label: Loc.fontSize, min: 8, max: 18,
             value: UserDefaults.standard.double(forKey: "terminalFontSize"),
             fmt: "%0.fpt", fmtScale: 1,
             key: "terminalFontSize"))
 
         let cursorVal = UserDefaults.standard.integer(forKey: "cursorStyle")
-        rows.append(makeSegmentRow(label: "Cursor", options: ["▁ Line", "▏Beam", "█ Block"],
+        rows.append(makeSegmentRow(label: Loc.cursor, options: ["▁ Line", "▏Beam", "█ Block"],
             selected: cursorVal, key: "cursorStyle"))
-        rows.append(makeToggleRow(label: "Cursor Blink", settingsKey: "cursorBlink"))
+        rows.append(makeToggleRow(label: Loc.cursorBlink, settingsKey: "cursorBlink"))
 
         let fontNames = TerminalView.availableFonts.map { $0.0 }
         let fontIdx = UserDefaults.standard.integer(forKey: "fontFamily")
-        rows.append(makeSegmentRow(label: "Font", options: fontNames,
+        rows.append(makeSegmentRow(label: Loc.font, options: fontNames,
             selected: fontIdx, key: "fontFamily"))
 
-        rows.append(makeToggleRow(label: "Syntax Highlighting", settingsKey: "syntaxHighlighting"))
+        rows.append(makeToggleRow(label: Loc.syntaxHighlight, settingsKey: "syntaxHighlighting"))
 
         // Theme picker — each button IS the preview
         let themeNames = ["default", "cyberpunk", "minimal", "powerline", "retro", "lambda", "starship"]
         let currentTheme = UserDefaults.standard.string(forKey: "promptTheme") ?? "default"
-        let themeIdx = themeNames.firstIndex(of: currentTheme) ?? 0
+        let promptThemeIdx = themeNames.firstIndex(of: currentTheme) ?? 0
         for i in 0..<7 {
             let card = ThemeCardView(preview: themeCardPreview(i))
-            card.isChosen = (i == themeIdx)
+            card.isChosen = (i == promptThemeIdx)
             themeCards.append(card)
         }
         for (i, card) in themeCards.enumerated() {
@@ -5900,31 +7261,32 @@ class SettingsOverlay: NSView {
 
         // Behavior
         let shellIdx = UserDefaults.standard.integer(forKey: "defaultShellIndex")
-        rows.append(makeSegmentRow(label: "Default Shell", options: ["zsh", "bash", "sh"],
+        rows.append(makeSegmentRow(label: Loc.defaultShell, options: ["zsh", "bash", "sh"],
             selected: shellIdx, key: "defaultShellIndex"))
 
         // Window behavior group
-        rows.append(makeSectionHeader("Window"))
-        rows.append(makeToggleRow(label: "Always on Top", settingsKey: "alwaysOnTop"))
-        rows.append(makeToggleRow(label: "Auto-Dim", settingsKey: "autoDim"))
-        rows.append(makeToggleRow(label: "Hide on Click Outside", settingsKey: "hideOnClickOutside"))
-        rows.append(makeToggleRow(label: "Hide on Deactivate", settingsKey: "hideOnDeactivate"))
+        rows.append(makeSectionHeader(Loc.windowSection))
+        rows.append(makeToggleRow(label: Loc.alwaysOnTop, settingsKey: "alwaysOnTop"))
+        rows.append(makeToggleRow(label: Loc.followAllSpaces, settingsKey: "followAllSpaces"))
+        rows.append(makeToggleRow(label: Loc.autoDim, settingsKey: "autoDim"))
+        rows.append(makeToggleRow(label: Loc.hideOnClickOutside, settingsKey: "hideOnClickOutside"))
+        rows.append(makeToggleRow(label: Loc.hideOnDeactivate, settingsKey: "hideOnDeactivate"))
 
-        rows.append(makeToggleRow(label: "Copy on Select", settingsKey: "copyOnSelect"))
-        rows.append(makeToggleRow(label: "Launch at Login", settingsKey: "autoStartEnabled"))
-        rows.append(makeToggleRow(label: "Auto-Check Updates", settingsKey: "autoCheckUpdates"))
+        rows.append(makeToggleRow(label: Loc.copyOnSelect, settingsKey: "copyOnSelect"))
+        rows.append(makeToggleRow(label: Loc.launchAtLogin, settingsKey: "autoStartEnabled"))
+        rows.append(makeToggleRow(label: Loc.autoCheckUpdates, settingsKey: "autoCheckUpdates"))
 
         // WebPicker
-        rows.append(makeSectionHeader("WebPicker"))
-        rows.append(makeSegmentRow(label: "Browser", options: ["Chrome", "Safari"],
+        rows.append(makeSectionHeader(Loc.webpickerSection))
+        rows.append(makeSegmentRow(label: Loc.browser, options: ["Chrome", "Safari"],
             selected: 0,
             key: "webPickerBrowser",
             disabled: true))
 
         // AI Usage
-        rows.append(makeSectionHeader("Claude Code"))
-        rows.append(makeToggleRow(label: "Show Usage Badge", settingsKey: "showAIUsage"))
-        rows.append(makeSegmentRow(label: "Refresh", options: ["5m", "10m", "30m"],
+        rows.append(makeSectionHeader(Loc.claudeSection))
+        rows.append(makeToggleRow(label: Loc.showUsageBadge, settingsKey: "showAIUsage"))
+        rows.append(makeSegmentRow(label: Loc.refresh, options: ["5m", "10m", "30m"],
             selected: UserDefaults.standard.integer(forKey: "aiUsageRefreshIndex"),
             key: "aiUsageRefreshIndex"))
         rows.append(makeStatusRow())
@@ -5958,52 +7320,6 @@ class SettingsOverlay: NSView {
         headerBlur.autoresizingMask = [.width, .height]
         headerView.addSubview(headerBlur, positioned: .below, relativeTo: nil)
 
-        // Credits line in header
-        let creditsLine = NSView()
-        creditsLine.translatesAutoresizingMaskIntoConstraints = false
-        headerView.addSubview(creditsLine)
-
-        let accent = NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)
-        let dim = NSColor(calibratedWhite: 0.45, alpha: 1.0)
-        let parts: [(String, NSColor)] = [
-            ("quickTERMINAL", accent),
-            (" v1.0.0 — ", dim),
-            ("Levogne", NSColor(calibratedWhite: 0.7, alpha: 1.0)),
-            (" — ", dim),
-        ]
-        let attrStr = NSMutableAttributedString()
-        let creditFont = NSFont.monospacedSystemFont(ofSize: 8.5, weight: .medium)
-        for (text, color) in parts {
-            attrStr.append(NSAttributedString(string: text, attributes: [
-                .foregroundColor: color, .font: creditFont
-            ]))
-        }
-        let creditsLabel = NSTextField(labelWithAttributedString: attrStr)
-        creditsLabel.isEditable = false; creditsLabel.isBordered = false; creditsLabel.drawsBackground = false
-        creditsLabel.translatesAutoresizingMaskIntoConstraints = false
-        creditsLine.addSubview(creditsLabel)
-
-        // Clickable envelope icon — opens message compose popup
-        let emailBtn = HoverButton(title: "\u{2709}\u{FE0E}", fontSize: 18, weight: .regular,
-            normalColor: NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 0.45),
-            hoverColor: NSColor(calibratedRed: 0.5, green: 0.75, blue: 1.0, alpha: 1.0),
-            hoverBg: NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 0.12),
-            pressBg: NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 0.2),
-            cornerRadius: 4)
-        emailBtn.label.font = NSFont.systemFont(ofSize: 16, weight: .regular)
-        emailBtn.translatesAutoresizingMaskIntoConstraints = false
-        emailBtn.onClick = { [weak self] in self?.showMessagePopup() }
-        creditsLine.addSubview(emailBtn)
-
-        NSLayoutConstraint.activate([
-            creditsLabel.centerYAnchor.constraint(equalTo: creditsLine.centerYAnchor),
-            creditsLabel.leadingAnchor.constraint(equalTo: creditsLine.leadingAnchor),
-            emailBtn.centerYAnchor.constraint(equalTo: creditsLine.centerYAnchor),
-            emailBtn.leadingAnchor.constraint(equalTo: creditsLabel.trailingAnchor, constant: 4),
-            emailBtn.widthAnchor.constraint(equalToConstant: 22),
-            emailBtn.heightAnchor.constraint(equalToConstant: 22),
-        ])
-
         // Close button in header — big icon, small bg
         let closeBtn = HoverButton(title: "\u{2715}", fontSize: 11, weight: .bold,
             normalColor: NSColor(calibratedWhite: 0.4, alpha: 1.0),
@@ -6030,11 +7346,6 @@ class SettingsOverlay: NSView {
         headerView.addSubview(sep)
 
         NSLayoutConstraint.activate([
-            creditsLine.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
-            creditsLine.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 10),
-            creditsLine.trailingAnchor.constraint(equalTo: closeBtn.leadingAnchor, constant: -6),
-            creditsLine.heightAnchor.constraint(equalTo: headerView.heightAnchor),
-
             closeBtn.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
             closeBtn.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -6),
             closeBtn.widthAnchor.constraint(equalToConstant: 16),
@@ -6117,7 +7428,7 @@ class SettingsOverlay: NSView {
         popup.addSubview(blur)
 
         // Title
-        let titleLbl = NSTextField(labelWithString: "Send Feedback")
+        let titleLbl = NSTextField(labelWithString: Loc.sendFeedback)
         titleLbl.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
         titleLbl.textColor = NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)
         titleLbl.isEditable = false; titleLbl.isBordered = false; titleLbl.drawsBackground = false
@@ -6153,7 +7464,7 @@ class SettingsOverlay: NSView {
         popup.addSubview(textView)
 
         // Send button
-        let sendBtn = HoverButton(title: "Send \u{2197}", fontSize: 9.5, weight: .bold,
+        let sendBtn = HoverButton(title: "\(Loc.sendFeedback) \u{2197}", fontSize: 9.5, weight: .bold,
             normalColor: NSColor(calibratedRed: 0.35, green: 0.6, blue: 1.0, alpha: 1.0),
             hoverColor: .white,
             hoverBg: NSColor(calibratedRed: 0.3, green: 0.55, blue: 1.0, alpha: 0.25),
@@ -6191,7 +7502,7 @@ class SettingsOverlay: NSView {
                 proc.waitUntilExit()
                 if proc.terminationStatus == 0 {
                     statusLbl.textColor = NSColor(calibratedRed: 0.3, green: 0.8, blue: 0.4, alpha: 1.0)
-                    statusLbl.stringValue = "\u{2713} Sent!"
+                    statusLbl.stringValue = Loc.sent
                     textView.string = ""
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                         self?.hideMessagePopup()
@@ -6261,15 +7572,70 @@ class SettingsOverlay: NSView {
 
     private func labelForKey(_ key: String) -> String {
         switch key {
-        case "alwaysOnTop": return "Always on Top"
-        case "autoDim": return "Auto-Dim"
-        case "hideOnClickOutside": return "Hide on Click Outside"
-        case "hideOnDeactivate": return "Hide on Deactivate"
-        case "copyOnSelect": return "Copy on Select"
-        case "cursorBlink": return "Cursor Blink"
-        case "autoStartEnabled": return "Launch at Login"
+        case "alwaysOnTop": return Loc.alwaysOnTop
+        case "autoDim": return Loc.autoDim
+        case "hideOnClickOutside": return Loc.hideOnClickOutside
+        case "hideOnDeactivate": return Loc.hideOnDeactivate
+        case "copyOnSelect": return Loc.copyOnSelect
+        case "cursorBlink": return Loc.cursorBlink
+        case "autoStartEnabled": return Loc.launchAtLogin
         default: return ""
         }
+    }
+
+    private func makeLanguageRow() -> NSView {
+        let container = NSView()
+        container.wantsLayer = true
+
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.spacing = 4
+        stack.alignment = .centerY
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let currentLang = Loc.lang
+        for code in Loc.supported {
+            let flag = Loc.flags[code] ?? code
+            let btn = NSButton(title: flag, target: nil, action: nil)
+            btn.bezelStyle = .inline
+            btn.isBordered = false
+            btn.font = NSFont.systemFont(ofSize: 15)
+            btn.wantsLayer = true
+            btn.layer?.cornerRadius = 5
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            if code == currentLang {
+                btn.layer?.borderWidth = 1.5
+                btn.layer?.borderColor = NSColor(calibratedRed: 0.24, green: 0.79, blue: 0.63, alpha: 0.8).cgColor
+                btn.layer?.backgroundColor = NSColor(calibratedRed: 0.24, green: 0.79, blue: 0.63, alpha: 0.12).cgColor
+            } else {
+                btn.layer?.borderWidth = 0
+                btn.layer?.backgroundColor = NSColor.clear.cgColor
+            }
+            let capturedCode = code
+            BlockTarget.shared.register(btn) { [weak self] in
+                Loc.lang = capturedCode
+                UserDefaults.standard.set(capturedCode, forKey: "appLanguage")
+                NotificationCenter.default.post(name: .appLanguageChanged, object: nil)
+                // Rebuild settings panel with new language
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.onClose?()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        NotificationCenter.default.post(name: .appLanguageChanged, object: nil)
+                    }
+                }
+            }
+            stack.addArrangedSubview(btn)
+            btn.widthAnchor.constraint(equalToConstant: 24).isActive = true
+            btn.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        }
+
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+            stack.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+        ])
+
+        return container
     }
 
     private func makeSectionHeader(_ title: String) -> NSView {
@@ -6475,14 +7841,14 @@ class SettingsOverlay: NSView {
         let row = SettingsRowView()
         let hasToken = AIUsageManager.shared.hasToken
 
-        let lbl = NSTextField(labelWithString: "Status")
+        let lbl = NSTextField(labelWithString: Loc.status)
         lbl.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
         lbl.textColor = NSColor(calibratedWhite: 0.75, alpha: 1.0)
         lbl.isEditable = false; lbl.isBordered = false; lbl.drawsBackground = false
         lbl.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(lbl)
 
-        let statusLbl = NSTextField(labelWithString: hasToken ? "Connected" : "No Claude Code Token")
+        let statusLbl = NSTextField(labelWithString: hasToken ? Loc.connected : Loc.noToken)
         statusLbl.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         statusLbl.textColor = hasToken
             ? NSColor(calibratedRed: 0.3, green: 0.75, blue: 0.4, alpha: 1.0)
@@ -6510,7 +7876,7 @@ class SettingsOverlay: NSView {
         row.layer?.cornerRadius = 6
         row.layer?.backgroundColor = NSColor(calibratedRed: 0.4, green: 0.1, blue: 0.1, alpha: 0.25).cgColor
 
-        let lbl = NSTextField(labelWithString: "Reset to Defaults")
+        let lbl = NSTextField(labelWithString: Loc.resetToDefaults)
         lbl.font = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .medium)
         lbl.textColor = NSColor(calibratedRed: 0.9, green: 0.35, blue: 0.35, alpha: 0.8)
         lbl.alignment = .center
@@ -6544,7 +7910,7 @@ class SettingsOverlay: NSView {
         cv.wantsLayer = true
         cv.autoresizingMask = [.width, .height]
 
-        let sureLabel = NSTextField(labelWithString: "Sure?")
+        let sureLabel = NSTextField(labelWithString: Loc.sure)
         sureLabel.font = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .bold)
         sureLabel.textColor = NSColor(calibratedRed: 0.95, green: 0.4, blue: 0.4, alpha: 1.0)
         sureLabel.isEditable = false; sureLabel.isBordered = false; sureLabel.drawsBackground = false
@@ -6617,6 +7983,7 @@ class SettingsOverlay: NSView {
     }
 
     static let defaultSettings: [String: Any] = [
+        "appLanguage": "",
         "windowOpacity": 0.99,
         "blurIntensity": 0.96,
         "terminalFontSize": 10.0,
@@ -6624,11 +7991,12 @@ class SettingsOverlay: NSView {
         "fontFamily": 0,
         "defaultShellIndex": 0,
         "alwaysOnTop": true,
+        "followAllSpaces": false,
         "autoDim": false,
         "hideOnClickOutside": false,
         "hideOnDeactivate": false,
         "copyOnSelect": true,
-        "cursorBlink": false,
+        "cursorBlink": true,
         "syntaxHighlighting": true,
         "promptTheme": "default",
         "autoStartEnabled": false,
@@ -6636,6 +8004,7 @@ class SettingsOverlay: NSView {
         "webPickerBrowser": 0,
         "showAIUsage": true,
         "aiUsageRefreshIndex": 0,
+        "colorTheme": 0,
     ]
 
     private func isAtDefaults() -> Bool {
@@ -7121,8 +8490,11 @@ class AIUsageManager {
                 self.debugLog("Response: \(String(body.prefix(500)))")
             }
             DispatchQueue.main.async { self.lastStatusCode = statusCode }
-            // Auth errors → clear badge (token revoked/expired)
+            // Auth errors → clear badge + reset token cache so next poll re-reads Keychain
+            // (Claude Code rotates OAuth tokens; cached token becomes stale over time)
             if statusCode == 401 || statusCode == 403 {
+                self.cachedToken = nil
+                self.tokenChecked = false
                 DispatchQueue.main.async { self.onUpdate?(nil) }
                 return
             }
@@ -7485,6 +8857,33 @@ class AIUsagePopover: NSView {
     }
 }
 
+// MARK: - Sidebar Context Menu
+
+/// Shared right-click menu for all sidebar panels (Git, WebPicker, SSH).
+private func showSidebarContextMenu(in view: NSView, event: NSEvent) {
+    guard let del = NSApp.delegate as? AppDelegate else { return }
+    let menu = NSMenu()
+
+    let gitOn = del.activeTab < del.tabGitPositions.count && del.tabGitPositions[del.activeTab] != .none
+    let gitItem = NSMenuItem(title: "Git", action: nil, keyEquivalent: "")
+    gitItem.state = gitOn ? .on : .off
+    gitItem.target = del
+    gitItem.action = #selector(AppDelegate.toggleGitPanel)
+    menu.addItem(gitItem)
+
+    let pickerItem = NSMenuItem(title: "WebPicker", action: #selector(AppDelegate.toggleWebPicker), keyEquivalent: "")
+    pickerItem.state = del.webPickerSidebarView != nil ? .on : .off
+    pickerItem.target = del
+    menu.addItem(pickerItem)
+
+    let sshItem = NSMenuItem(title: "SSH", action: #selector(AppDelegate.toggleSSHManager), keyEquivalent: "")
+    sshItem.state = del.sshManagerView != nil ? .on : .off
+    sshItem.target = del
+    menu.addItem(sshItem)
+
+    NSMenu.popUpContextMenu(menu, with: event, for: view)
+}
+
 // MARK: - Git Panel
 
 enum GitPanelPosition { case none, right, bottom }
@@ -7496,9 +8895,69 @@ class GitPanelDividerView: NSView {
     private var isHovered = false
     private var isDragging = false
 
+    // The visible 2px strip is drawn by a sublayer; the view frame is expanded
+    // by `grab` pixels on each side so the full grab zone IS the frame — this
+    // ensures AppKit's frame pre-check never prevents hitTest from being called.
+    static let grab: CGFloat      = 5    // extra pixels on each side
+    static let stripThick: CGFloat = 2   // visual strip width
+
     static let normalColor = NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
-    static let hoverColor = NSColor(calibratedRed: 0.4, green: 0.65, blue: 1.0, alpha: 0.5).cgColor
-    static let dragColor = NSColor(calibratedRed: 0.4, green: 0.65, blue: 1.0, alpha: 0.75).cgColor
+    static let hoverColor  = NSColor(calibratedRed: 0.4, green: 0.65, blue: 1.0, alpha: 0.5).cgColor
+    static let dragColor   = NSColor(calibratedRed: 0.4, green: 0.65, blue: 1.0, alpha: 0.75).cgColor
+
+    private let stripLayer = CALayer()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setupStrip()
+    }
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setupStrip()
+    }
+    private func setupStrip() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
+        stripLayer.backgroundColor = Self.normalColor
+        layer?.addSublayer(stripLayer)
+        positionStripLayer()
+    }
+
+    private func positionStripLayer() {
+        let g = Self.grab
+        let t = Self.stripThick
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        // Center the visual 2px strip inside the (expanded) bounds
+        if isVertical {
+            stripLayer.frame = CGRect(x: g, y: 0, width: t, height: bounds.height)
+        } else {
+            stripLayer.frame = CGRect(x: 0, y: g, width: bounds.width, height: t)
+        }
+        CATransaction.commit()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        positionStripLayer()
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    // Animate the strip color (CATransaction, no NSAnimationContext needed)
+    private func setStripColor(_ color: CGColor, animated: Bool = true) {
+        if animated {
+            let anim = CABasicAnimation(keyPath: "backgroundColor")
+            anim.fromValue = stripLayer.presentation()?.backgroundColor ?? stripLayer.backgroundColor
+            anim.toValue   = color
+            anim.duration  = 0.15
+            stripLayer.add(anim, forKey: "bgColor")
+        }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        stripLayer.backgroundColor = color
+        CATransaction.commit()
+    }
 
     override func resetCursorRects() {
         super.resetCursorRects()
@@ -7508,7 +8967,7 @@ class GitPanelDividerView: NSView {
     override func mouseDown(with event: NSEvent) {
         dragStart = isVertical ? event.locationInWindow.x : event.locationInWindow.y
         isDragging = true
-        layer?.backgroundColor = GitPanelDividerView.dragColor
+        setStripColor(Self.dragColor, animated: false)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -7520,43 +8979,26 @@ class GitPanelDividerView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         isDragging = false
-        layer?.backgroundColor = isHovered ? GitPanelDividerView.hoverColor : GitPanelDividerView.normalColor
+        setStripColor(isHovered ? Self.hoverColor : Self.normalColor)
     }
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
-        if !isDragging {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                self.animator().layer?.backgroundColor = GitPanelDividerView.hoverColor
-            }
-        }
+        if !isDragging { setStripColor(Self.hoverColor) }
         (isVertical ? NSCursor.resizeLeftRight : NSCursor.resizeUpDown).push()
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovered = false
-        if !isDragging {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                self.animator().layer?.backgroundColor = GitPanelDividerView.normalColor
-            }
-        }
+        if !isDragging { setStripColor(Self.normalColor) }
         NSCursor.pop()
     }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
-        // Expanded hit area for easier grabbing
-        let expand: CGFloat = 8
-        let expanded: NSRect
-        if isVertical {
-            expanded = bounds.insetBy(dx: -expand, dy: 0)
-        } else {
-            expanded = bounds.insetBy(dx: 0, dy: -expand)
-        }
-        addTrackingArea(NSTrackingArea(rect: expanded,
+        // The frame already covers the full grab zone, so track the whole bounds
+        addTrackingArea(NSTrackingArea(rect: bounds,
             options: [.activeAlways, .mouseEnteredAndExited, .cursorUpdate],
             owner: self))
     }
@@ -7714,6 +9156,7 @@ class GitPanelView: NSView {
 
     private var lastCwd = ""
     private var refreshTimer: Timer?
+    private var isRefreshing = false
     private var feedbackTimer: Timer?
     private let github = GitHubClient()
 
@@ -7729,6 +9172,22 @@ class GitPanelView: NSView {
 
     // isHorizontal: API-kompatibel behalten, aber ignoriert
     var isHorizontal: Bool { get { false } set {} }
+
+    // MARK: - Move callbacks (multi-panel sidebar)
+    var onMoveUp:   (() -> Void)?
+    var onMoveDown: (() -> Void)?
+    private let moveUpBtn   = NSButton()
+    private let moveDownBtn = NSButton()
+
+    func setMoveButtonsEnabled(up: Bool, down: Bool) {
+        let visible = up || down
+        moveUpBtn.isHidden   = !visible
+        moveDownBtn.isHidden = !visible
+        moveUpBtn.isEnabled   = up
+        moveDownBtn.isEnabled = down
+        moveUpBtn.alphaValue   = up   ? 1.0 : 0.35
+        moveDownBtn.alphaValue = down ? 1.0 : 0.35
+    }
 
     // MARK: - UI: Scroll + Stack
 
@@ -7784,19 +9243,52 @@ class GitPanelView: NSView {
     private let repoCreateBtn = NSButton()
     private var newRepoOverlayVisible = false
 
+    // MARK: - UI: Language-refreshable refs (locally created in build functions)
+
+    private var noRepoTitleLabel: NSTextField!
+    private var noRepoSubLabel: NSTextField!
+    private var noRepoInitBtn: NSButton!
+    private var commitHeaderLabel: NSTextField!
+    private var githubAuthTitleLabel: NSTextField!
+    private var newRepoTitleLabel: NSTextField!
+    private var newRepoVisLabel: NSTextField!
+    private var newRepoCancelBtn: NSButton!
+
     // MARK: - Init
+
+    override func layout() {
+        super.layout()
+        let bw: CGFloat = 18
+        let y = bounds.height - 28
+        moveUpBtn.frame   = NSRect(x: bounds.width - bw*2 - 10, y: y + 4, width: bw, height: bw)
+        moveDownBtn.frame = NSRect(x: bounds.width - bw   -  4, y: y + 4, width: bw, height: bw)
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor(calibratedWhite: 0.06, alpha: 0.85).cgColor
         setupScrollAndStack()
+
+        for (btn, symbol, sel) in [(moveUpBtn, "▲", #selector(moveUpTapped)),
+                                   (moveDownBtn, "▼", #selector(moveDownTapped))] {
+            btn.title = symbol
+            btn.font = NSFont.systemFont(ofSize: 9, weight: .medium)
+            btn.isBordered = false
+            btn.contentTintColor = NSColor(calibratedWhite: 0.55, alpha: 1)
+            btn.target = self; btn.action = sel
+            btn.isHidden = true
+            addSubview(btn)
+        }
+
         buildHeaderCard()
         buildNoRepoCard()
         buildFilesCard()
         buildCommitCard()
         buildGithubCard()
         buildNewRepoOverlay()
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshLanguage),
+                                               name: .appLanguageChanged, object: nil)
         if github.isAuthenticated {
             github.fetchUser { [weak self] _ in
                 DispatchQueue.main.async { self?.updateGithubCard() }
@@ -7805,6 +9297,57 @@ class GitPanelView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func moveUpTapped()   { onMoveUp?() }
+    @objc private func moveDownTapped() { onMoveDown?() }
+
+    // MARK: - Language Refresh
+
+    @objc private func refreshLanguage() {
+        // noRepoCard
+        noRepoTitleLabel.stringValue = Loc.noProjectYet
+        noRepoSubLabel.stringValue = Loc.clickToStartTracking
+        noRepoInitBtn.title = Loc.startTracking
+        // filesCard header
+        filesHeaderLabel.attributedStringValue = NSAttributedString(string: Loc.changedFiles, attributes: [
+            .font: NSFont.systemFont(ofSize: 9.5, weight: .semibold),
+            .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0),
+            .kern: 1.5
+        ])
+        // commitCard
+        commitHeaderLabel.attributedStringValue = NSAttributedString(string: Loc.whatChanged, attributes: [
+            .font: NSFont.systemFont(ofSize: 9.5, weight: .semibold),
+            .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0),
+            .kern: 1.5
+        ])
+        (commitField.cell as? NSTextFieldCell)?.placeholderString = Loc.commitPlaceholder
+        saveBtn.title = Loc.save
+        // githubCard - auth
+        githubAuthTitleLabel.stringValue = Loc.notConnectedGH
+        tokenField.placeholderString = Loc.pasteToken
+        tokenSaveBtn.title = Loc.connect
+        tokenLinkBtn.title = Loc.createToken
+        // githubCard - connected
+        uploadBtn.title = Loc.uploadGH
+        updateBtn.title = Loc.updateGH
+        disconnectBtn.title = Loc.logout
+        // newRepoOverlay
+        newRepoTitleLabel.stringValue = Loc.createProject
+        repoNameField.placeholderString = Loc.projectNamePlaceholder
+        newRepoVisLabel.stringValue = Loc.visibility
+        repoPublicBtn.title = Loc.public_
+        repoPrivateBtn.title = Loc.private_
+        repoCreateBtn.title = Loc.createAndUpload
+        newRepoCancelBtn.title = Loc.cancel
+        // statusLabel — re-apply current state
+        if !isGitRepo {
+            statusLabel.stringValue = Loc.noTracking
+        } else if fileEntries.isEmpty {
+            statusLabel.stringValue = Loc.allSaved
+        } else {
+            statusLabel.stringValue = Loc.filesChanged(fileEntries.count)
+        }
+    }
 
     // MARK: - Layout Helpers
 
@@ -7937,14 +9480,14 @@ class GitPanelView: NSView {
         noRepoCard.layer?.cornerRadius = 10
         noRepoCard.translatesAutoresizingMaskIntoConstraints = false
 
-        let title = makeLabel("No project tracking yet", size: 12, weight: .medium,
-                              color: NSColor(calibratedWhite: 0.6, alpha: 1.0))
-        let sub = makeLabel("Click the button to start tracking this folder.", size: 10.5, weight: .regular,
-                            color: NSColor(calibratedWhite: 0.4, alpha: 1.0))
-        let initBtn = makeBtn("Start Tracking", color: NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0),
-                              target: self, action: #selector(initRepoClicked))
+        noRepoTitleLabel = makeLabel(Loc.noProjectYet, size: 12, weight: .medium,
+                                     color: NSColor(calibratedWhite: 0.6, alpha: 1.0))
+        noRepoSubLabel = makeLabel(Loc.clickToStartTracking, size: 10.5, weight: .regular,
+                                   color: NSColor(calibratedWhite: 0.4, alpha: 1.0))
+        noRepoInitBtn = makeBtn(Loc.startTracking, color: NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0),
+                                target: self, action: #selector(initRepoClicked))
 
-        _ = addToCard(noRepoCard, views: [title, sub, initBtn], padding: 14, spacing: 8)
+        _ = addToCard(noRepoCard, views: [noRepoTitleLabel, noRepoSubLabel, noRepoInitBtn], padding: 14, spacing: 8)
 
         contentStack.addArrangedSubview(noRepoCard)
         fullWidthInStack(noRepoCard)
@@ -7961,7 +9504,7 @@ class GitPanelView: NSView {
 
         filesHeaderLabel.font = NSFont.systemFont(ofSize: 10, weight: .semibold)
         filesHeaderLabel.textColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
-        filesHeaderLabel.attributedStringValue = NSAttributedString(string: "CHANGED FILES", attributes: [
+        filesHeaderLabel.attributedStringValue = NSAttributedString(string: Loc.changedFiles, attributes: [
             .font: NSFont.systemFont(ofSize: 9.5, weight: .semibold),
             .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0),
             .kern: 1.5
@@ -8016,27 +9559,35 @@ class GitPanelView: NSView {
         commitCard.layer?.cornerRadius = 10
         commitCard.translatesAutoresizingMaskIntoConstraints = false
 
-        let label = NSTextField(labelWithString: "")
-        label.attributedStringValue = NSAttributedString(string: "WHAT DID YOU CHANGE?", attributes: [
+        commitHeaderLabel = NSTextField(labelWithString: "")
+        commitHeaderLabel.attributedStringValue = NSAttributedString(string: Loc.whatChanged, attributes: [
             .font: NSFont.systemFont(ofSize: 9.5, weight: .semibold),
             .foregroundColor: NSColor(calibratedWhite: 0.35, alpha: 1.0),
             .kern: 1.5
         ])
 
-        commitField.isEditable = true
+        let commitCell = VertCenteredTextFieldCell(textCell: "")
+        commitCell.isEditable = true
+        commitCell.isBezeled = false
+        commitCell.focusRingType = .none
+        commitCell.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        commitCell.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
+        commitCell.drawsBackground = false
+        commitCell.placeholderString = Loc.commitPlaceholder
+        commitCell.usesSingleLineMode = true
+        commitCell.wraps = false
+        commitCell.leftPad = 10
+        commitField.cell = commitCell
         commitField.isBordered = false
         commitField.focusRingType = .none
-        commitField.font = NSFont.systemFont(ofSize: 11, weight: .regular)
-        commitField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
         commitField.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06)
-        commitField.placeholderString = "z.B. Login-Seite verbessert, Bug behoben..."
         commitField.wantsLayer = true
         commitField.layer?.cornerRadius = 6
         commitField.translatesAutoresizingMaskIntoConstraints = false
         commitField.target = self
         commitField.action = #selector(saveClicked)
 
-        saveBtn.title = "💾  Save"
+        saveBtn.title = Loc.save
         saveBtn.bezelStyle = .rounded
         saveBtn.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         saveBtn.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
@@ -8054,7 +9605,7 @@ class GitPanelView: NSView {
         feedbackLabel.lineBreakMode = .byWordWrapping
         feedbackLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let inner = NSStackView(views: [label, commitField, saveBtn, feedbackLabel])
+        let inner = NSStackView(views: [commitHeaderLabel, commitField, saveBtn, feedbackLabel])
         inner.orientation = .vertical
         inner.alignment = .leading
         inner.spacing = 8
@@ -8087,8 +9638,8 @@ class GitPanelView: NSView {
         githubCard.translatesAutoresizingMaskIntoConstraints = false
 
         // === AUTH STACK (not logged in) ===
-        let authTitle = makeLabel("🔗  Not connected to GitHub", size: 11, weight: .medium,
-                                  color: NSColor(calibratedWhite: 0.55, alpha: 1.0))
+        githubAuthTitleLabel = makeLabel(Loc.notConnectedGH, size: 11, weight: .medium,
+                                         color: NSColor(calibratedWhite: 0.55, alpha: 1.0))
 
         tokenField.font = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
         tokenField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
@@ -8096,10 +9647,10 @@ class GitPanelView: NSView {
         tokenField.isBordered = false
         tokenField.focusRingType = .none
         tokenField.bezelStyle = .roundedBezel
-        tokenField.placeholderString = "Paste GitHub token (ghp_...)"
+        tokenField.placeholderString = Loc.pasteToken
         tokenField.translatesAutoresizingMaskIntoConstraints = false
 
-        tokenSaveBtn.title = "Connect"
+        tokenSaveBtn.title = Loc.connect
         tokenSaveBtn.bezelStyle = .inline
         tokenSaveBtn.font = NSFont.systemFont(ofSize: 10, weight: .medium)
         tokenSaveBtn.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
@@ -8107,7 +9658,7 @@ class GitPanelView: NSView {
         tokenSaveBtn.target = self
         tokenSaveBtn.action = #selector(saveTokenClicked)
 
-        tokenLinkBtn.title = "Token erstellen →"
+        tokenLinkBtn.title = Loc.createToken
         tokenLinkBtn.bezelStyle = .inline
         tokenLinkBtn.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
         tokenLinkBtn.contentTintColor = NSColor(calibratedWhite: 0.38, alpha: 1.0)
@@ -8125,7 +9676,7 @@ class GitPanelView: NSView {
         githubAuthStack.alignment = .leading
         githubAuthStack.spacing = 8
         githubAuthStack.translatesAutoresizingMaskIntoConstraints = false
-        githubAuthStack.addArrangedSubview(authTitle)
+        githubAuthStack.addArrangedSubview(githubAuthTitleLabel)
         githubAuthStack.addArrangedSubview(tokenField)
         githubAuthStack.addArrangedSubview(tokenRow)
 
@@ -8141,7 +9692,7 @@ class GitPanelView: NSView {
         githubSyncLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         githubSyncLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        uploadBtn.title = "↑  Upload to GitHub"
+        uploadBtn.title = Loc.uploadGH
         uploadBtn.bezelStyle = .rounded
         uploadBtn.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         uploadBtn.contentTintColor = NSColor(calibratedRed: 0.5, green: 0.78, blue: 1.0, alpha: 1.0)
@@ -8152,7 +9703,7 @@ class GitPanelView: NSView {
         uploadBtn.target = self
         uploadBtn.action = #selector(uploadClicked)
 
-        updateBtn.title = "↓  Aktualisieren"
+        updateBtn.title = Loc.updateGH
         updateBtn.bezelStyle = .rounded
         updateBtn.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         updateBtn.contentTintColor = NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.35, alpha: 1.0)
@@ -8163,7 +9714,7 @@ class GitPanelView: NSView {
         updateBtn.target = self
         updateBtn.action = #selector(updateClicked)
 
-        disconnectBtn.title = "Abmelden"
+        disconnectBtn.title = Loc.logout
         disconnectBtn.bezelStyle = .inline
         disconnectBtn.font = NSFont.systemFont(ofSize: 9, weight: .regular)
         disconnectBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1.0)
@@ -8231,8 +9782,8 @@ class GitPanelView: NSView {
         newRepoOverlay.isHidden = true
         addSubview(newRepoOverlay)
 
-        let title = makeLabel("Create new GitHub project", size: 13, weight: .semibold,
-                              color: NSColor(calibratedWhite: 0.85, alpha: 1.0))
+        newRepoTitleLabel = makeLabel(Loc.createProject, size: 13, weight: .semibold,
+                                      color: NSColor(calibratedWhite: 0.85, alpha: 1.0))
 
         repoNameField.isEditable = true
         repoNameField.isBordered = false
@@ -8240,16 +9791,16 @@ class GitPanelView: NSView {
         repoNameField.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
         repoNameField.textColor = NSColor(calibratedWhite: 0.85, alpha: 1.0)
         repoNameField.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.07)
-        repoNameField.placeholderString = "projekt-name"
+        repoNameField.placeholderString = Loc.projectNamePlaceholder
         repoNameField.wantsLayer = true
         repoNameField.layer?.cornerRadius = 6
         repoNameField.translatesAutoresizingMaskIntoConstraints = false
 
-        let visLabel = makeLabel("Sichtbarkeit:", size: 10.5, weight: .regular,
-                                 color: NSColor(calibratedWhite: 0.5, alpha: 1.0))
+        newRepoVisLabel = makeLabel(Loc.visibility, size: 10.5, weight: .regular,
+                                    color: NSColor(calibratedWhite: 0.5, alpha: 1.0))
 
         repoPublicBtn.setButtonType(.radio)
-        repoPublicBtn.title = "Public"
+        repoPublicBtn.title = Loc.public_
         repoPublicBtn.font = NSFont.systemFont(ofSize: 10.5, weight: .regular)
         repoPublicBtn.contentTintColor = NSColor(calibratedWhite: 0.65, alpha: 1.0)
         repoPublicBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -8258,7 +9809,7 @@ class GitPanelView: NSView {
         repoPublicBtn.state = .off
 
         repoPrivateBtn.setButtonType(.radio)
-        repoPrivateBtn.title = "Private"
+        repoPrivateBtn.title = Loc.private_
         repoPrivateBtn.font = NSFont.systemFont(ofSize: 10.5, weight: .regular)
         repoPrivateBtn.contentTintColor = NSColor(calibratedWhite: 0.65, alpha: 1.0)
         repoPrivateBtn.translatesAutoresizingMaskIntoConstraints = false
@@ -8266,13 +9817,13 @@ class GitPanelView: NSView {
         repoPrivateBtn.action = #selector(repoVisibilityChanged(_:))
         repoPrivateBtn.state = .on
 
-        let visRow = NSStackView(views: [visLabel, repoPublicBtn, repoPrivateBtn])
+        let visRow = NSStackView(views: [newRepoVisLabel, repoPublicBtn, repoPrivateBtn])
         visRow.orientation = .horizontal
         visRow.spacing = 12
         visRow.alignment = .centerY
         visRow.translatesAutoresizingMaskIntoConstraints = false
 
-        repoCreateBtn.title = "✔  Create & Upload"
+        repoCreateBtn.title = Loc.createAndUpload
         repoCreateBtn.bezelStyle = .rounded
         repoCreateBtn.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         repoCreateBtn.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.85, blue: 0.55, alpha: 1.0)
@@ -8283,10 +9834,10 @@ class GitPanelView: NSView {
         repoCreateBtn.target = self
         repoCreateBtn.action = #selector(createRepoClicked)
 
-        let cancelBtn = makeBtn("Cancel", color: NSColor(calibratedWhite: 0.45, alpha: 1.0),
-                                target: self, action: #selector(cancelNewRepo))
+        newRepoCancelBtn = makeBtn(Loc.cancel, color: NSColor(calibratedWhite: 0.45, alpha: 1.0),
+                                   target: self, action: #selector(cancelNewRepo))
 
-        let innerStack = NSStackView(views: [title, repoNameField, visRow, repoCreateBtn, cancelBtn])
+        let innerStack = NSStackView(views: [newRepoTitleLabel, repoNameField, visRow, repoCreateBtn, newRepoCancelBtn])
         innerStack.orientation = .vertical
         innerStack.alignment = .leading
         innerStack.spacing = 10
@@ -8305,7 +9856,7 @@ class GitPanelView: NSView {
             repoNameField.heightAnchor.constraint(equalToConstant: 28),
             repoCreateBtn.widthAnchor.constraint(equalTo: innerStack.widthAnchor),
             repoCreateBtn.heightAnchor.constraint(equalToConstant: 30),
-            cancelBtn.widthAnchor.constraint(equalTo: innerStack.widthAnchor),
+            newRepoCancelBtn.widthAnchor.constraint(equalTo: innerStack.widthAnchor),
         ])
     }
 
@@ -8380,6 +9931,8 @@ class GitPanelView: NSView {
     private func refresh() {
         let cwd = lastCwd
         guard !cwd.isEmpty else { return }
+        guard !isRefreshing else { return }
+        isRefreshing = true
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -8445,6 +9998,7 @@ class GitPanelView: NSView {
 
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
+                self.isRefreshing = false
                 self.isGitRepo = isRepo
                 self.currentBranch = branch
                 self.ahead = aheadCount
@@ -8454,6 +10008,15 @@ class GitPanelView: NSView {
 
                 self.updateLayout(projectName: projectName)
                 self.refreshGithubStatus(cwd: cwd)
+
+                // Intervall: 3s in Repos, 30s außerhalb
+                let newInterval: TimeInterval = isRepo ? 3.0 : 30.0
+                if let t = self.refreshTimer, abs(t.timeInterval - newInterval) > 0.1 {
+                    self.refreshTimer?.invalidate()
+                    self.refreshTimer = Timer.scheduledTimer(withTimeInterval: newInterval, repeats: true) { [weak self] _ in
+                        self?.refresh()
+                    }
+                }
             }
         }
     }
@@ -8470,13 +10033,13 @@ class GitPanelView: NSView {
         }
 
         if !isGitRepo {
-            statusLabel.stringValue = "No tracking — start it with the button"
+            statusLabel.stringValue = Loc.noTracking
             statusLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1.0)
         } else if fileEntries.isEmpty {
-            statusLabel.stringValue = "✅  All saved — nothing to do"
+            statusLabel.stringValue = Loc.allSaved
             statusLabel.textColor = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.5, alpha: 1.0)
         } else {
-            statusLabel.stringValue = "\(fileEntries.count) file\(fileEntries.count == 1 ? "" : "s") changed"
+            statusLabel.stringValue = Loc.filesChanged(fileEntries.count)
             statusLabel.textColor = NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.3, alpha: 1.0)
         }
 
@@ -8590,7 +10153,7 @@ class GitPanelView: NSView {
         githubAuthStack.isHidden = loggedIn
         githubConnectedStack.isHidden = !loggedIn
         if loggedIn {
-            let user = github.username ?? "verbunden"
+            let user = github.username ?? Loc.verbunden
             githubUserLabel.stringValue = "🔗  @\(user)"
         }
     }
@@ -8598,7 +10161,7 @@ class GitPanelView: NSView {
     private func refreshGithubStatus(cwd: String) {
         guard github.isAuthenticated, isGitRepo, hasRemote else {
             if isGitRepo && !hasRemote && github.isAuthenticated {
-                githubSyncLabel.stringValue = "Not yet uploaded"
+                githubSyncLabel.stringValue = Loc.notYetUploaded
                 githubSyncLabel.textColor = NSColor(calibratedWhite: 0.45, alpha: 1.0)
                 uploadBtn.isHidden = false
                 updateBtn.isHidden = true
@@ -8607,16 +10170,16 @@ class GitPanelView: NSView {
         }
 
         if ahead > 0 && behind > 0 {
-            githubSyncLabel.stringValue = "↑ \(ahead) zu senden, ↓ \(behind) zu holen"
+            githubSyncLabel.stringValue = Loc.aheadBehind(ahead, behind)
             githubSyncLabel.textColor = NSColor(calibratedRed: 1.0, green: 0.7, blue: 0.3, alpha: 1.0)
         } else if ahead > 0 {
-            githubSyncLabel.stringValue = "↑ \(ahead) change\(ahead == 1 ? "" : "s") to push"
+            githubSyncLabel.stringValue = Loc.aheadOnly(ahead)
             githubSyncLabel.textColor = NSColor(calibratedRed: 0.95, green: 0.8, blue: 0.35, alpha: 1.0)
         } else if behind > 0 {
-            githubSyncLabel.stringValue = "↓ \(behind) new change\(behind == 1 ? "" : "s") available"
+            githubSyncLabel.stringValue = Loc.behindOnly(behind)
             githubSyncLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.7, blue: 1.0, alpha: 1.0)
         } else {
-            githubSyncLabel.stringValue = "✓  Alles auf dem aktuellen Stand"
+            githubSyncLabel.stringValue = Loc.upToDate
             githubSyncLabel.textColor = NSColor(calibratedRed: 0.4, green: 0.8, blue: 0.5, alpha: 1.0)
         }
 
@@ -8660,7 +10223,7 @@ class GitPanelView: NSView {
     @objc private func saveClicked() {
         let msg = commitField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !msg.isEmpty else {
-            showFeedback("Please describe what you changed first.", success: false)
+            showFeedback(Loc.describeChanges, success: false)
             window?.makeFirstResponder(commitField)
             return
         }
@@ -8683,7 +10246,7 @@ class GitPanelView: NSView {
             DispatchQueue.main.async {
                 self.commitField.isEnabled = true
                 self.saveBtn.isEnabled = true
-                self.showFeedback(commit.success ? "✓  Saved: \(msg)" : "Error: \(commit.output)", success: commit.success)
+                self.showFeedback(commit.success ? "\(Loc.savedMsg): \(msg)" : "Error: \(commit.output)", success: commit.success)
                 self.refresh()
             }
         }
@@ -8704,7 +10267,7 @@ class GitPanelView: NSView {
             let result = self.runGitAction(["push", "-u", "origin", branch], cwd: cwd)
             DispatchQueue.main.async {
                 self.uploadBtn.isEnabled = true
-                self.showFeedback(result.success ? "✓  Uploaded!" : "Error: \(result.output)", success: result.success)
+                self.showFeedback(result.success ? Loc.uploaded : "Error: \(result.output)", success: result.success)
                 self.github.cache.lastFetch = .distantPast
                 self.refresh()
             }
@@ -8721,7 +10284,7 @@ class GitPanelView: NSView {
             let result = self.runGitAction(["pull"], cwd: cwd)
             DispatchQueue.main.async {
                 self.updateBtn.isEnabled = true
-                self.showFeedback(result.success ? "✓  Updated!" : "Error: \(result.output)", success: result.success)
+                self.showFeedback(result.success ? Loc.updated : "Error: \(result.output)", success: result.success)
                 self.github.cache.lastFetch = .distantPast
                 self.refresh()
             }
@@ -8733,7 +10296,7 @@ class GitPanelView: NSView {
     @objc private func saveTokenClicked() {
         let value = tokenField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
-        tokenSaveBtn.title = "Checking..."
+        tokenSaveBtn.title = Loc.checking
         tokenSaveBtn.isEnabled = false
         github.setToken(value)
         github.fetchUser { [weak self] username in
@@ -8744,9 +10307,9 @@ class GitPanelView: NSView {
                 self.refresh()
             } else {
                 self.github.logout()
-                self.showFeedback("Invalid token — please try again", success: false)
+                self.showFeedback(Loc.invalidToken, success: false)
             }
-            self.tokenSaveBtn.title = "Connect"
+            self.tokenSaveBtn.title = Loc.connect
             self.tokenSaveBtn.isEnabled = true
         }
     }
@@ -8803,7 +10366,7 @@ class GitPanelView: NSView {
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
 
         repoCreateBtn.isEnabled = false
-        repoCreateBtn.title = "Creating..."
+        repoCreateBtn.title = Loc.creating
 
         let cwd = lastCwd
         let branch = currentBranch.isEmpty ? "main" : currentBranch
@@ -8821,9 +10384,9 @@ class GitPanelView: NSView {
                     let push = self.runGitAction(["push", "-u", "origin", branch], cwd: cwd)
                     DispatchQueue.main.async {
                         self.repoCreateBtn.isEnabled = true
-                        self.repoCreateBtn.title = "✔  Create & Upload"
+                        self.repoCreateBtn.title = Loc.createAndUpload
                         self.cancelNewRepo()
-                        self.showFeedback(push.success ? "✓  Project created & uploaded to GitHub!" : "Repo created, push failed: \(push.output)", success: push.success)
+                        self.showFeedback(push.success ? Loc.projectCreated : "Repo created, push failed: \(push.output)", success: push.success)
                         self.github.cache.lastFetch = .distantPast
                         self.refresh()
                     }
@@ -8839,6 +10402,10 @@ class GitPanelView: NSView {
     deinit {
         refreshTimer?.invalidate()
         feedbackTimer?.invalidate()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        showSidebarContextMenu(in: self, event: event)
     }
 }
 
@@ -8864,6 +10431,52 @@ class ChromeCDPClient {
     private var messageId = 0
     private var pendingCallbacks: [Int: ([String: Any]?) -> Void] = [:]
     var onDisconnected: (() -> Void)?
+
+    /// The specific Chrome process listening on our debug port (found via lsof).
+    /// Used to activate the CORRECT Chrome instance (not the user's regular Chrome).
+    private(set) var managedApp: NSRunningApplication?
+
+    /// Finds the exact Chrome NSRunningApplication that is running with our debug port.
+    /// Uses `ps` to find the Chrome process that was launched with --remote-debugging-port=PORT.
+    /// Falls back to single-instance detection if ps fails.
+    func findManagedApp() {
+        let port = Self.debugPort
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            // Method 1: ps — find Chrome process started with our exact debug port arg
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/sh")
+            task.arguments = ["-c",
+                "ps axww -o pid=,args= | grep -F -- '--remote-debugging-port=\(port)' | grep -v grep | awk '{print $1}' | head -1"]
+            let pipe = Pipe()
+            task.standardOutput = pipe
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+            task.waitUntilExit()
+            let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if let pid = pid_t(output), pid > 0, let app = NSRunningApplication(processIdentifier: pid) {
+                DispatchQueue.main.async { self?.managedApp = app }
+                return
+            }
+            // Method 2: Fallback — if exactly one Chrome instance is running it must be ours
+            DispatchQueue.main.async { [weak self] in
+                let bundleIds = ["com.google.Chrome", "org.chromium.Chromium", "com.google.Chrome.canary"]
+                let allChromes = bundleIds.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
+                if allChromes.count == 1 { self?.managedApp = allChromes[0] }
+            }
+        }
+    }
+
+    /// Focuses a specific tab in Chrome via the HTTP /json/activate endpoint.
+    /// This ensures Chrome shows the correct tab regardless of which tab was last active.
+    func activateTarget(targetId: String, completion: @escaping () -> Void) {
+        guard let url = URL(string: "http://localhost:\(Self.debugPort)/json/activate/\(targetId)") else {
+            completion(); return
+        }
+        URLSession.shared.dataTask(with: URLRequest(url: url)) { _, _, _ in
+            DispatchQueue.main.async { completion() }
+        }.resume()
+    }
 
     /// Prüft ob Chrome mit --remote-debugging-port läuft (2s Timeout)
     func isAvailable(completion: @escaping (Bool) -> Void) {
@@ -8946,7 +10559,7 @@ class ChromeCDPClient {
     }
 
     /// Gibt die WebSocket-URL des ersten aktiven Page-Tabs zurück
-    func getActiveTabWS(completion: @escaping (String?) -> Void) {
+    func getActiveTabWS(preferredTargetId: String? = nil, completion: @escaping (String?) -> Void) {
         let urlStr = "http://localhost:\(Self.debugPort)/json/list"
         guard let url = URL(string: urlStr) else { completion(nil); return }
         var req = URLRequest(url: url)
@@ -8957,16 +10570,25 @@ class ChromeCDPClient {
                 DispatchQueue.main.async { completion(nil) }
                 return
             }
-            guard let tab = tabs.first(where: {
+            let pages = tabs.filter {
                 guard ($0["type"] as? String) == "page",
                       let tabURL = $0["url"] as? String else { return false }
                 // Skip Chrome-internal pages — JS injection doesn't work there
                 return tabURL.hasPrefix("http://") || tabURL.hasPrefix("https://") || tabURL == "about:blank"
-            }), let wsURL = tab["webSocketDebuggerUrl"] as? String else {
-                DispatchQueue.main.async { completion(nil) }
+            }
+            // Prefer the previously connected tab if it still exists
+            if let preferred = preferredTargetId,
+               let tab = pages.first(where: { ($0["id"] as? String) == preferred }),
+               let wsURL = tab["webSocketDebuggerUrl"] as? String {
+                DispatchQueue.main.async { completion(wsURL) }
                 return
             }
-            DispatchQueue.main.async { completion(wsURL) }
+            // Fall back to first available page tab
+            if let tab = pages.first, let wsURL = tab["webSocketDebuggerUrl"] as? String {
+                DispatchQueue.main.async { completion(wsURL) }
+            } else {
+                DispatchQueue.main.async { completion(nil) }
+            }
         }.resume()
     }
 
@@ -8978,7 +10600,21 @@ class ChromeCDPClient {
         webSocketTask = wsSession?.webSocketTask(with: url)
         webSocketTask?.resume()
         receiveLoop()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { completion(true) }
+        // Verify connectivity with a ping — don't optimistically assume success
+        var done = false
+        let task = webSocketTask
+        task?.sendPing { [weak self] error in
+            guard !done else { return }; done = true
+            DispatchQueue.main.async {
+                if error == nil { completion(true) }
+                else { self?.disconnect(); completion(false) }
+            }
+        }
+        // 3s hard timeout in case Chrome doesn't respond to ping
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            guard !done else { return }; done = true
+            self?.disconnect(); completion(false)
+        }
     }
 
     private func receiveLoop() {
@@ -9031,6 +10667,42 @@ class ChromeCDPClient {
                 }
             }
         }
+    }
+
+    /// Generic CDP command with callback
+    func cdpCommand(_ method: String, params: [String: Any] = [:], completion: @escaping ([String: Any]?) -> Void) {
+        guard let webSocketTask = webSocketTask else { DispatchQueue.main.async { completion(nil) }; return }
+        messageId += 1
+        let id = messageId
+        let msg: [String: Any] = ["id": id, "method": method, "params": params]
+        guard let data = try? JSONSerialization.data(withJSONObject: msg),
+              let text = String(data: data, encoding: .utf8) else { DispatchQueue.main.async { completion(nil) }; return }
+        pendingCallbacks[id] = completion
+        webSocketTask.send(.string(text)) { [weak self] error in
+            if error != nil { DispatchQueue.main.async { self?.pendingCallbacks.removeValue(forKey: id); completion(nil) } }
+        }
+    }
+
+    /// Sets Chrome window size and position via Browser.setWindowBounds
+    func setChromeWindowBounds(width: Int, height: Int, left: Int = 0, top: Int = 0, targetId: String) {
+        cdpCommand("Browser.getWindowForTarget", params: ["targetId": targetId]) { [weak self] result in
+            guard let windowId = result?["windowId"] as? Int else { return }
+            self?.cdpCommand("Browser.setWindowBounds", params: [
+                "windowId": windowId,
+                "bounds": ["width": width, "height": height, "left": left, "top": top]
+            ]) { _ in }
+        }
+    }
+
+    /// Navigates the connected tab to a URL (Page.navigate)
+    func navigate(to rawURL: String) {
+        var urlStr = rawURL.trimmingCharacters(in: .whitespaces)
+        if !urlStr.isEmpty && !urlStr.contains("://") {
+            let isLocal = urlStr.hasPrefix("localhost") || urlStr.hasPrefix("127.0.0.1") || urlStr.hasPrefix("0.0.0.0")
+            urlStr = (isLocal ? "http://" : "https://") + urlStr
+        }
+        guard !urlStr.isEmpty, let _ = URL(string: urlStr) else { return }
+        cdpCommand("Page.navigate", params: ["url": urlStr]) { _ in }
     }
 
     func disconnect() {
@@ -9098,7 +10770,839 @@ class ChromeCDPClient {
         }.resume()
     }
 }
+// MARK: - SSH Manager
+
+struct SSHProfile: Codable {
+    var id: String = UUID().uuidString
+    var label: String
+    var user: String
+    var host: String
+    var port: Int = 22
+    var keyFile: String = ""
+
+    var connectCommand: String {
+        var cmd = "ssh \(user)@\(host)"
+        if port != 22 { cmd += " -p \(port)" }
+        if !keyFile.isEmpty {
+            let expanded = keyFile.replacingOccurrences(of: "~", with: NSHomeDirectory())
+            cmd += " -i \(expanded)"
+        }
+        return cmd
+    }
+}
+
+// NSScrollView contentView with flipped coords so documentView starts at top
+private class FlippedClipView: NSClipView {
+    override var isFlipped: Bool { return true }
+}
+
+class SSHManagerView: NSView {
+    var onConnect: ((SSHProfile) -> Void)?
+    var onClose:   (() -> Void)?
+    var onMoveUp:  (() -> Void)?
+    var onMoveDown: (() -> Void)?
+    private var moveUpBtn: NSButton!
+    private var moveDownBtn: NSButton!
+
+    func setMoveButtonsEnabled(up: Bool, down: Bool) {
+        let visible = up || down
+        moveUpBtn?.isHidden   = !visible
+        moveDownBtn?.isHidden = !visible
+        moveUpBtn?.isEnabled   = up;   moveUpBtn?.alphaValue   = up   ? 1.0 : 0.35
+        moveDownBtn?.isEnabled = down; moveDownBtn?.alphaValue = down ? 1.0 : 0.35
+    }
+
+    private static let accent = NSColor(calibratedRed: 0.38, green: 0.85, blue: 0.50, alpha: 1.0)
+    private static let formH: CGFloat = 114
+
+    private var profiles: [SSHProfile] = []
+    private let listStack  = NSStackView()
+    private let scrollView = NSScrollView()
+    // Collapsible form wrapper — clips to animated height
+    private let formWrap  = NSView()
+    private let formInner = NSView()
+    private var nameField = NSTextField()   // optional label
+    private var connField = NSTextField()   // user@host[:port]
+    private var keyField  = NSTextField()   // optional key file
+    private var formTitleLbl = NSTextField(labelWithString: "")
+    private var formHeightConstraint: NSLayoutConstraint!
+    private var formVisible  = false
+    private var editingIndex: Int? = nil
+    private var addBtn: NSButton!
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 1).cgColor
+        loadProfiles()
+        setupUI()
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshSSHLanguage),
+                                               name: .appLanguageChanged, object: nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setupUI() {
+        // ── Header ──
+        let titleLabel = NSTextField(labelWithString: "⌗  SSH")
+        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+        titleLabel.textColor = Self.accent
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        let closeBtn = NSButton()
+        closeBtn.title = "✕"
+        closeBtn.font = NSFont.systemFont(ofSize: 10, weight: .regular)
+        closeBtn.isBordered = false
+        closeBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        closeBtn.target = self
+        closeBtn.action = #selector(closePanel)
+        closeBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(closeBtn)
+
+        moveDownBtn = NSButton()
+        moveDownBtn.title = "▼"
+        moveDownBtn.font = NSFont.systemFont(ofSize: 9, weight: .medium)
+        moveDownBtn.isBordered = false
+        moveDownBtn.contentTintColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+        moveDownBtn.target = self; moveDownBtn.action = #selector(moveDownTapped)
+        moveDownBtn.isHidden = true
+        moveDownBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(moveDownBtn)
+
+        moveUpBtn = NSButton()
+        moveUpBtn.title = "▲"
+        moveUpBtn.font = NSFont.systemFont(ofSize: 9, weight: .medium)
+        moveUpBtn.isBordered = false
+        moveUpBtn.contentTintColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+        moveUpBtn.target = self; moveUpBtn.action = #selector(moveUpTapped)
+        moveUpBtn.isHidden = true
+        moveUpBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(moveUpBtn)
+
+        addBtn = NSButton()
+        addBtn.title = "+"
+        addBtn.font = NSFont.systemFont(ofSize: 14, weight: .light)
+        addBtn.isBordered = false
+        addBtn.contentTintColor = Self.accent
+        addBtn.target = self
+        addBtn.action = #selector(toggleForm)
+        addBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(addBtn)
+
+        let sep = NSView()
+        sep.wantsLayer = true
+        sep.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.07).cgColor
+        sep.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(sep)
+
+        // ── Collapsible form (at TOP, slides down) ──
+        formWrap.wantsLayer = true
+        formWrap.layer?.masksToBounds = true
+        formWrap.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(formWrap)
+
+        formInner.wantsLayer = true
+        formInner.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.04).cgColor
+        formInner.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.07).cgColor
+        formInner.layer?.borderWidth = 1
+        formInner.translatesAutoresizingMaskIntoConstraints = false
+        formWrap.addSubview(formInner)
+
+        formTitleLbl.font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        formTitleLbl.textColor = Self.accent
+        formTitleLbl.stringValue = Loc.sshNewConn
+        formTitleLbl.translatesAutoresizingMaskIntoConstraints = false
+        formInner.addSubview(formTitleLbl)
+
+        func makeField(_ placeholder: String) -> NSTextField {
+            let f = NSTextField()
+            f.placeholderString = placeholder
+            f.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+            f.textColor = NSColor(calibratedWhite: 0.9, alpha: 1)
+            f.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.08)
+            f.isBordered = false
+            f.focusRingType = .none
+            f.wantsLayer = true
+            f.layer?.cornerRadius = 3
+            f.translatesAutoresizingMaskIntoConstraints = false
+            return f
+        }
+
+        nameField = makeField(Loc.sshNamePh)
+        connField = makeField(Loc.sshConnPh)
+        keyField  = makeField(Loc.sshKeyPh)
+
+        let saveBtn = NSButton()
+        saveBtn.title = Loc.save.components(separatedBy: "  ").last ?? Loc.save
+        saveBtn.font = NSFont.systemFont(ofSize: 9, weight: .semibold)
+        saveBtn.isBordered = false
+        saveBtn.contentTintColor = Self.accent
+        saveBtn.target = self
+        saveBtn.action = #selector(saveProfile)
+        saveBtn.translatesAutoresizingMaskIntoConstraints = false
+
+        let cancelBtn = NSButton()
+        cancelBtn.title = Loc.cancel
+        cancelBtn.font = NSFont.systemFont(ofSize: 9, weight: .regular)
+        cancelBtn.isBordered = false
+        cancelBtn.contentTintColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+        cancelBtn.target = self
+        cancelBtn.action = #selector(cancelForm)
+        cancelBtn.translatesAutoresizingMaskIntoConstraints = false
+
+        [nameField, connField, keyField, saveBtn, cancelBtn].forEach { formInner.addSubview($0) }
+
+        // Tab key navigation through form fields
+        nameField.nextKeyView = connField
+        connField.nextKeyView = keyField
+        keyField.nextKeyView  = nameField
+
+        // ── Scroll list (below form) ──
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        // Use flipped clip view so list content starts at top, not bottom
+        let flippedClip = FlippedClipView()
+        flippedClip.drawsBackground = false
+        scrollView.contentView = flippedClip
+        addSubview(scrollView)
+
+        listStack.orientation = .vertical
+        listStack.spacing = 1
+        listStack.alignment = .leading
+        listStack.edgeInsets = NSEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
+        listStack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = listStack
+        listStack.widthAnchor.constraint(equalTo: scrollView.widthAnchor).isActive = true
+        listStack.topAnchor.constraint(equalTo: flippedClip.topAnchor).isActive = true
+
+        formHeightConstraint = formWrap.heightAnchor.constraint(equalToConstant: 0)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+
+            closeBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            closeBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            closeBtn.widthAnchor.constraint(equalToConstant: 22),
+
+            moveDownBtn.trailingAnchor.constraint(equalTo: closeBtn.leadingAnchor, constant: -2),
+            moveDownBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            moveDownBtn.widthAnchor.constraint(equalToConstant: 18),
+
+            moveUpBtn.trailingAnchor.constraint(equalTo: moveDownBtn.leadingAnchor, constant: -2),
+            moveUpBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            moveUpBtn.widthAnchor.constraint(equalToConstant: 18),
+
+            addBtn.trailingAnchor.constraint(equalTo: moveUpBtn.leadingAnchor, constant: -4),
+            addBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            addBtn.widthAnchor.constraint(equalToConstant: 22),
+
+            sep.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
+            sep.leadingAnchor.constraint(equalTo: leadingAnchor),
+            sep.trailingAnchor.constraint(equalTo: trailingAnchor),
+            sep.heightAnchor.constraint(equalToConstant: 1),
+
+            formWrap.topAnchor.constraint(equalTo: sep.bottomAnchor),
+            formWrap.leadingAnchor.constraint(equalTo: leadingAnchor),
+            formWrap.trailingAnchor.constraint(equalTo: trailingAnchor),
+            formHeightConstraint,
+
+            // formInner anchored to the BOTTOM of formWrap so it slides in from above
+            formInner.bottomAnchor.constraint(equalTo: formWrap.bottomAnchor),
+            formInner.leadingAnchor.constraint(equalTo: formWrap.leadingAnchor),
+            formInner.trailingAnchor.constraint(equalTo: formWrap.trailingAnchor),
+            formInner.heightAnchor.constraint(equalToConstant: Self.formH),
+
+            formTitleLbl.topAnchor.constraint(equalTo: formInner.topAnchor, constant: 8),
+            formTitleLbl.leadingAnchor.constraint(equalTo: formInner.leadingAnchor, constant: 10),
+
+            nameField.topAnchor.constraint(equalTo: formTitleLbl.bottomAnchor, constant: 5),
+            nameField.leadingAnchor.constraint(equalTo: formInner.leadingAnchor, constant: 8),
+            nameField.trailingAnchor.constraint(equalTo: formInner.trailingAnchor, constant: -8),
+            nameField.heightAnchor.constraint(equalToConstant: 18),
+
+            connField.topAnchor.constraint(equalTo: nameField.bottomAnchor, constant: 4),
+            connField.leadingAnchor.constraint(equalTo: formInner.leadingAnchor, constant: 8),
+            connField.trailingAnchor.constraint(equalTo: formInner.trailingAnchor, constant: -8),
+            connField.heightAnchor.constraint(equalToConstant: 18),
+
+            keyField.topAnchor.constraint(equalTo: connField.bottomAnchor, constant: 4),
+            keyField.leadingAnchor.constraint(equalTo: formInner.leadingAnchor, constant: 8),
+            keyField.trailingAnchor.constraint(equalTo: formInner.trailingAnchor, constant: -8),
+            keyField.heightAnchor.constraint(equalToConstant: 18),
+
+            saveBtn.topAnchor.constraint(equalTo: keyField.bottomAnchor, constant: 7),
+            saveBtn.trailingAnchor.constraint(equalTo: formInner.trailingAnchor, constant: -8),
+            saveBtn.widthAnchor.constraint(greaterThanOrEqualToConstant: 36),
+            saveBtn.heightAnchor.constraint(equalToConstant: 16),
+
+            cancelBtn.centerYAnchor.constraint(equalTo: saveBtn.centerYAnchor),
+            cancelBtn.trailingAnchor.constraint(equalTo: saveBtn.leadingAnchor, constant: -8),
+            cancelBtn.widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            cancelBtn.heightAnchor.constraint(equalToConstant: 16),
+
+            scrollView.topAnchor.constraint(equalTo: formWrap.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+
+        rebuildList()
+        // Z-order fix: formWrap must be in front of scrollView so buttons are clickable
+        addSubview(formWrap)
+    }
+
+    private func rebuildList() {
+        listStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+
+        if profiles.isEmpty {
+            let empty = NSTextField(labelWithString: Loc.sshNoSaved)
+            empty.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+            empty.textColor = NSColor(calibratedWhite: 0.30, alpha: 1)
+            empty.alignment = .center
+            empty.translatesAutoresizingMaskIntoConstraints = false
+            let wrapper = NSView()
+            wrapper.translatesAutoresizingMaskIntoConstraints = false
+            wrapper.addSubview(empty)
+            NSLayoutConstraint.activate([
+                empty.centerXAnchor.constraint(equalTo: wrapper.centerXAnchor),
+                empty.centerYAnchor.constraint(equalTo: wrapper.centerYAnchor),
+                wrapper.heightAnchor.constraint(equalToConstant: 50),
+            ])
+            listStack.addArrangedSubview(wrapper)
+            return
+        }
+
+        for (i, profile) in profiles.enumerated() {
+            let row = SSHProfileRowView(profile: profile, index: i, accent: Self.accent)
+            row.translatesAutoresizingMaskIntoConstraints = false
+            row.onConnect = { [weak self] idx in
+                guard let self = self, idx < self.profiles.count else { return }
+                self.onConnect?(self.profiles[idx])
+            }
+            row.onEdit = { [weak self] idx in self?.startEditing(at: idx) }
+            row.onDelete = { [weak self] idx in
+                guard let self = self, idx < self.profiles.count else { return }
+                self.profiles.remove(at: idx)
+                self.saveProfiles()
+                self.rebuildList()
+            }
+            listStack.addArrangedSubview(row)
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: listStack.leadingAnchor),
+                row.trailingAnchor.constraint(equalTo: listStack.trailingAnchor),
+                row.heightAnchor.constraint(equalToConstant: 44),
+            ])
+        }
+    }
+
+    private func startEditing(at index: Int) {
+        guard index < profiles.count else { return }
+        let p = profiles[index]
+        editingIndex = index
+        formTitleLbl.stringValue = "EDIT CONNECTION"
+        nameField.stringValue = p.label
+        let portSuffix = p.port == 22 ? "" : ":\(p.port)"
+        connField.stringValue = "\(p.user)@\(p.host)\(portSuffix)"
+        keyField.stringValue  = p.keyFile
+        openForm()
+    }
+
+    @objc private func toggleForm() {
+        if formVisible {
+            cancelForm()
+        } else {
+            editingIndex = nil
+            formTitleLbl.stringValue = Loc.sshNewConn
+            [nameField, connField, keyField].forEach { $0.stringValue = "" }
+            openForm()
+        }
+    }
+
+    private func openForm() {
+        guard !formVisible else { return }
+        formVisible = true
+        addBtn.title = "−"
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.22
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1.0, 0.36, 1.0)
+            self.formHeightConstraint.animator().constant = Self.formH
+        }
+        window?.makeFirstResponder(nameField)
+    }
+
+    @objc private func cancelForm() {
+        formVisible = false
+        editingIndex = nil
+        addBtn.title = "+"
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            self.formHeightConstraint.animator().constant = 0
+        }
+        window?.makeFirstResponder(nil)
+    }
+
+    @objc private func saveProfile() {
+        let conn = connField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !conn.isEmpty else {
+            // Visual error hint
+            connField.layer?.borderColor = NSColor.systemRed.cgColor
+            connField.layer?.borderWidth = 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                self?.connField.layer?.borderWidth = 0
+            }
+            return
+        }
+
+        // Parse user@host:port
+        var user = "root", host = conn, port = 22
+        if conn.contains("@") {
+            let parts = conn.split(separator: "@", maxSplits: 1)
+            user = String(parts[0])
+            host = String(parts[1])
+        }
+        if host.contains(":") {
+            let parts = host.split(separator: ":", maxSplits: 1)
+            host = String(parts[0])
+            port = Int(String(parts[1])) ?? 22
+        }
+
+        let label = nameField.stringValue.trimmingCharacters(in: .whitespaces)
+        let key   = keyField.stringValue.trimmingCharacters(in: .whitespaces)
+
+        if let idx = editingIndex, idx < profiles.count {
+            profiles[idx] = SSHProfile(id: profiles[idx].id,
+                label: label, user: user, host: host, port: port, keyFile: key)
+        } else {
+            profiles.append(SSHProfile(label: label, user: user, host: host, port: port, keyFile: key))
+        }
+        saveProfiles()
+        rebuildList()
+        cancelForm()
+    }
+
+    @objc private func closePanel()    { onClose?() }
+    @objc private func moveUpTapped()   { onMoveUp?() }
+    @objc private func moveDownTapped() { onMoveDown?() }
+
+    @objc private func refreshSSHLanguage() {
+        formTitleLbl.stringValue = Loc.sshNewConn
+        nameField.placeholderString = Loc.sshNamePh
+        connField.placeholderString = Loc.sshConnPh
+        keyField.placeholderString  = Loc.sshKeyPh
+        rebuildList()
+    }
+
+    private func loadProfiles() {
+        guard let data = UserDefaults.standard.data(forKey: "sshProfiles"),
+              let loaded = try? JSONDecoder().decode([SSHProfile].self, from: data) else { return }
+        profiles = loaded
+    }
+
+    private func saveProfiles() {
+        if let data = try? JSONEncoder().encode(profiles) {
+            UserDefaults.standard.set(data, forKey: "sshProfiles")
+        }
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        showSidebarContextMenu(in: self, event: event)
+    }
+}
+
+// Profile row with hover-reveal action buttons
+private class SSHProfileRowView: NSView {
+    var onConnect: ((Int) -> Void)?
+    var onEdit:    ((Int) -> Void)?
+    var onDelete:  ((Int) -> Void)?
+
+    private let rowIndex: Int
+    private let accent: NSColor
+    private var trackingArea: NSTrackingArea?
+    private let deleteBtn = NSButton()
+    private let editBtn   = NSButton()
+
+    init(profile: SSHProfile, index: Int, accent: NSColor) {
+        self.rowIndex = index
+        self.accent   = accent
+        super.init(frame: .zero)
+        wantsLayer = true
+        setupRow(profile: profile)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setupRow(profile: SSHProfile) {
+        let nameLbl = NSTextField(labelWithString: profile.label.isEmpty ? profile.host : profile.label)
+        nameLbl.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        nameLbl.textColor = NSColor(calibratedWhite: 0.88, alpha: 1)
+        nameLbl.lineBreakMode = .byTruncatingTail
+        nameLbl.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(nameLbl)
+
+        let portStr = profile.port == 22 ? "" : ":\(profile.port)"
+        let sub = NSTextField(labelWithString: "\(profile.user)@\(profile.host)\(portStr)")
+        sub.font = NSFont.monospacedSystemFont(ofSize: 8, weight: .regular)
+        sub.textColor = NSColor(calibratedWhite: 0.42, alpha: 1)
+        sub.lineBreakMode = .byTruncatingTail
+        sub.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(sub)
+
+        let connectBtn = NSButton()
+        connectBtn.title = "▶"
+        connectBtn.font = NSFont.systemFont(ofSize: 10)
+        connectBtn.isBordered = false
+        connectBtn.contentTintColor = accent
+        connectBtn.target = self
+        connectBtn.action = #selector(connectTapped)
+        connectBtn.toolTip = "Connect in new tab"
+        connectBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(connectBtn)
+
+        editBtn.title = "✎"
+        editBtn.font = NSFont.systemFont(ofSize: 10)
+        editBtn.isBordered = false
+        editBtn.contentTintColor = NSColor(calibratedWhite: 0.50, alpha: 1)
+        editBtn.target = self
+        editBtn.action = #selector(editTapped)
+        editBtn.toolTip = "Edit"
+        editBtn.alphaValue = 0
+        editBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(editBtn)
+
+        deleteBtn.title = "✕"
+        deleteBtn.font = NSFont.systemFont(ofSize: 9)
+        deleteBtn.isBordered = false
+        deleteBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1)
+        deleteBtn.target = self
+        deleteBtn.action = #selector(deleteTapped)
+        deleteBtn.toolTip = "Delete"
+        deleteBtn.alphaValue = 0
+        deleteBtn.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(deleteBtn)
+
+        // Key indicator
+        if !profile.keyFile.isEmpty {
+            let keyLbl = NSTextField(labelWithString: "⚿ \(URL(fileURLWithPath: profile.keyFile).lastPathComponent)")
+            keyLbl.font = NSFont.monospacedSystemFont(ofSize: 7, weight: .regular)
+            keyLbl.textColor = NSColor(calibratedWhite: 0.40, alpha: 1)
+            keyLbl.toolTip = profile.keyFile
+            keyLbl.lineBreakMode = .byTruncatingTail
+            keyLbl.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(keyLbl)
+            NSLayoutConstraint.activate([
+                keyLbl.leadingAnchor.constraint(equalTo: sub.leadingAnchor),
+                keyLbl.topAnchor.constraint(equalTo: sub.bottomAnchor, constant: 1),
+                keyLbl.trailingAnchor.constraint(lessThanOrEqualTo: connectBtn.leadingAnchor, constant: -4),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
+            nameLbl.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            nameLbl.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+            nameLbl.trailingAnchor.constraint(lessThanOrEqualTo: connectBtn.leadingAnchor, constant: -4),
+
+            sub.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            sub.topAnchor.constraint(equalTo: nameLbl.bottomAnchor, constant: 2),
+            sub.trailingAnchor.constraint(lessThanOrEqualTo: connectBtn.leadingAnchor, constant: -4),
+
+            deleteBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            deleteBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            deleteBtn.widthAnchor.constraint(equalToConstant: 18),
+
+            editBtn.trailingAnchor.constraint(equalTo: deleteBtn.leadingAnchor, constant: -2),
+            editBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            editBtn.widthAnchor.constraint(equalToConstant: 18),
+
+            connectBtn.trailingAnchor.constraint(equalTo: editBtn.leadingAnchor, constant: -2),
+            connectBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            connectBtn.widthAnchor.constraint(equalToConstant: 22),
+        ])
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let ta = trackingArea { removeTrackingArea(ta) }
+        trackingArea = NSTrackingArea(rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        addTrackingArea(trackingArea!)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.05).cgColor
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            deleteBtn.animator().alphaValue = 1
+            editBtn.animator().alphaValue = 1
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        layer?.backgroundColor = NSColor.clear.cgColor
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.12
+            deleteBtn.animator().alphaValue = 0
+            editBtn.animator().alphaValue = 0
+        }
+    }
+
+    @objc private func connectTapped() { onConnect?(rowIndex) }
+    @objc private func editTapped()    { onEdit?(rowIndex) }
+    @objc private func deleteTapped()  { onDelete?(rowIndex) }
+}
+
+// MARK: - Color Theme Picker
+
+private class ColorThemeRow: NSView {
+    var onChanged: ((String, Int) -> Void)?
+    var onPreview: ((Int) -> Void)?
+
+    private var savedIdx: Int
+    private var buttons: [ColorChipButton] = []
+
+    private static let labels  = ["Dark", "Light", "OLED", "System"]
+    private static let chipBG: [NSColor] = [
+        NSColor(calibratedRed: 0.11, green: 0.11, blue: 0.13, alpha: 1.0),
+        NSColor(calibratedRed: 0.96, green: 0.96, blue: 0.97, alpha: 1.0),
+        NSColor(calibratedRed: 0.02, green: 0.02, blue: 0.02, alpha: 1.0),
+        NSColor(calibratedRed: 0.20, green: 0.20, blue: 0.24, alpha: 1.0),
+    ]
+    private static let chipFG: [NSColor] = [
+        NSColor(calibratedRed: 0.85, green: 0.85, blue: 0.85, alpha: 1.0),
+        NSColor(calibratedRed: 0.12, green: 0.12, blue: 0.14, alpha: 1.0),
+        NSColor(calibratedRed: 0.90, green: 0.90, blue: 0.90, alpha: 1.0),
+        NSColor(calibratedRed: 0.70, green: 0.70, blue: 0.75, alpha: 1.0),
+    ]
+
+    init(selected: Int) {
+        self.savedIdx = selected
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        setupButtons()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func setupButtons() {
+        var prev: NSView? = nil
+        for i in 0..<4 {
+            let btn = ColorChipButton(
+                title: Self.labels[i], index: i,
+                bg: Self.chipBG[i], fg: Self.chipFG[i],
+                isSelected: i == savedIdx
+            )
+            btn.target = self
+            btn.action = #selector(chipTapped(_:))
+            btn.onHoverEnter = { [weak self] idx in self?.onPreview?(idx) }
+            btn.onHoverExit  = { [weak self] in  self?.onPreview?(self?.savedIdx ?? 0) }
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(btn)
+            buttons.append(btn)
+            NSLayoutConstraint.activate([
+                btn.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+                btn.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
+                btn.widthAnchor.constraint(equalToConstant: 56),
+            ])
+            if let p = prev {
+                btn.leadingAnchor.constraint(equalTo: p.trailingAnchor, constant: 4).isActive = true
+            } else {
+                btn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8).isActive = true
+            }
+            prev = btn
+        }
+    }
+
+    @objc private func chipTapped(_ sender: NSButton) {
+        guard let btn = sender as? ColorChipButton else { return }
+        savedIdx = btn.themeIndex
+        buttons.forEach { $0.isSelected = $0.themeIndex == savedIdx }
+        onChanged?("colorTheme", savedIdx)
+    }
+}
+
+private class ColorChipButton: NSButton {
+    let themeIndex: Int
+    private let chipBG: NSColor
+    private let chipFG: NSColor
+    var isSelected: Bool = false { didSet { needsDisplay = true } }
+    var onHoverEnter: ((Int) -> Void)?
+    var onHoverExit:  (() -> Void)?
+    private var ta: NSTrackingArea?
+
+    init(title: String, index: Int, bg: NSColor, fg: NSColor, isSelected: Bool) {
+        self.themeIndex = index
+        self.chipBG = bg
+        self.chipFG = fg
+        super.init(frame: .zero)
+        self.title = title
+        self.isSelected = isSelected
+        isBordered = false
+        wantsLayer = true
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let r = bounds.insetBy(dx: 1, dy: 1)
+        let path = NSBezierPath(roundedRect: r, xRadius: 5, yRadius: 5)
+        chipBG.setFill(); path.fill()
+        let border: NSColor = isSelected
+            ? NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)
+            : NSColor(calibratedWhite: 1.0, alpha: 0.12)
+        border.setStroke()
+        path.lineWidth = isSelected ? 1.5 : 0.5
+        path.stroke()
+        let attr: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 9, weight: isSelected ? .semibold : .regular),
+            .foregroundColor: chipFG,
+        ]
+        let s = NSAttributedString(string: title, attributes: attr)
+        let sz = s.size()
+        s.draw(at: NSPoint(x: (bounds.width - sz.width) / 2, y: (bounds.height - sz.height) / 2))
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let ta { removeTrackingArea(ta) }
+        ta = NSTrackingArea(rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
+        addTrackingArea(ta!)
+    }
+
+    override func mouseEntered(with event: NSEvent) { onHoverEnter?(themeIndex) }
+    override func mouseExited(with event: NSEvent)  { onHoverExit?() }
+}
+
 // MARK: - WebPicker Sidebar View
+
+
+private final class VertCenteredTextFieldCell: NSTextFieldCell {
+    var leftPad: CGFloat = 0
+
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        let h = cellSize(forBounds: rect).height
+        let y = rect.minY + (rect.height - h) / 2
+        return NSRect(x: rect.minX + leftPad, y: y, width: rect.width - leftPad, height: h)
+    }
+
+    override func select(withFrame rect: NSRect, in cv: NSView, editor: NSText, delegate: Any?, start: Int, length: Int) {
+        super.select(withFrame: drawingRect(forBounds: rect), in: cv, editor: editor, delegate: delegate, start: start, length: length)
+    }
+
+    override func edit(withFrame rect: NSRect, in cv: NSView, editor: NSText, delegate: Any?, event: NSEvent?) {
+        super.edit(withFrame: drawingRect(forBounds: rect), in: cv, editor: editor, delegate: delegate, event: event)
+    }
+}
+
+private final class PickRowView: NSView {
+    var onHighlight: (() -> Void)?
+    var onUnhighlight: (() -> Void)?
+    var onRemove: (() -> Void)?
+    var onCopied: (() -> Void)?
+    private let xBtn = NSButton()
+    private let labelScroll = NSScrollView()
+    private var rowArea: NSTrackingArea?
+    private var xArea: NSTrackingArea?
+    private var html: String = ""
+
+    init(html: String, color: NSColor) {
+        self.html = html
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+
+        let dot = NSView()
+        dot.wantsLayer = true
+        dot.layer?.backgroundColor = color.cgColor
+        dot.layer?.cornerRadius = 4
+        dot.translatesAutoresizingMaskIntoConstraints = false
+
+        // Label inside a horizontal scroll view — swipe to read full HTML
+        let text = html.replacingOccurrences(of: "\n", with: " ")
+        let label = NSTextField(labelWithString: text)
+        label.font = NSFont.monospacedSystemFont(ofSize: 8, weight: .regular)
+        label.textColor = color.withAlphaComponent(0.9)
+        label.maximumNumberOfLines = 1
+        label.lineBreakMode = .byClipping
+        label.sizeToFit()
+
+        let labelH = label.frame.height
+
+        labelScroll.documentView = label
+        labelScroll.hasVerticalScroller = false
+        labelScroll.hasHorizontalScroller = true
+        labelScroll.autohidesScrollers = true
+        labelScroll.scrollerStyle = .overlay
+        labelScroll.drawsBackground = false
+        labelScroll.horizontalScrollElasticity = .allowed
+        labelScroll.verticalScrollElasticity = .none
+        labelScroll.translatesAutoresizingMaskIntoConstraints = false
+
+        xBtn.title = "×"; xBtn.isBordered = false
+        xBtn.font = NSFont.systemFont(ofSize: 11, weight: .light)
+        xBtn.contentTintColor = NSColor(calibratedWhite: 0.25, alpha: 1)
+        xBtn.translatesAutoresizingMaskIntoConstraints = false
+        xBtn.target = self; xBtn.action = #selector(removed)
+
+        addSubview(dot); addSubview(labelScroll); addSubview(xBtn)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 18),
+            dot.leadingAnchor.constraint(equalTo: leadingAnchor),
+            dot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            dot.widthAnchor.constraint(equalToConstant: 8),
+            dot.heightAnchor.constraint(equalToConstant: 8),
+            xBtn.trailingAnchor.constraint(equalTo: trailingAnchor),
+            xBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
+            xBtn.widthAnchor.constraint(equalToConstant: 14),
+            labelScroll.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 5),
+            labelScroll.trailingAnchor.constraint(equalTo: xBtn.leadingAnchor, constant: -2),
+            labelScroll.centerYAnchor.constraint(equalTo: centerYAnchor),
+            labelScroll.heightAnchor.constraint(equalToConstant: labelH),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let a = rowArea { removeTrackingArea(a) }
+        if let a = xArea   { xBtn.removeTrackingArea(a) }
+        rowArea = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self, userInfo: ["t": "row"])
+        xArea   = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self, userInfo: ["t": "x"])
+        addTrackingArea(rowArea!)
+        xBtn.addTrackingArea(xArea!)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if (event.trackingArea?.userInfo?["t"] as? String) == "x" {
+            xBtn.contentTintColor = NSColor(calibratedRed: 0.9, green: 0.35, blue: 0.35, alpha: 1)
+        } else {
+            layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.06).cgColor
+            alphaValue = 1.0
+            onHighlight?()
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if (event.trackingArea?.userInfo?["t"] as? String) == "x" {
+            xBtn.contentTintColor = NSColor(calibratedWhite: 0.25, alpha: 1)
+        } else {
+            layer?.backgroundColor = .clear
+            onUnhighlight?()
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let pt = convert(event.locationInWindow, from: nil)
+        if !xBtn.frame.contains(pt) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(html, forType: .string)
+            onCopied?()
+        }
+        super.mouseDown(with: event)
+    }
+
+    @objc private func removed() { onRemove?() }
+}
 
 class WebPickerSidebarView: NSView {
     private let cdp = ChromeCDPClient()
@@ -9107,7 +11611,20 @@ class WebPickerSidebarView: NSView {
     private var titlePollTimer: Timer?
     private var isConnected = false
     private var currentTargetId: String?
-    var onClose: (() -> Void)?
+    var onClose:    (() -> Void)?
+    var onConnected: (() -> Void)?
+    var onMoveUp:   (() -> Void)?
+    var onMoveDown: (() -> Void)?
+    private let moveUpBtn   = NSButton()
+    private let moveDownBtn = NSButton()
+
+    func setMoveButtonsEnabled(up: Bool, down: Bool) {
+        let visible = up || down
+        moveUpBtn.isHidden   = !visible
+        moveDownBtn.isHidden = !visible
+        moveUpBtn.isEnabled   = up;   moveUpBtn.alphaValue   = up   ? 1.0 : 0.35
+        moveDownBtn.isEnabled = down; moveDownBtn.alphaValue = down ? 1.0 : 0.35
+    }
 
     // Teal accent
     private static let teal = NSColor(calibratedRed: 0.24, green: 0.79, blue: 0.63, alpha: 1.0)
@@ -9115,27 +11632,65 @@ class WebPickerSidebarView: NSView {
     // UI elements
     private let titleLabel    = NSTextField(labelWithString: "◈  WebPicker")
     private let closeBtn      = NSButton()
+    private let debugLink1    = NSTextField(labelWithString: "chrome://inspect")
+    private let debugLink2    = NSTextField(labelWithString: "localhost:9222/json")
     private let titleSep      = NSView()
     private let statusDot     = NSView()
-    private let statusLabel   = NSTextField(labelWithString: "Not connected")
+    private let statusLabel   = NSTextField(labelWithString: "")
     private let pickBtn       = NSButton()
     private let connectBtn    = NSButton()
     private let disconnectBtn = NSButton()
-    private let previewSep    = NSView()
-    private let previewLabel  = NSTextField(labelWithString: "")
-    private let feedbackLabel = NSTextField(labelWithString: "")
+    private let urlBg         = NSView()
+    private let urlField      = NSTextField()
+    private let previewSep         = NSView()
+    private let picksHeaderLabel   = NSTextField(labelWithString: "")
+    private let picksSep           = NSView()
+    private let clearPicksBtn      = NSButton()
+    private let picksStack         = NSStackView()
+    private let feedbackLabel      = NSTextField(labelWithString: "")
+    private var statusLabelTrailingConnected: NSLayoutConstraint!
+    private var statusLabelTrailingDisconnected: NSLayoutConstraint!
+    private struct PickEntry { let id: Int; let html: String; let hex: String; let color: NSColor }
+    private var picks: [PickEntry] = []
+    private var nextPickId = 0
+
+    // ── URL history ──
+    private let suggestBox = NSView()
+    private var suggestBoxH: NSLayoutConstraint!
+    private static let historyKey = "webPickerURLHistory"
+    private static let historyMax = 15
+    private static let pickColors: [(NSColor, String)] = [
+        (NSColor(calibratedRed: 1.0,  green: 0.42, blue: 0.42, alpha: 1), "#FF6B6B"),
+        (NSColor(calibratedRed: 0.27, green: 0.72, blue: 0.82, alpha: 1), "#45B7D1"),
+        (NSColor(calibratedRed: 0.97, green: 0.86, blue: 0.44, alpha: 1), "#F7DC6F"),
+        (NSColor(calibratedRed: 0.59, green: 0.81, blue: 0.68, alpha: 1), "#96CEB4"),
+        (NSColor(calibratedRed: 0.87, green: 0.63, blue: 0.87, alpha: 1), "#DE99DE"),
+    ]
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 1).cgColor
         setupUI()
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshLanguage),
+                                               name: .appLanguageChanged, object: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    @objc private func refreshLanguage() {
+        picksHeaderLabel.stringValue = Loc.picks
+        clearPicksBtn.title = Loc.resetMarks
+        if isConnected {
+            disconnectBtn.title = Loc.disconnect
+            pickBtn.title = Loc.pickElement
+        } else {
+            showDisconnectedState()
+        }
+    }
+
     private func setupUI() {
         // ── Title bar ──
-        titleLabel.font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
+        titleLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         titleLabel.textColor = Self.teal
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(titleLabel)
@@ -9143,31 +11698,95 @@ class WebPickerSidebarView: NSView {
         closeBtn.title = "✕"
         closeBtn.isBordered = false; closeBtn.bezelStyle = .inline
         closeBtn.font = NSFont.systemFont(ofSize: 11)
-        closeBtn.contentTintColor = NSColor(calibratedWhite: 0.4, alpha: 1)
+        closeBtn.contentTintColor = NSColor(calibratedWhite: 0.35, alpha: 1)
         closeBtn.target = self; closeBtn.action = #selector(doClose)
         closeBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(closeBtn)
 
-        // Teal separator line under title
-        titleSep.wantsLayer = true
-        titleSep.layer?.backgroundColor = Self.teal.withAlphaComponent(0.35).cgColor
-        titleSep.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(titleSep)
+        for (btn, symbol, sel) in [(moveDownBtn, "▼", #selector(moveDownTapped)),
+                                   (moveUpBtn,   "▲", #selector(moveUpTapped))] {
+            btn.title = symbol
+            btn.font = NSFont.systemFont(ofSize: 9, weight: .medium)
+            btn.isBordered = false
+            btn.contentTintColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+            btn.target = self; btn.action = sel
+            btn.isHidden = true
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(btn)
+        }
+
+        // ── Debug links ──
+        for (lbl, tip) in [(debugLink1, "Open chrome://inspect in Chrome"),
+                           (debugLink2, "Open http://localhost:9222/json in browser")] {
+            lbl.font = NSFont.monospacedSystemFont(ofSize: 7.5, weight: .regular)
+            lbl.textColor = Self.teal.withAlphaComponent(0.45)
+            lbl.translatesAutoresizingMaskIntoConstraints = false
+            lbl.toolTip = tip
+            addSubview(lbl)
+        }
+        debugLink1.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(openChromeInspect)))
+        debugLink2.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(openDebugJSON)))
+
+        // ── Separators ──
+        for sep in [titleSep, previewSep] {
+            sep.wantsLayer = true
+            sep.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(sep)
+        }
+        titleSep.layer?.backgroundColor   = Self.teal.withAlphaComponent(0.25).cgColor
+        previewSep.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
 
         // ── Status row ──
         statusDot.wantsLayer = true
-        statusDot.layer?.cornerRadius = 4
+        statusDot.layer?.cornerRadius = 3.5
         statusDot.layer?.backgroundColor = NSColor.systemGray.cgColor
         statusDot.translatesAutoresizingMaskIntoConstraints = false
         addSubview(statusDot)
 
         statusLabel.font = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
-        statusLabel.textColor = NSColor(calibratedWhite: 0.55, alpha: 1)
+        statusLabel.textColor = NSColor(calibratedWhite: 0.6, alpha: 1)
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(statusLabel)
 
-        // ── Pick button (main action, teal styled) ──
-        pickBtn.title = "Pick Element"
+        // ── Disconnect button (in status row) ──
+        disconnectBtn.title = Loc.disconnect
+        disconnectBtn.bezelStyle = .inline
+        disconnectBtn.isBordered = false
+        disconnectBtn.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
+        disconnectBtn.contentTintColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+        disconnectBtn.isHidden = true
+        disconnectBtn.target = self; disconnectBtn.action = #selector(doDisconnect)
+        disconnectBtn.translatesAutoresizingMaskIntoConstraints = false
+        disconnectBtn.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self, userInfo: ["btn": "disconnect"]))
+        addSubview(disconnectBtn)
+
+        // ── URL bar ──
+        urlBg.wantsLayer = true
+        urlBg.layer?.backgroundColor = NSColor(calibratedWhite: 0.12, alpha: 1).cgColor
+        urlBg.layer?.cornerRadius = 5
+        urlBg.layer?.borderColor = NSColor(calibratedWhite: 0.20, alpha: 1).cgColor
+        urlBg.layer?.borderWidth = 0.5
+        urlBg.isHidden = true
+        urlBg.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(urlBg)
+
+        let urlCell = VertCenteredTextFieldCell(textCell: "")
+        urlCell.leftPad = 10
+        urlCell.placeholderString = "https://..."
+        urlCell.font = NSFont.systemFont(ofSize: 10)
+        urlCell.textColor = NSColor(calibratedWhite: 0.88, alpha: 1)
+        urlCell.isBezeled = false
+        urlCell.isEditable = true
+        urlCell.drawsBackground = false
+        urlCell.focusRingType = .none
+        urlField.cell = urlCell
+        urlField.translatesAutoresizingMaskIntoConstraints = false
+        urlField.target = self; urlField.action = #selector(navigateURL)
+        urlField.delegate = self
+        urlBg.addSubview(urlField)
+
+        // ── Pick button ──
+        pickBtn.title = Loc.pickElement
         pickBtn.bezelStyle = .rounded
         pickBtn.isEnabled = false
         pickBtn.font = NSFont.systemFont(ofSize: 11, weight: .medium)
@@ -9178,7 +11797,7 @@ class WebPickerSidebarView: NSView {
         styleTealButton(pickBtn, enabled: false)
 
         // ── Connect button ──
-        connectBtn.title = "  ⊕  Connect"
+        connectBtn.title = Loc.connectToChrome
         connectBtn.bezelStyle = .rounded
         connectBtn.font = NSFont.systemFont(ofSize: 10.5, weight: .medium)
         connectBtn.wantsLayer = true
@@ -9187,78 +11806,137 @@ class WebPickerSidebarView: NSView {
         addSubview(connectBtn)
         styleTealButton(connectBtn, enabled: true)
 
-        // ── Disconnect button ──
-        disconnectBtn.title = "⏏  Disconnect"
-        disconnectBtn.bezelStyle = .inline
-        disconnectBtn.isBordered = false
-        disconnectBtn.font = NSFont.systemFont(ofSize: 9.5, weight: .regular)
-        disconnectBtn.contentTintColor = NSColor(calibratedWhite: 0.4, alpha: 1)
-        disconnectBtn.isHidden = true
-        disconnectBtn.target = self; disconnectBtn.action = #selector(doDisconnect)
-        disconnectBtn.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(disconnectBtn)
+        // ── Picks section header ──
+        picksHeaderLabel.font = NSFont.systemFont(ofSize: 8.5, weight: .medium)
+        picksHeaderLabel.textColor = NSColor(calibratedWhite: 0.35, alpha: 1)
+        picksHeaderLabel.stringValue = Loc.picks
+        picksHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
+        picksHeaderLabel.isHidden = true
+        addSubview(picksHeaderLabel)
 
-        // ── Preview area ──
-        previewSep.wantsLayer = true
-        previewSep.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.06).cgColor
-        previewSep.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(previewSep)
+        clearPicksBtn.title = Loc.resetMarks
+        clearPicksBtn.isBordered = false
+        clearPicksBtn.font = NSFont.systemFont(ofSize: 8.5, weight: .regular)
+        clearPicksBtn.contentTintColor = NSColor(calibratedWhite: 0.38, alpha: 1)
+        clearPicksBtn.translatesAutoresizingMaskIntoConstraints = false
+        clearPicksBtn.isHidden = true
+        clearPicksBtn.target = self; clearPicksBtn.action = #selector(clearAllPicksAction)
+        addSubview(clearPicksBtn)
 
-        previewLabel.font = NSFont.monospacedSystemFont(ofSize: 8.5, weight: .regular)
-        previewLabel.textColor = NSColor(calibratedWhite: 0.4, alpha: 1)
-        previewLabel.maximumNumberOfLines = 4
-        previewLabel.lineBreakMode = .byTruncatingTail
-        previewLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(previewLabel)
+        picksSep.wantsLayer = true
+        picksSep.layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.07).cgColor
+        picksSep.translatesAutoresizingMaskIntoConstraints = false
+        picksSep.isHidden = true
+        addSubview(picksSep)
 
-        feedbackLabel.font = NSFont.systemFont(ofSize: 10, weight: .medium)
+        picksStack.orientation = .vertical
+        picksStack.spacing = 2
+        picksStack.alignment = .leading
+        picksStack.distribution = .fillProportionally
+        picksStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(picksStack)
+
+        feedbackLabel.font = NSFont.systemFont(ofSize: 9.5, weight: .medium)
         feedbackLabel.textColor = Self.teal
         feedbackLabel.isHidden = true
         feedbackLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(feedbackLabel)
 
         NSLayoutConstraint.activate([
-            // Title bar
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            closeBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            // ── Title bar ──
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            closeBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             closeBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
             closeBtn.widthAnchor.constraint(equalToConstant: 18),
+            moveDownBtn.trailingAnchor.constraint(equalTo: closeBtn.leadingAnchor, constant: -2),
+            moveDownBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            moveDownBtn.widthAnchor.constraint(equalToConstant: 16),
+            moveUpBtn.trailingAnchor.constraint(equalTo: moveDownBtn.leadingAnchor, constant: -1),
+            moveUpBtn.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
+            moveUpBtn.widthAnchor.constraint(equalToConstant: 16),
+            // ── Debug links ──
+            debugLink1.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            debugLink1.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3),
+            debugLink2.leadingAnchor.constraint(equalTo: debugLink1.trailingAnchor, constant: 6),
+            debugLink2.centerYAnchor.constraint(equalTo: debugLink1.centerYAnchor),
+            // ── Title separator ──
             titleSep.leadingAnchor.constraint(equalTo: leadingAnchor),
             titleSep.trailingAnchor.constraint(equalTo: trailingAnchor),
-            titleSep.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 7),
+            titleSep.topAnchor.constraint(equalTo: debugLink1.bottomAnchor, constant: 6),
             titleSep.heightAnchor.constraint(equalToConstant: 1),
-            // Status
+            // ── Status row ──
             statusDot.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             statusDot.topAnchor.constraint(equalTo: titleSep.bottomAnchor, constant: 10),
-            statusDot.widthAnchor.constraint(equalToConstant: 8),
-            statusDot.heightAnchor.constraint(equalToConstant: 8),
-            statusLabel.leadingAnchor.constraint(equalTo: statusDot.trailingAnchor, constant: 6),
+            statusDot.widthAnchor.constraint(equalToConstant: 7),
+            statusDot.heightAnchor.constraint(equalToConstant: 7),
+            statusLabel.leadingAnchor.constraint(equalTo: statusDot.trailingAnchor, constant: 7),
             statusLabel.centerYAnchor.constraint(equalTo: statusDot.centerYAnchor),
-            statusLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            // Pick button
+            // Disconnect — right of status row
+            disconnectBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            disconnectBtn.centerYAnchor.constraint(equalTo: statusDot.centerYAnchor),
+            // ── URL bar ──
+            urlBg.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            urlBg.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            urlBg.topAnchor.constraint(equalTo: statusDot.bottomAnchor, constant: 8),
+            urlBg.heightAnchor.constraint(equalToConstant: 24),
+            urlField.leadingAnchor.constraint(equalTo: urlBg.leadingAnchor, constant: 10),
+            urlField.trailingAnchor.constraint(equalTo: urlBg.trailingAnchor, constant: -8),
+            urlField.topAnchor.constraint(equalTo: urlBg.topAnchor),
+            urlField.bottomAnchor.constraint(equalTo: urlBg.bottomAnchor),
+            // ── Pick / Connect buttons (below urlBg) ──
             pickBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             pickBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            pickBtn.topAnchor.constraint(equalTo: statusDot.bottomAnchor, constant: 9),
-            // Connect button (same position as pickBtn — only one visible at a time)
+            pickBtn.topAnchor.constraint(equalTo: urlBg.bottomAnchor, constant: 8),
             connectBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             connectBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            connectBtn.topAnchor.constraint(equalTo: statusDot.bottomAnchor, constant: 9),
-            // Disconnect button (small, below pick)
-            disconnectBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            disconnectBtn.topAnchor.constraint(equalTo: pickBtn.bottomAnchor, constant: 4),
-            // Preview sep
+            connectBtn.topAnchor.constraint(equalTo: urlBg.bottomAnchor, constant: 8),
+            // ── Section separator ──
             previewSep.leadingAnchor.constraint(equalTo: leadingAnchor),
             previewSep.trailingAnchor.constraint(equalTo: trailingAnchor),
-            previewSep.topAnchor.constraint(equalTo: disconnectBtn.bottomAnchor, constant: 7),
+            previewSep.topAnchor.constraint(equalTo: pickBtn.bottomAnchor, constant: 10),
             previewSep.heightAnchor.constraint(equalToConstant: 1),
-            // Preview
-            previewLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            previewLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            previewLabel.topAnchor.constraint(equalTo: previewSep.bottomAnchor, constant: 6),
-            feedbackLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            feedbackLabel.topAnchor.constraint(equalTo: previewLabel.bottomAnchor, constant: 4),
+            // ── Picks header ──
+            picksHeaderLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            picksHeaderLabel.topAnchor.constraint(equalTo: previewSep.bottomAnchor, constant: 8),
+            clearPicksBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            clearPicksBtn.centerYAnchor.constraint(equalTo: picksHeaderLabel.centerYAnchor),
+            // ── Picks divider ──
+            picksSep.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            picksSep.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            picksSep.topAnchor.constraint(equalTo: picksHeaderLabel.bottomAnchor, constant: 5),
+            picksSep.heightAnchor.constraint(equalToConstant: 1),
+            // ── Picks list ──
+            picksStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            picksStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            picksStack.topAnchor.constraint(equalTo: picksSep.bottomAnchor, constant: 5),
+            // ── Feedback ──
+            feedbackLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            feedbackLabel.topAnchor.constraint(equalTo: picksStack.bottomAnchor, constant: 6),
         ])
+
+        // Dynamic statusLabel trailing — narrow when disconnect visible, full when hidden
+        statusLabelTrailingConnected    = statusLabel.trailingAnchor.constraint(equalTo: disconnectBtn.leadingAnchor, constant: -4)
+        statusLabelTrailingDisconnected = statusLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12)
+        statusLabelTrailingDisconnected.isActive = true
+
+        // ── URL history dropdown (added after other views to stay on top) ──
+        suggestBox.wantsLayer = true
+        suggestBox.layer?.backgroundColor = NSColor(calibratedWhite: 0.10, alpha: 0.97).cgColor
+        suggestBox.layer?.cornerRadius = 5
+        suggestBox.layer?.borderColor = NSColor(calibratedWhite: 0.22, alpha: 1).cgColor
+        suggestBox.layer?.borderWidth = 0.5
+        suggestBox.isHidden = true
+        suggestBox.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(suggestBox)
+
+        NSLayoutConstraint.activate([
+            suggestBox.leadingAnchor.constraint(equalTo: urlBg.leadingAnchor),
+            suggestBox.trailingAnchor.constraint(equalTo: urlBg.trailingAnchor),
+            suggestBox.topAnchor.constraint(equalTo: urlBg.bottomAnchor, constant: 2),
+        ])
+        suggestBoxH = suggestBox.heightAnchor.constraint(equalToConstant: 0)
+        suggestBoxH.isActive = true
 
         showDisconnectedState()
     }
@@ -9279,42 +11957,55 @@ class WebPickerSidebarView: NSView {
 
     private func showDisconnectedState() {
         setStatusDot(.systemGray)
-        setStatusText("Not connected")
+        setStatusText(Loc.notConnected)
         pickBtn.isHidden = true
+        pickBtn.title = Loc.pickElement
         disconnectBtn.isHidden = true
+        disconnectBtn.title = Loc.disconnect
         connectBtn.isHidden = false
         connectBtn.isEnabled = true
+        connectBtn.title = Loc.connectToChrome
         styleTealButton(connectBtn, enabled: true)
+        urlBg.isHidden = true; urlField.stringValue = ""
+        hideSuggestions()
         previewSep.isHidden = true
-        previewLabel.stringValue = ""
+        clearPickList()
         feedbackLabel.isHidden = true
+        statusLabelTrailingConnected?.isActive = false
+        statusLabelTrailingDisconnected?.isActive = true
     }
 
     private func showConnectingState(_ msg: String) {
         setStatusDot(.systemOrange)
         setStatusText(msg)
+        urlBg.isHidden = true
         pickBtn.isHidden = true
         disconnectBtn.isHidden = true
         connectBtn.isHidden = false
         connectBtn.isEnabled = false
         styleTealButton(connectBtn, enabled: false)
         previewSep.isHidden = true
+        statusLabelTrailingConnected?.isActive = false
+        statusLabelTrailingDisconnected?.isActive = true
     }
 
     private func showConnectedState(hostname: String, navigating: Bool) {
         if navigating {
             setStatusDot(.systemOrange)
-            setStatusText("Navigate to a website")
+            setStatusText(Loc.navigateTo)
         } else {
             setStatusDot(Self.teal)
-            setStatusText(hostname.isEmpty ? "Verbunden" : hostname)
+            setStatusText(hostname.isEmpty ? Loc.verbunden : hostname)
         }
         connectBtn.isHidden = true
+        urlBg.isHidden = false
         pickBtn.isHidden = false
         pickBtn.isEnabled = !navigating
         styleTealButton(pickBtn, enabled: !navigating)
         disconnectBtn.isHidden = false
         previewSep.isHidden = false
+        statusLabelTrailingDisconnected?.isActive = false
+        statusLabelTrailingConnected?.isActive = true
     }
 
     private func setStatusDot(_ color: NSColor) {
@@ -9336,8 +12027,8 @@ class WebPickerSidebarView: NSView {
         pollTimer?.invalidate(); pollTimer = nil
         tabSearchTimer?.invalidate(); tabSearchTimer = nil
         titlePollTimer?.invalidate(); titlePollTimer = nil
-        pickBtn.title = "Pick Element"
-        showConnectingState("Connecting...")
+        pickBtn.title = Loc.pickElement
+        showConnectingState(Loc.connecting)
         cdp.isAvailable { [weak self] available in
             guard let self = self else { return }
             if available {
@@ -9356,8 +12047,8 @@ class WebPickerSidebarView: NSView {
         titlePollTimer?.invalidate(); titlePollTimer = nil
         isConnected = false
         cdp.onDisconnected = nil
-        pickBtn.title = "Pick Element"
-        let cleanup = "window.__qtPickerActive = false; document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';}); void 0;"
+        pickBtn.title = Loc.pickElement
+        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
         if let tid = currentTargetId {
             cdp.evaluate(cleanup) { [weak self] _ in
                 self?.cdp.closeTab(targetId: tid) {
@@ -9368,23 +12059,41 @@ class WebPickerSidebarView: NSView {
             cdp.evaluate(cleanup) { [weak self] _ in self?.cdp.disconnect() }
         }
         currentTargetId = nil
+        // Clear saved target so next Connect() doesn't try to reconnect to the now-closed tab
+        UserDefaults.standard.removeObject(forKey: "webPickerLastTargetId")
+        showDisconnectedState()
+    }
+
+    /// Closes the WebSocket but keeps the Chrome tab alive for later reconnection.
+    /// Called when the sidebar is hidden — tab ID is preserved in UserDefaults for next connect().
+    func softDisconnect() {
+        pollTimer?.invalidate(); pollTimer = nil
+        tabSearchTimer?.invalidate(); tabSearchTimer = nil
+        titlePollTimer?.invalidate(); titlePollTimer = nil
+        isConnected = false
+        cdp.onDisconnected = nil
+        pickBtn.title = Loc.pickElement
+        let cleanup = "window.__qtPickerActive=false;[0,1,2,3,4,5,6,7,8,9].forEach(function(i){var e=document.querySelector('[data-qt-pick-'+i+']');if(e)e.removeAttribute('data-qt-pick-'+i);});document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
+        cdp.evaluate(cleanup) { [weak self] _ in self?.cdp.disconnect() }
+        // NOTE: currentTargetId kept intact in UserDefaults so connect() can reconnect to same tab
         showDisconnectedState()
     }
 
     private func connectToTab() {
-        cdp.getActiveTabWS { [weak self] wsURL in
+        let preferred = UserDefaults.standard.string(forKey: "webPickerLastTargetId")
+        cdp.getActiveTabWS(preferredTargetId: preferred) { [weak self] wsURL in
             guard let self = self else { return }
             if let wsURL = wsURL {
                 self.doConnect(to: wsURL)
             } else {
-                self.showConnectingState("Opening new tab...")
+                self.showConnectingState(Loc.openingTab)
                 self.cdp.createBlankTab { [weak self] newWS in
                     guard let self = self else { return }
                     if let newWS = newWS {
                         self.doConnect(to: newWS)
                     } else {
                         self.showDisconnectedState()
-                        self.setStatusText("Chrome not reachable")
+                        self.setStatusText(Loc.chromeNotReachable)
                     }
                 }
             }
@@ -9406,19 +12115,31 @@ class WebPickerSidebarView: NSView {
 
     private func doConnect(to wsURL: String) {
         currentTargetId = URL(string: wsURL)?.lastPathComponent
+        if let tid = currentTargetId {
+            UserDefaults.standard.set(tid, forKey: "webPickerLastTargetId")
+        }
         tabSearchTimer?.invalidate(); tabSearchTimer = nil
         cdp.onDisconnected = { [weak self] in
-            self?.handleUnexpectedDisconnect(message: "Connection lost")
+            self?.handleUnexpectedDisconnect(message: Loc.connectionLost)
         }
         cdp.connect(wsURL: wsURL) { [weak self] success in
             guard let self = self else { return }
             if success {
                 self.isConnected = true
+                self.cdp.findManagedApp()
+                if let tid = self.currentTargetId {
+                    let h = Int(NSScreen.main?.frame.height ?? 900)
+                    // Small delay so Chrome is fully ready to accept window bounds
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                        self?.cdp.setChromeWindowBounds(width: 777, height: h, left: 0, top: 0, targetId: tid)
+                    }
+                }
+                self.onConnected?()
                 self.refreshTabTitle()
                 self.startTitlePolling()
             } else {
                 self.showDisconnectedState()
-                self.setStatusText("Connection failed")
+                self.setStatusText(Loc.connectionFailed)
                 self.scheduleTabSearch()
             }
         }
@@ -9433,7 +12154,7 @@ class WebPickerSidebarView: NSView {
                 self.showConnectedState(hostname: hostname, navigating: hostname.isEmpty)
             } else {
                 // nil = tab not found in /json/list — tab was closed externally
-                self.handleUnexpectedDisconnect(message: "Tab was closed")
+                self.handleUnexpectedDisconnect(message: Loc.tabClosed)
             }
         }
     }
@@ -9457,28 +12178,73 @@ class WebPickerSidebarView: NSView {
 
     @objc private func doConnectBtn() { connect() }
     @objc private func doDisconnect() { disconnect() }
-    @objc private func doClose() { onClose?() }
+    @objc private func doClose()       { onClose?() }
+    @objc private func moveUpTapped()   { onMoveUp?() }
+    @objc private func moveDownTapped() { onMoveDown?() }
+
+    @objc private func openChromeInspect() {
+        // Open chrome://inspect in the managed Chrome via CDP navigate, or fall back to NSWorkspace
+        if isConnected, let tid = currentTargetId {
+            cdp.activateTarget(targetId: tid) { [weak self] in
+                _ = self?.cdp.managedApp?.activate(options: [])
+            }
+            cdp.evaluate("window.open('chrome://inspect','_blank');void 0;") { _ in }
+        } else {
+            NSWorkspace.shared.open(URL(string: "chrome://inspect")!)
+        }
+    }
+
+    @objc private func openDebugJSON() {
+        let port = ChromeCDPClient.debugPort
+        NSWorkspace.shared.open(URL(string: "http://localhost:\(port)/json")!)
+    }
 
     // MARK: - Picker
 
+    @objc private func navigateURL() {
+        let text = urlField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        addToHistory(text)
+        hideSuggestions()
+        cdp.navigate(to: text)
+        window?.makeFirstResponder(nil)
+    }
+
     @objc private func startPicking() {
-        pickBtn.title = "Waiting for click..."; pickBtn.isEnabled = false
+        pickBtn.title = Loc.waitingForClick; pickBtn.isEnabled = false
         styleTealButton(pickBtn, enabled: false)
-        previewLabel.stringValue = ""; feedbackLabel.isHidden = true
-        cdp.evaluate("window.__qtPickedHTML = null; window.__qtPickerActive = false; void 0;") { _ in }
+        feedbackLabel.isHidden = true
+        cdp.evaluate("var p=document.querySelector('[data-qt-picked]');if(p)p.removeAttribute('data-qt-picked');window.__qtPickedHTML=null;window.__qtPickerActive=false;void 0;") { _ in }
         let pickerJS = """
         (function() {
           if (window.__qtPickerActive) return 'already_active';
           window.__qtPickerActive = true; window.__qtPickedHTML = null;
+
+          // CSS :hover works even when Chrome is NOT the focused app (browser tracks mouse for cursor).
+          // This is the primary highlight mechanism — no Chrome activation needed.
+          var style = document.createElement('style');
+          style.id = '__qt_picker_style';
+          style.textContent = '* { cursor: crosshair !important; } *:hover { outline: 2px solid #4ECDC4 !important; outline-offset: -2px !important; }';
+          document.head.appendChild(style);
+
+          // When Chrome HAS focus: JS mouseover upgrades to random per-element colors.
+          var palette = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#DDA0DD','#F7DC6F','#FF9F7F','#87CEEB','#BB8FCE','#82E0AA'];
+          function randColor() { return palette[Math.floor(Math.random()*palette.length)]; }
           var last = null;
           function over(e) {
+            if (!window.__qtPickerActive) return;
             if (last && last !== e.target) { last.style.outline=''; last.style.outlineOffset=''; }
-            last = e.target; last.style.outline='2px solid #3DC9A0'; last.style.outlineOffset='-2px';
+            last = e.target;
+            last.style.outline='2px solid '+randColor(); last.style.outlineOffset='-2px';
           }
-          function out(e) { if (e.target===last){e.target.style.outline='';e.target.style.outlineOffset='';} }
+          function out(e) { if(e.target===last){e.target.style.outline='';e.target.style.outlineOffset='';} }
           function pick(e) {
             e.preventDefault(); e.stopPropagation();
             if (last){last.style.outline='';last.style.outlineOffset='';}
+            var s=document.getElementById('__qt_picker_style'); if(s)s.remove();
+            var prev=document.querySelector('[data-qt-picked]');
+            if(prev) prev.removeAttribute('data-qt-picked');
+            e.target.setAttribute('data-qt-picked','1');
             window.__qtPickedHTML=e.target.outerHTML; window.__qtPickerActive=false;
             document.removeEventListener('mouseover',over,true);
             document.removeEventListener('mouseout',out,true);
@@ -9491,8 +12257,9 @@ class WebPickerSidebarView: NSView {
         })();
         """
         cdp.evaluate(pickerJS) { [weak self] _ in
-            self?.pollTimer?.invalidate()
-            self?.pollTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            self.pollTimer?.invalidate()
+            self.pollTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
                 self?.cdp.evaluate("typeof window.__qtPickedHTML!=='undefined'&&window.__qtPickedHTML!==null?window.__qtPickedHTML:null") { [weak self] result in
                     guard let self = self,
                           let inner = (result?["result"] as? [String: Any]),
@@ -9504,10 +12271,80 @@ class WebPickerSidebarView: NSView {
         }
     }
 
+    private func highlightPick(id: Int, hex: String) {
+        let js = "var el=document.querySelector('[data-qt-pick-\(id)]');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.outline='3px solid \(hex)';el.style.outlineOffset='-3px';}void 0;"
+        cdp.evaluate(js) { _ in }
+    }
+
+    private func unhighlightPick(id: Int) {
+        let js = "var el=document.querySelector('[data-qt-pick-\(id)]');if(el){el.style.outline='';el.style.outlineOffset='';}void 0;"
+        cdp.evaluate(js) { _ in }
+    }
+
+    private func clearPickList() {
+        picks.removeAll()
+        nextPickId = 0
+        picksStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        picksHeaderLabel.isHidden = true
+        picksSep.isHidden = true
+        clearPicksBtn.isHidden = true
+    }
+
+    @objc private func clearAllPicksAction() {
+        // Reset browser: deactivate picker, remove style tag + inline outlines only
+        // data-qt-pick-N attributes stay so hover-highlight keeps working
+        let js = "window.__qtPickerActive=false;var s=document.getElementById('__qt_picker_style');if(s)s.remove();document.querySelectorAll('*').forEach(function(el){el.style.outline='';el.style.outlineOffset='';});void 0;"
+        cdp.evaluate(js) { _ in }
+        // Cancel active pick poll if running
+        pollTimer?.invalidate(); pollTimer = nil
+        if !pickBtn.isEnabled {
+            pickBtn.title = Loc.pickElement; pickBtn.isEnabled = true
+            styleTealButton(pickBtn, enabled: true)
+        }
+        // List stays — only browser marks are cleared
+    }
+
     private func onHTMLPicked(_ html: String) {
-        pickBtn.title = "Pick Element"; pickBtn.isEnabled = true
+        // FIFO: remove oldest if already at 5
+        if picks.count >= 5, let oldest = picks.first {
+            cdp.evaluate("var e=document.querySelector('[data-qt-pick-\(oldest.id)]');if(e)e.removeAttribute('data-qt-pick-\(oldest.id)');") { _ in }
+            picks.removeFirst()
+            picksStack.arrangedSubviews.first?.removeFromSuperview()
+        }
+
+        let id = nextPickId; nextPickId += 1
+        let (color, hex) = Self.pickColors[id % Self.pickColors.count]
+        picks.append(PickEntry(id: id, html: html, hex: hex, color: color))
+
+        // Relabel data-qt-picked → data-qt-pick-N in browser
+        cdp.evaluate("var e=document.querySelector('[data-qt-picked]');if(e){e.removeAttribute('data-qt-picked');e.setAttribute('data-qt-pick-\(id)','1');}") { _ in }
+
+        // Add row to picks list
+        let row = PickRowView(html: html, color: color)
+        row.onHighlight   = { [weak self] in self?.highlightPick(id: id, hex: hex) }
+        row.onUnhighlight = { [weak self] in self?.unhighlightPick(id: id) }
+        row.onCopied      = { [weak self] in self?.showCopiedFeedback() }
+        row.onRemove = { [weak self] in
+            guard let self = self else { return }
+            self.cdp.evaluate("var e=document.querySelector('[data-qt-pick-\(id)]');if(e)e.removeAttribute('data-qt-pick-\(id)');") { _ in }
+            self.picks.removeAll { $0.id == id }
+            row.removeFromSuperview()
+        }
+        picksStack.addArrangedSubview(row)
+        row.widthAnchor.constraint(equalTo: picksStack.widthAnchor).isActive = true
+
+        // Show picks header if first pick
+        if picks.count == 1 {
+            picksHeaderLabel.isHidden = false
+            picksSep.isHidden = false
+            clearPicksBtn.isHidden = false
+        }
+
+        pickBtn.title = Loc.pickElement
+        pickBtn.isEnabled = true
         styleTealButton(pickBtn, enabled: true)
-        previewLabel.stringValue = String(html.prefix(300))
+
+        // Copy to clipboard
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(html, forType: .string)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -9517,10 +12354,88 @@ class WebPickerSidebarView: NSView {
             vDown?.flags = .maskCommand; vUp?.flags = .maskCommand
             vDown?.post(tap: .cghidEventTap); vUp?.post(tap: .cghidEventTap)
         }
-        feedbackLabel.stringValue = "✓ Copied!"; feedbackLabel.isHidden = false
+        showCopiedFeedback()
+    }
+
+    private func showCopiedFeedback() {
+        feedbackLabel.stringValue = "✓ Copied!"
+        feedbackLabel.isHidden = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
             self?.feedbackLabel.isHidden = true
         }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if (event.trackingArea?.userInfo?["btn"] as? String) == "disconnect" {
+            disconnectBtn.contentTintColor = NSColor(calibratedRed: 0.9, green: 0.35, blue: 0.35, alpha: 1)
+        }
+    }
+    override func mouseExited(with event: NSEvent) {
+        if (event.trackingArea?.userInfo?["btn"] as? String) == "disconnect" {
+            disconnectBtn.contentTintColor = NSColor(calibratedWhite: 0.5, alpha: 1)
+        }
+    }
+
+    // MARK: - URL History
+
+    private func loadHistory() -> [String] {
+        UserDefaults.standard.stringArray(forKey: Self.historyKey) ?? []
+    }
+
+    private func addToHistory(_ rawURL: String) {
+        var url = rawURL.trimmingCharacters(in: .whitespaces)
+        if url.isEmpty { return }
+        if !url.contains("://") {
+            let isLocal = url.hasPrefix("localhost") || url.hasPrefix("127.0.0.1") || url.hasPrefix("0.0.0.0")
+            url = (isLocal ? "http://" : "https://") + url
+        }
+        var h = loadHistory().filter { $0 != url }
+        h.insert(url, at: 0)
+        UserDefaults.standard.set(Array(h.prefix(Self.historyMax)), forKey: Self.historyKey)
+    }
+
+    private func updateSuggestions(query: String) {
+        suggestBox.subviews.forEach { $0.removeFromSuperview() }
+        let history = loadHistory()
+        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let filtered: [String] = q.isEmpty
+            ? Array(history.prefix(5))
+            : history.filter { $0.lowercased().contains(q) }.prefix(5).map { $0 }
+        guard !filtered.isEmpty else { suggestBox.isHidden = true; return }
+
+        let rowH: CGFloat = 22
+        for (i, url) in filtered.enumerated() {
+            let btn = NSButton(title: url, target: self, action: #selector(selectSuggestion(_:)))
+            btn.isBordered = false
+            btn.alignment = .left
+            btn.font = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
+            btn.contentTintColor = NSColor(calibratedWhite: 0.72, alpha: 1)
+            btn.lineBreakMode = .byTruncatingMiddle
+            btn.identifier = NSUserInterfaceItemIdentifier(rawValue: url)
+            btn.translatesAutoresizingMaskIntoConstraints = false
+            suggestBox.addSubview(btn)
+            NSLayoutConstraint.activate([
+                btn.leadingAnchor.constraint(equalTo: suggestBox.leadingAnchor, constant: 4),
+                btn.trailingAnchor.constraint(equalTo: suggestBox.trailingAnchor, constant: -4),
+                btn.topAnchor.constraint(equalTo: suggestBox.topAnchor, constant: CGFloat(i) * rowH + 2),
+                btn.heightAnchor.constraint(equalToConstant: rowH),
+            ])
+        }
+        suggestBoxH.constant = CGFloat(filtered.count) * rowH + 4
+        suggestBox.isHidden = false
+    }
+
+    private func hideSuggestions() {
+        suggestBox.isHidden = true
+        suggestBox.subviews.forEach { $0.removeFromSuperview() }
+    }
+
+    @objc private func selectSuggestion(_ sender: NSButton) {
+        let url = sender.identifier?.rawValue ?? sender.title
+        urlField.stringValue = url
+        hideSuggestions()
+        cdp.navigate(to: url)
+        window?.makeFirstResponder(nil)
     }
 
     deinit {
@@ -9528,6 +12443,27 @@ class WebPickerSidebarView: NSView {
         tabSearchTimer?.invalidate()
         titlePollTimer?.invalidate()
         cdp.disconnect()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        showSidebarContextMenu(in: self, event: event)
+    }
+}
+
+extension WebPickerSidebarView: NSTextFieldDelegate {
+    func controlTextDidBeginEditing(_ obj: Notification) {
+        guard (obj.object as? NSTextField) === urlField else { return }
+        updateSuggestions(query: urlField.stringValue)
+    }
+    func controlTextDidChange(_ obj: Notification) {
+        guard (obj.object as? NSTextField) === urlField else { return }
+        updateSuggestions(query: urlField.stringValue)
+    }
+    func controlTextDidEndEditing(_ obj: Notification) {
+        guard (obj.object as? NSTextField) === urlField else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.hideSuggestions()
+        }
     }
 }
 
@@ -9883,10 +12819,54 @@ class HelpViewer {
         showLines(lines, relativeTo: parent)
     }
 
-    private func showLines(_ lines: [StyledLine], relativeTo parent: NSWindow) {
+    func showChangelog(relativeTo parent: NSWindow) {
+        let md = Self.findFile("CHANGELOG.md")
+        guard !md.isEmpty else { return }
+        showLines(Self.renderMarkdown(md), relativeTo: parent, winW: 720)
+    }
+
+    private func showLines(_ lines: [StyledLine], relativeTo parent: NSWindow, winW: CGFloat = 640) {
         if let existing = window, existing.isVisible { close(); return }
 
-        let winW: CGFloat = 560, winH: CGFloat = 240
+        let winH: CGFloat = 240
+        let pad: CGFloat = 20
+        let textW = winW - pad * 2
+
+        let font      = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
+        let boldFont  = NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
+        let titleFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
+        let h2Font    = NSFont.monospacedSystemFont(ofSize: 11, weight: .bold)
+        let minH: CGFloat = 15
+
+        func attrsFor(_ style: LineStyle) -> [NSAttributedString.Key: Any] {
+            switch style {
+            case .title:          return [.font: titleFont, .foregroundColor: NSColor.white]
+            case .heading:        return [.font: h2Font,    .foregroundColor: NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)]
+            case .subheading:     return [.font: boldFont,  .foregroundColor: NSColor(calibratedRed: 0.6, green: 0.8, blue: 1.0, alpha: 1.0)]
+            case .bold:           return [.font: boldFont,  .foregroundColor: NSColor(calibratedWhite: 0.85, alpha: 1.0)]
+            case .code:           return [.font: font,      .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.75, blue: 0.45, alpha: 1.0)]
+            case .separator:      return [.font: font,      .foregroundColor: NSColor(calibratedWhite: 0.2, alpha: 1.0)]
+            case .tableRow:       return [.font: font,      .foregroundColor: NSColor(calibratedWhite: 0.65, alpha: 1.0)]
+            case .badge:          return [.font: boldFont,  .foregroundColor: NSColor(calibratedRed: 0.3, green: 0.6, blue: 0.9, alpha: 1.0)]
+            case .alertImportant: return [.font: boldFont,  .foregroundColor: NSColor(calibratedRed: 1.0, green: 0.45, blue: 0.35, alpha: 1.0)]
+            case .alertNote:      return [.font: font,      .foregroundColor: NSColor(calibratedRed: 0.35, green: 0.6, blue: 1.0, alpha: 1.0)]
+            case .alertTip:       return [.font: font,      .foregroundColor: NSColor(calibratedRed: 0.3, green: 0.8, blue: 0.5, alpha: 1.0)]
+            case .listItem:       return [.font: font,      .foregroundColor: NSColor(calibratedWhite: 0.6, alpha: 1.0)]
+            case .tree:           return [.font: font,      .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.65, blue: 0.8, alpha: 1.0)]
+            case .normal:         return [.font: font,      .foregroundColor: NSColor(calibratedWhite: 0.55, alpha: 1.0)]
+            }
+        }
+
+        // Pre-pass: compute each line's actual wrapped height
+        let lineHeights: [CGFloat] = lines.map { line in
+            guard !line.text.isEmpty else { return minH }
+            let as_ = NSAttributedString(string: line.text, attributes: attrsFor(line.style))
+            let rect = as_.boundingRect(with: NSSize(width: textW, height: .greatestFiniteMagnitude),
+                                        options: [.usesLineFragmentOrigin, .usesFontLeading])
+            return max(minH, ceil(rect.height) + 2)
+        }
+        let totalH = lineHeights.reduce(0, +) + 60
+
         let px = parent.frame.midX - winW / 2
         let py = parent.frame.midY - winH / 2
         let win = HelpViewerWindow(
@@ -9913,61 +12893,24 @@ class HelpViewer {
         clip.layer?.masksToBounds = true
         glass.addSubview(clip)
 
-        let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular)
-        let boldFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
-        let titleFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
-        let h2Font = NSFont.monospacedSystemFont(ofSize: 11, weight: .bold)
-        let lineH: CGFloat = 15
-        let totalH = lineH * CGFloat(lines.count) + 60
-
         // Content startet oben — ASCII-Art sofort sichtbar
         let content = NSView(frame: NSRect(x: 0, y: -(totalH - winH), width: winW, height: totalH))
         content.wantsLayer = true
         clip.addSubview(content)
 
-        var y = totalH - lineH - 30
-        for line in lines {
+        var y = totalH - 30
+        for (i, line) in lines.enumerated() {
+            let h = lineHeights[i]
+            y -= h
             let lbl = NSTextField(labelWithString: "")
             lbl.isEditable = false
             lbl.isBordered = false
             lbl.drawsBackground = false
-            lbl.lineBreakMode = .byTruncatingTail
-
-            let attrs: [NSAttributedString.Key: Any]
-            switch line.style {
-            case .title:
-                attrs = [.font: titleFont, .foregroundColor: NSColor.white]
-            case .heading:
-                attrs = [.font: h2Font, .foregroundColor: NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)]
-            case .subheading:
-                attrs = [.font: boldFont, .foregroundColor: NSColor(calibratedRed: 0.6, green: 0.8, blue: 1.0, alpha: 1.0)]
-            case .bold:
-                attrs = [.font: boldFont, .foregroundColor: NSColor(calibratedWhite: 0.85, alpha: 1.0)]
-            case .code:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.75, blue: 0.45, alpha: 1.0)]
-            case .separator:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedWhite: 0.2, alpha: 1.0)]
-            case .tableRow:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedWhite: 0.65, alpha: 1.0)]
-            case .badge:
-                attrs = [.font: boldFont, .foregroundColor: NSColor(calibratedRed: 0.3, green: 0.6, blue: 0.9, alpha: 1.0)]
-            case .alertImportant:
-                attrs = [.font: boldFont, .foregroundColor: NSColor(calibratedRed: 1.0, green: 0.45, blue: 0.35, alpha: 1.0)]
-            case .alertNote:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedRed: 0.35, green: 0.6, blue: 1.0, alpha: 1.0)]
-            case .alertTip:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedRed: 0.3, green: 0.8, blue: 0.5, alpha: 1.0)]
-            case .listItem:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedWhite: 0.6, alpha: 1.0)]
-            case .tree:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedRed: 0.5, green: 0.65, blue: 0.8, alpha: 1.0)]
-            case .normal:
-                attrs = [.font: font, .foregroundColor: NSColor(calibratedWhite: 0.55, alpha: 1.0)]
-            }
-            lbl.attributedStringValue = NSAttributedString(string: line.text, attributes: attrs)
-            lbl.frame = NSRect(x: 20, y: y, width: winW - 40, height: lineH)
+            lbl.lineBreakMode = .byWordWrapping
+            lbl.maximumNumberOfLines = 0
+            lbl.attributedStringValue = NSAttributedString(string: line.text, attributes: attrsFor(line.style))
+            lbl.frame = NSRect(x: pad, y: y, width: textW, height: h)
             content.addSubview(lbl)
-            y -= lineH
         }
 
         // Fade-Masken oben und unten
@@ -10083,7 +13026,7 @@ class HelpViewer {
 
     static func findFile(_ name: String) -> String {
         // Load from embedded binary section first
-        let sectionMap = ["COMMANDS.md": "__commands"]
+        let sectionMap = ["COMMANDS.md": "__commands", "CHANGELOG.md": "__changelog"]
         if let sect = sectionMap[name] {
             let header = #dsohandle.assumingMemoryBound(to: mach_header_64.self)
             var size: UInt = 0
@@ -10188,40 +13131,45 @@ class HelpViewer {
     private static func flushTable(_ rows: inout [[String]], isHeader: inout [Bool], to result: inout [StyledLine]) {
         guard !rows.isEmpty else { return }
         let colCount = rows.map(\.count).max() ?? 0
-        var colWidths = [Int](repeating: 0, count: colCount)
-        for row in rows {
-            for (i, cell) in row.enumerated() where i < colCount {
-                colWidths[i] = max(colWidths[i], displayWidth(cell))
-            }
-        }
-        // Add padding to each column
-        for i in 0..<colCount { colWidths[i] += 2 }
 
-        // Top border: ┌───┬───┐
-        let topLine = "  ┌" + colWidths.map { String(repeating: "─", count: $0) }.joined(separator: "┬") + "┐"
-        result.append(StyledLine(text: topLine, style: .separator))
+        // Skip purely decorative columns (only emojis/symbols, max display width ≤ 2)
+        var skipCols = Set<Int>()
+        for ci in 0..<colCount {
+            let maxW = rows.compactMap { ci < $0.count ? displayWidth($0[ci]) : nil }.max() ?? 0
+            if maxW <= 2 { skipCols.insert(ci) }
+        }
+        let activeCols = (0..<colCount).filter { !skipCols.contains($0) }
+        guard !activeCols.isEmpty else { rows.removeAll(); isHeader.removeAll(); return }
+
+        // Max content width per active column
+        var colWidths = [Int: Int]()
+        for ci in activeCols {
+            colWidths[ci] = rows.compactMap { ci < $0.count ? displayWidth($0[ci]) : nil }.max() ?? 0
+        }
+        let lastActive = activeCols.last!
+
+        result.append(StyledLine(text: "", style: .normal))
 
         for (ri, row) in rows.enumerated() {
             var parts: [String] = []
-            for ci in 0..<colCount {
+            for ci in activeCols {
                 let cell = ci < row.count ? row[ci] : ""
-                parts.append(" " + padToWidth(cell, width: colWidths[ci] - 1))
+                // Pad all but last column so the │ separators align
+                parts.append(ci == lastActive ? cell : padToWidth(cell, width: colWidths[ci] ?? 0))
             }
-            let formatted = "  │" + parts.joined(separator: "│") + "│"
+            let text = "  " + parts.joined(separator: "  │  ")
             let style: LineStyle = isHeader[ri] ? .subheading : .tableRow
-            result.append(StyledLine(text: formatted, style: style))
+            result.append(StyledLine(text: text, style: style))
 
-            // Header separator: ├───┼───┤
+            // Thin rule under the header row
             if isHeader[ri] {
-                let sep = "  ├" + colWidths.map { String(repeating: "─", count: $0) }.joined(separator: "┼") + "┤"
-                result.append(StyledLine(text: sep, style: .separator))
+                let ruleW = activeCols.dropLast().reduce(0) { $0 + (colWidths[$1] ?? 0) + 5 }
+                           + (colWidths[lastActive] ?? 0)
+                result.append(StyledLine(text: "  " + String(repeating: "─", count: ruleW + 2), style: .separator))
             }
         }
 
-        // Bottom border: └───┴───┘
-        let botLine = "  └" + colWidths.map { String(repeating: "─", count: $0) }.joined(separator: "┴") + "┘"
-        result.append(StyledLine(text: botLine, style: .separator))
-
+        result.append(StyledLine(text: "", style: .normal))
         rows.removeAll()
         isHeader.removeAll()
     }
@@ -10828,9 +13776,11 @@ class CommandPaletteView: NSView, NSTextFieldDelegate {
 struct GitHubRelease {
     let tagName: String
     let downloadURL: URL
+    let checksumURL: URL?  // optional .sha256 sidecar for integrity verification
 }
 
 class UpdateChecker {
+    private let allowedUpdateHosts = ["github.com", "objects.githubusercontent.com"]
     private var downloadTask: URLSessionDownloadTask?
     private var progressObservation: NSKeyValueObservation?
 
@@ -10845,8 +13795,21 @@ class UpdateChecker {
                 DispatchQueue.main.async { completion(.failure(error)) }
                 return
             }
-            guard let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            if let httpResp = response as? HTTPURLResponse, httpResp.statusCode != 200 {
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "UpdateChecker", code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(httpResp.statusCode)"])))
+                }
+                return
+            }
+            guard let data = data else {
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "UpdateChecker", code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "No data received from server"])))
+                }
+                return
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tagName = json["tag_name"] as? String,
                   let assets = json["assets"] as? [[String: Any]],
                   let firstAsset = assets.first(where: {
@@ -10855,13 +13818,21 @@ class UpdateChecker {
                   let urlStr = firstAsset["browser_download_url"] as? String,
                   let downloadURL = URL(string: urlStr)
             else {
-                DispatchQueue.main.async { completion(.success(nil)) }
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "UpdateChecker", code: 0,
+                        userInfo: [NSLocalizedDescriptionKey: "Failed to parse release data from server"])))
+                }
                 return
             }
 
+            // Look for a .sha256 sidecar asset (same name as zip + ".sha256")
+            let zipName = firstAsset["name"] as? String ?? ""
+            let sha256Asset = assets.first(where: { ($0["name"] as? String) == zipName + ".sha256" })
+            let checksumURL = (sha256Asset?["browser_download_url"] as? String).flatMap { URL(string: $0) }
+
             if isNewerVersion(remote: tagName, local: kAppVersion) {
                 DispatchQueue.main.async {
-                    completion(.success(GitHubRelease(tagName: tagName, downloadURL: downloadURL)))
+                    completion(.success(GitHubRelease(tagName: tagName, downloadURL: downloadURL, checksumURL: checksumURL)))
                 }
             } else {
                 DispatchQueue.main.async { completion(.success(nil)) }
@@ -10872,6 +13843,19 @@ class UpdateChecker {
     func downloadAndInstall(release: GitHubRelease,
                             onProgress: @escaping (Double) -> Void,
                             onComplete: @escaping (Result<Void, Error>) -> Void) {
+        // [P1] Verify HTTPS scheme — reject plain HTTP downloads
+        guard release.downloadURL.scheme == "https" else {
+            onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Download URL must use HTTPS"])))
+            return
+        }
+        // [P0] Verify download URL is from a trusted GitHub host
+        let host = release.downloadURL.host ?? ""
+        guard allowedUpdateHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else {
+            onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Download URL from unexpected host: \(host)"])))
+            return
+        }
         let task = URLSession.shared.downloadTask(with: release.downloadURL) { [weak self] tmpURL, _, error in
             self?.progressObservation = nil
             if let error = error {
@@ -10889,17 +13873,42 @@ class UpdateChecker {
             let zipPath = FileManager.default.temporaryDirectory
                 .appendingPathComponent("quickTerminal_update_\(UUID().uuidString).zip")
             do {
-                if FileManager.default.fileExists(atPath: zipPath.path) {
-                    try FileManager.default.removeItem(at: zipPath)
-                }
+                try? FileManager.default.removeItem(at: zipPath)
                 try FileManager.default.copyItem(at: tmpURL, to: zipPath)
             } catch {
                 DispatchQueue.main.async { onComplete(.failure(error)) }
                 return
             }
 
-            DispatchQueue.main.async {
-                self?.installUpdate(from: zipPath, completion: onComplete)
+            // [P0] If a checksum sidecar was provided, verify before install
+            // [P2] Validate checksumURL with same HTTPS + host allowlist as downloadURL
+            let trustedHosts = self?.allowedUpdateHosts ?? []
+            let validChecksumURL: URL? = release.checksumURL.flatMap { url in
+                let host = url.host ?? ""
+                guard url.scheme == "https",
+                      trustedHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) })
+                else { return nil }
+                return url
+            }
+            if let checksumURL = validChecksumURL {
+                self?.verifyChecksum(zipPath: zipPath, checksumURL: checksumURL) { matches in
+                    guard matches else {
+                        DispatchQueue.main.async {
+                            onComplete(.failure(NSError(domain: "UpdateChecker", code: 15,
+                                userInfo: [NSLocalizedDescriptionKey: "SHA256 checksum mismatch — download may be corrupt or tampered"])))
+                        }
+                        try? FileManager.default.removeItem(at: zipPath)
+                        return
+                    }
+                    DispatchQueue.global(qos: .utility).async {
+                        self?.installUpdate(from: zipPath, completion: onComplete)
+                    }
+                }
+            } else {
+                // No checksum file in release — proceed without hash verification
+                DispatchQueue.global(qos: .utility).async {
+                    self?.installUpdate(from: zipPath, completion: onComplete)
+                }
             }
         }
 
@@ -10914,6 +13923,12 @@ class UpdateChecker {
     }
 
     private func installUpdate(from zipPath: URL, completion: @escaping (Result<Void, Error>) -> Void) {
+        // Guard: semaphore below deadlocks if called from main — make it a hard crash instead of a silent hang
+        precondition(!Thread.isMainThread, "installUpdate must not run on the main thread")
+        // [P1] installUpdate runs on a background thread — dispatch all completion calls back to main
+        let complete: (Result<Void, Error>) -> Void = { result in
+            DispatchQueue.main.async { completion(result) }
+        }
         let fm = FileManager.default
         let extractDir = fm.temporaryDirectory.appendingPathComponent("quickTerminal_extract_\(UUID().uuidString)")
 
@@ -10925,20 +13940,20 @@ class UpdateChecker {
             try dittoProc.run()
             dittoProc.waitUntilExit()
         } catch {
-            completion(.failure(NSError(domain: "UpdateChecker", code: 2,
-                                       userInfo: [NSLocalizedDescriptionKey: "Failed to extract: \(error.localizedDescription)"])))
+            complete(.failure(NSError(domain: "UpdateChecker", code: 2,
+                                     userInfo: [NSLocalizedDescriptionKey: "Failed to extract: \(error.localizedDescription)"])))
             return
         }
         guard dittoProc.terminationStatus == 0 else {
-            completion(.failure(NSError(domain: "UpdateChecker", code: 3,
-                                       userInfo: [NSLocalizedDescriptionKey: "ditto failed with exit code \(dittoProc.terminationStatus)"])))
+            complete(.failure(NSError(domain: "UpdateChecker", code: 3,
+                                     userInfo: [NSLocalizedDescriptionKey: "ditto failed with exit code \(dittoProc.terminationStatus)"])))
             return
         }
 
         // 2. Find .app in extracted contents
         guard let appBundle = findAppBundle(in: extractDir) else {
-            completion(.failure(NSError(domain: "UpdateChecker", code: 4,
-                                       userInfo: [NSLocalizedDescriptionKey: "No .app bundle found in archive"])))
+            complete(.failure(NSError(domain: "UpdateChecker", code: 4,
+                                     userInfo: [NSLocalizedDescriptionKey: "No .app bundle found in archive"])))
             try? fm.removeItem(at: extractDir)
             return
         }
@@ -10946,8 +13961,20 @@ class UpdateChecker {
         // Verify executable exists
         let execPath = appBundle.appendingPathComponent("Contents/MacOS/quickTerminal")
         guard fm.isExecutableFile(atPath: execPath.path) else {
-            completion(.failure(NSError(domain: "UpdateChecker", code: 5,
-                                       userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])))
+            complete(.failure(NSError(domain: "UpdateChecker", code: 5,
+                                     userInfo: [NSLocalizedDescriptionKey: "Invalid app bundle — no executable"])))
+            try? fm.removeItem(at: extractDir)
+            return
+        }
+
+        // [P0] Verify bundle identifier matches current app
+        let infoPlistURL = appBundle.appendingPathComponent("Contents/Info.plist")
+        if let plist = NSDictionary(contentsOf: infoPlistURL),
+           let newBundleId = plist["CFBundleIdentifier"] as? String,
+           let currentBundleId = Bundle.main.bundleIdentifier,
+           !currentBundleId.isEmpty, newBundleId != currentBundleId {
+            complete(.failure(NSError(domain: "UpdateChecker", code: 9,
+                                     userInfo: [NSLocalizedDescriptionKey: "Bundle identifier mismatch — aborting update"])))
             try? fm.removeItem(at: extractDir)
             return
         }
@@ -10959,8 +13986,8 @@ class UpdateChecker {
 
         // Check write permission
         guard fm.isWritableFile(atPath: parentDir.path) else {
-            completion(.failure(NSError(domain: "UpdateChecker", code: 6,
-                                       userInfo: [NSLocalizedDescriptionKey: "No write permission at \(parentDir.path)"])))
+            complete(.failure(NSError(domain: "UpdateChecker", code: 6,
+                                     userInfo: [NSLocalizedDescriptionKey: "No write permission at \(parentDir.path)"])))
             try? fm.removeItem(at: extractDir)
             return
         }
@@ -10970,8 +13997,8 @@ class UpdateChecker {
         do {
             try fm.moveItem(at: currentAppURL, to: backupPath)
         } catch {
-            completion(.failure(NSError(domain: "UpdateChecker", code: 7,
-                                       userInfo: [NSLocalizedDescriptionKey: "Failed to move old app: \(error.localizedDescription)"])))
+            complete(.failure(NSError(domain: "UpdateChecker", code: 7,
+                                     userInfo: [NSLocalizedDescriptionKey: "Failed to move old app: \(error.localizedDescription)"])))
             try? fm.removeItem(at: extractDir)
             return
         }
@@ -10982,8 +14009,8 @@ class UpdateChecker {
         } catch {
             // Rollback
             try? fm.moveItem(at: backupPath, to: currentAppURL)
-            completion(.failure(NSError(domain: "UpdateChecker", code: 8,
-                                       userInfo: [NSLocalizedDescriptionKey: "Failed to install update, rolled back: \(error.localizedDescription)"])))
+            complete(.failure(NSError(domain: "UpdateChecker", code: 8,
+                                     userInfo: [NSLocalizedDescriptionKey: "Failed to install update, rolled back: \(error.localizedDescription)"])))
             try? fm.removeItem(at: extractDir)
             return
         }
@@ -10995,34 +14022,100 @@ class UpdateChecker {
         try? xattrProc.run()
         xattrProc.waitUntilExit()
 
-        // Cleanup
+        // Partial cleanup — backup kept until relaunch succeeds (see below)
         try? fm.removeItem(at: extractDir)
         try? fm.removeItem(at: zipPath)
-        try? fm.removeItem(at: backupPath)
 
-        // 7. Save session before relaunch
-        if let delegate = NSApp.delegate as? AppDelegate {
-            delegate.saveSession()
+        // 7. Save session before relaunch (semaphore avoids main.sync deadlock risk)
+        let sema = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async {
+            if let delegate = NSApp.delegate as? AppDelegate { delegate.saveSession() }
+            sema.signal()
         }
+        sema.wait()
 
-        // 8. Prepare relaunch command (supports .app and dev-binary)
-        let relaunchCmd: String
-        if currentAppPath.hasSuffix(".app") {
-            relaunchCmd = "open \"\(currentAppPath)\""
-        } else {
-            relaunchCmd = "\"\(ProcessInfo.processInfo.arguments[0])\""
-        }
-
-        completion(.success(()))
+        complete(.success(()))
 
         // 9. Show SUCCESS toast for 3s, then relaunch + exit
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            let shellProc = Process()
-            shellProc.executableURL = URL(fileURLWithPath: "/bin/sh")
-            shellProc.arguments = ["-c", "sleep 0.3; \(relaunchCmd)"]
-            try? shellProc.run()
-            exit(0)
+            // [P2] For .app bundles: use `open` directly and verify exit code before
+            //      deleting backup. `open` returns 0 quickly once the app is queued.
+            if currentAppPath.hasSuffix(".app") {
+                let openProc = Process()
+                openProc.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                openProc.arguments = [currentAppPath]
+                do {
+                    try openProc.run()
+                    openProc.waitUntilExit()  // open exits quickly (≈ launch queued)
+                    guard openProc.terminationStatus == 0 else {
+                        // open returned non-zero — relaunch failed; show error so user isn't left hanging
+                        if let delegate = NSApp.delegate as? AppDelegate {
+                            delegate.showGenericToast(badge: "ERROR", text: "Relaunch failed — please restart manually",
+                                                      badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
+                                                      dismissAfter: 8.0)
+                        }
+                        return
+                    }
+                    try? fm.removeItem(at: backupPath)
+                    exit(0)
+                } catch {
+                    // open() threw — relaunch failed; show error so user isn't left hanging
+                    if let delegate = NSApp.delegate as? AppDelegate {
+                        delegate.showGenericToast(badge: "ERROR", text: "Relaunch failed — please restart manually",
+                                                  badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0),
+                                                  dismissAfter: 8.0)
+                    }
+                }
+            } else {
+                // Dev binary: shell wrapper
+                let shellProc = Process()
+                shellProc.executableURL = URL(fileURLWithPath: "/bin/sh")
+                shellProc.arguments = ["-c", "sleep 0.3; \"\(ProcessInfo.processInfo.arguments[0])\""]
+                do {
+                    try shellProc.run()
+                    try? fm.removeItem(at: backupPath)
+                    exit(0)
+                } catch {
+                    return
+                }
+            }
         }
+    }
+
+    /// Downloads the .sha256 sidecar and verifies the ZIP matches.
+    /// Trust-anchor note: ZIP + SHA256 both come from the same GitHub release. A compromised
+    /// GitHub account could manipulate both. The next hardening step is Apple code-signing
+    /// (codesign --verify) or hosting the hash on a separate, independently controlled endpoint.
+    private func verifyChecksum(zipPath: URL, checksumURL: URL, completion: @escaping (Bool) -> Void) {
+        URLSession.shared.dataTask(with: checksumURL) { data, _, _ in
+            guard let data = data,
+                  let checksumStr = String(data: data, encoding: .utf8)?
+                      .trimmingCharacters(in: .whitespacesAndNewlines),
+                  let expectedHash = checksumStr.components(separatedBy: CharacterSet.whitespaces).first,
+                  !expectedHash.isEmpty
+            else {
+                completion(false)
+                return
+            }
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/shasum")
+            proc.arguments = ["-a", "256", zipPath.path]
+            let pipe = Pipe()
+            proc.standardOutput = pipe
+            do {
+                try proc.run()
+                proc.waitUntilExit()
+                guard proc.terminationStatus == 0 else { completion(false); return }
+                let output = pipe.fileHandleForReading.readDataToEndOfFile()
+                let actualHash = String(data: output, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .components(separatedBy: CharacterSet.whitespaces)
+                    .first ?? ""
+                completion(actualHash.lowercased() == expectedHash.lowercased())
+            } catch {
+                completion(false)
+            }
+        }.resume()
     }
 
     private func findAppBundle(in directory: URL) -> URL? {
@@ -11046,30 +14139,35 @@ class OnboardingPanel: NSPanel {
     private var playerView: AVPlayerView!
     private var endObserver: Any?
 
-    static func showIfNeeded() {
+    static func showIfNeeded(relativeTo parentWindow: NSWindow? = nil) {
         guard !UserDefaults.standard.bool(forKey: "onboardingVideoShown") else { return }
         guard let url = Bundle.main.url(forResource: "quickTERMINAL", withExtension: "mp4") else { return }
-        let panel = OnboardingPanel(url: url)
+        let panel = OnboardingPanel(url: url, relativeTo: parentWindow)
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    init(url: URL) {
+    init(url: URL, relativeTo parentWindow: NSWindow? = nil) {
         let w: CGFloat = 480
         let h: CGFloat = 300
-        // Center on main screen
-        let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let x = screen.midX - w / 2
-        let y = screen.midY - h / 2
+        // Center on parent window if available, otherwise main screen
+        let origin: NSPoint
+        if let pw = parentWindow {
+            let pf = pw.frame
+            origin = NSPoint(x: pf.midX - w / 2, y: pf.midY - h / 2)
+        } else {
+            let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+            origin = NSPoint(x: screen.midX - w / 2, y: screen.midY - h / 2)
+        }
         super.init(
-            contentRect: NSRect(x: x, y: y, width: w, height: h),
+            contentRect: NSRect(origin: origin, size: NSSize(width: w, height: h)),
             styleMask: [.nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         isMovableByWindowBackground = true
         isReleasedWhenClosed = false
-        level = .floating
+        level = .modalPanel
         backgroundColor = .black
         isOpaque = true
 
@@ -11108,6 +14206,10 @@ class OnboardingPanel: NSPanel {
         player?.pause()
         if let obs = endObserver { NotificationCenter.default.removeObserver(obs) }
         close()
+        // Show terminal if not already visible
+        if let delegate = NSApp.delegate as? AppDelegate, !delegate.window.isVisible {
+            delegate.showWindowAnimated()
+        }
     }
 
     deinit {
@@ -11127,6 +14229,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var hotKeyRef: EventHotKeyRef?
     var visualEffect: NSVisualEffectView!
     var isAnimating = false
+    var pendingToggle = false           // queued toggle: execute one toggleWindow() after current animation
+    var isWindowDetached = false        // free-floating mode (not anchored to tray icon)
     var lastHideTime: TimeInterval = 0  // suppress hover-activate right after hiding
     let updateChecker = UpdateChecker()
     var pendingRelease: GitHubRelease?
@@ -11144,17 +14248,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return base > 0.01 ? base : 1.0
     }
 
-    /// Animate window to full (undimmed) opacity
+    /// Animate window to full (undimmed) opacity without allowing any frame drift
     private func restoreWindowOpacity() {
-        NSAnimationContext.runAnimationGroup { ctx in
+        let pinnedOrigin = window.frame.origin
+        NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             window.animator().alphaValue = effectiveOpacity
-        }
+        }, completionHandler: { [weak self] in
+            guard let self = self else { return }
+            // Pin position: prevent any implicit frame drift caused by the alpha animation
+            if self.window.frame.origin != pinnedOrigin {
+                self.window.setFrameOrigin(pinnedOrigin)
+            }
+        })
     }
     var headerView: HeaderBarView!
     var footerView: FooterBarView!
     var footerTimer: Timer?
+    private var windowMoveWorkItem: DispatchWorkItem?
     let arrowH: CGFloat = 10
     let arrowW: CGFloat = 20
     var tabColors: [NSColor] = []
@@ -11171,6 +14283,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var commandPalette: CommandPaletteView?
     var webPickerSidebarView: WebPickerSidebarView?
     var webPickerRightDivider: GitPanelDividerView?
+    var sshManagerView: SSHManagerView?
+    // Multi-panel sidebar state (order = visual top→bottom)
+    var sidebarOrder: [String] = ["git", "picker", "ssh"]
+    var sidebarPanelHeights: [String: CGFloat] = ["git": 300, "picker": 320, "ssh": 260]
+    var sidebarHDividers: [String: GitPanelDividerView] = [:]
     var helpViewer: HelpViewer?
     var perfOverlay: DiagnosticsOverlay?
     var parserOverlay: DiagnosticsOverlay?
@@ -11198,11 +14315,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if hasAccess { return }
 
         let alert = NSAlert()
-        alert.messageText = "Full Disk Access"
-        alert.informativeText = "quickTERMINAL works best with Full Disk Access so your shell can navigate the entire filesystem.\n\nGrant access in:\nSystem Settings → Privacy & Security → Full Disk Access"
+        alert.messageText = Loc.fullDiskAccess
+        alert.informativeText = Loc.fullDiskAccessMsg
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Later")
+        alert.addButton(withTitle: Loc.openSettings)
+        alert.addButton(withTitle: Loc.later)
         alert.icon = NSApp.applicationIconImage
 
         let response = alert.runModal()
@@ -11220,6 +14337,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Register default settings (single source of truth in SettingsOverlay.defaultSettings)
         UserDefaults.standard.register(defaults: SettingsOverlay.defaultSettings)
+
+        // Apply saved color theme
+        let savedTheme = UserDefaults.standard.integer(forKey: "colorTheme")
+        if savedTheme != 0 {
+            applySetting(key: "colorTheme", value: savedTheme)
+        }
+
+        // Observe macOS appearance changes for System theme
+        DistributedNotificationCenter.default().addObserver(
+            self, selector: #selector(systemAppearanceChanged),
+            name: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil)
 
         // Menu bar icon — custom drawn >_ prompt
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -11327,7 +14455,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.hasShadow = true
         let alwaysTop = UserDefaults.standard.bool(forKey: "alwaysOnTop")
         window.level = alwaysTop ? .floating : .normal
-        window.collectionBehavior = [.moveToActiveSpace]
+        let followSpaces = UserDefaults.standard.bool(forKey: "followAllSpaces")
+        window.collectionBehavior = followSpaces ? [.canJoinAllSpaces] : [.moveToActiveSpace]
         window.appearance = NSAppearance(named: .darkAqua)  // always dark mode
 
         // Shape mask: rounded rect body + popover arrow at top center
@@ -11357,6 +14486,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         arrowTint.layer?.backgroundColor = NSColor(calibratedWhite: 0.0, alpha: 0.3).cgColor
         arrowTint.autoresizingMask = [.width, .minYMargin]
         window.contentView?.addSubview(arrowTint)
+        arrowTintView = arrowTint
 
         // Header bar at top (below arrow)
         headerView = HeaderBarView(frame: NSRect(x: 0, y: bounds.height - headerH - arrowH,
@@ -11370,11 +14500,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self = self, index >= 0, index < self.tabCustomNames.count else { return }
             self.tabCustomNames[index] = name
             self.updateHeaderTabs()
+            self.saveSession()
         }
         headerView.onSplitVertical = { [weak self] in self?.toggleSplit(vertical: true) }
         headerView.onSplitHorizontal = { [weak self] in self?.toggleSplit(vertical: false) }
         headerView.onGitToggle = { [weak self] in self?.toggleGitPanel() }
         headerView.onWebPickerToggle = { [weak self] in self?.toggleWebPicker() }
+        headerView.onSSHToggle = { [weak self] in self?.toggleSSHManager() }
         headerView.onDoubleClick = { [weak self] in self?.toggleFullscreen() }
 
         window.contentView?.addSubview(headerView)
@@ -11439,20 +14571,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             AIUsageManager.shared.startPolling(interval: intervals[min(idx, 2)])
         }
 
-        // Version label — just above footer, bottom-right, low z so terminal text covers it
-        let verLabel = NSTextField(labelWithString: "v\(kAppVersion)")
-        verLabel.font = NSFont.monospacedSystemFont(ofSize: 8, weight: .light)
-        verLabel.textColor = NSColor(calibratedWhite: 0.3, alpha: 1.0)
-        verLabel.isBezeled = false
-        verLabel.drawsBackground = false
-        verLabel.isEditable = false
-        verLabel.isSelectable = false
-        verLabel.sizeToFit()
-        verLabel.frame.origin = NSPoint(x: bounds.width - verLabel.frame.width - 12, y: footerH + 2)
-        verLabel.autoresizingMask = [.minXMargin, .maxYMargin]
-        verLabel.wantsLayer = true
-        verLabel.layer?.zPosition = 1  // above background, below terminal content
-        window.contentView?.addSubview(verLabel)
+        // Version label — clickable HoverButton, shows full changelog on click
+        let verBtn = HoverButton(
+            title: "v\(kAppVersion)",
+            fontSize: 9, weight: .light,
+            normalColor: NSColor(calibratedWhite: 0.38, alpha: 1.0),
+            hoverColor:  NSColor(calibratedWhite: 0.90, alpha: 1.0),
+            hoverBg:     NSColor(calibratedWhite: 1.0, alpha: 0.10),
+            cornerRadius: 4)
+        verBtn.onClick = { [weak self] in
+            guard let self = self else { return }
+            if self.helpViewer == nil { self.helpViewer = HelpViewer() }
+            self.helpViewer?.showChangelog(relativeTo: self.window)
+        }
+        let btnSize = verBtn.intrinsicContentSize
+        verBtn.frame = NSRect(x: bounds.width - btnSize.width - 8, y: footerH + 1,
+                              width: btnSize.width, height: btnSize.height)
+        verBtn.autoresizingMask = [.minXMargin, .maxYMargin]
+        verBtn.layer?.zPosition = 1
+        window.contentView?.addSubview(verBtn)
 
         // Restore previous session or create first tab
         if !restoreSession() {
@@ -11464,7 +14601,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.updateFooter()
             self?.updateHeaderTabs()
             self?.updateGitPanelCwd()
-            self?.saveSession()
         }
         updateFooter()
 
@@ -11495,14 +14631,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return event
         }
 
-        // Start hidden, user clicks tray icon to show
-        positionWindowUnderTrayIcon()
-        window.alphaValue = 0
-        window.orderOut(nil)
+        // Show window on launch — defer one run-loop so statusItem.button.window is ready.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if UserDefaults.standard.bool(forKey: "windowDetached") {
+                self.restoreDetachedWindowState()
+            } else {
+                self.showWindowAnimated()
+            }
+        }
+        // Retry positioning after 150ms — the status-bar button reports a bogus
+        // screenRect (0, -11) on the very first run-loop after launch. By 150ms
+        // macOS has placed the button correctly, so positionWindowUnderTrayIcon
+        // will now calculate the real position and snap the window into place.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self = self, !self.isWindowDetached, self.window.isVisible else { return }
+            self.positionWindowUnderTrayIcon()
+            self.updateWindowMask()
+        }
 
         // First-launch onboarding video (plays once, never again)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            OnboardingPanel.showIfNeeded()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            OnboardingPanel.showIfNeeded(relativeTo: self.window)
         }
     }
 
@@ -11510,8 +14661,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let bounds = window.contentView?.bounds ?? .zero
         let headerH = HeaderBarView.barHeight
         let footerH = FooterBarView.barHeight
+        let effectiveArrowH: CGFloat = isWindowDetached ? 0 : arrowH
         return NSRect(x: 0, y: footerH, width: bounds.width,
-                      height: bounds.height - headerH - footerH - arrowH)
+                      height: bounds.height - headerH - footerH - effectiveArrowH)
+    }
+
+    @objc func systemAppearanceChanged() {
+        if UserDefaults.standard.integer(forKey: "colorTheme") == 3 {
+            applySetting(key: "colorTheme", value: 3)
+            applySystemThemeAppearance(to: visualEffect)
+        }
     }
 
     @objc func addTab() {
@@ -11554,9 +14713,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabGitRatiosV.append(gitDefaultRatioV)
         tabGitRatiosH.append(gitDefaultRatioH)
 
-        // Hide current tab container if exists
+        // Hide current tab container + git panel/divider if exists
         if !splitContainers.isEmpty && activeTab < splitContainers.count {
             splitContainers[activeTab].isHidden = true
+            if activeTab < tabGitPanels.count {
+                tabGitPanels[activeTab]?.isHidden = true
+                tabGitDividers[activeTab]?.isHidden = true
+            }
         }
 
         termViews.append(tv)
@@ -11573,8 +14736,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             container.animator().alphaValue = 1
         })
 
+        headerView.setGitActive(false)
+        updateSplitButtonState()
         updateHeaderTabs()
         updateFooter()
+        // If a sidebar is open, resize new container to account for it
+        layoutGitPanel()
+        saveSession()
     }
 
     func closeTab(index: Int) {
@@ -11633,8 +14801,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if activeTab >= 0 && activeTab < termViews.count {
             window.makeFirstResponder(termViews[activeTab])
         }
+        // Ensure new active tab's git panel is visible
+        if activeTab < tabGitPanels.count {
+            tabGitPanels[activeTab]?.isHidden = false
+            tabGitDividers[activeTab]?.isHidden = false
+        }
+        headerView.setGitActive(activeTab < tabGitPositions.count && tabGitPositions[activeTab] != .none)
+        layoutGitPanel()
+        updateSplitButtonState()
         updateHeaderTabs()
         updateFooter()
+        saveSession()
     }
 
     @objc func closeCurrentTab() {
@@ -11682,6 +14859,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             activeTab += 1
         }
         updateHeaderTabs()
+        saveSession()
     }
 
     func switchSplitPane() {
@@ -11702,6 +14880,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 _ = container.unsplit()
                 self.window.makeFirstResponder(container.primaryView)
                 self.updateFooter()
+                self.updateSplitButtonState()
             }
         }
     }
@@ -11718,6 +14897,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             window.makeFirstResponder(container.primaryView)
             updateFooter()
+            if sameDirection {
+                headerView.setSplitActive(vertical: vertical, active: false)
+            }
             // If different direction requested, immediately open new split
             if !sameDirection {
                 toggleSplit(vertical: vertical)
@@ -11738,6 +14920,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             container.split(vertical: vertical, secondary: sec)
             window.makeFirstResponder(sec)
             updateFooter()
+            headerView.setSplitActive(vertical: vertical, active: true)
+        }
+    }
+
+    /// Syncs both split buttons to the current active tab's actual split state.
+    func updateSplitButtonState() {
+        guard activeTab >= 0 && activeTab < splitContainers.count else {
+            headerView.resetSplitButtons(); return
+        }
+        let container = splitContainers[activeTab]
+        if container.isSplit {
+            headerView.setSplitActive(vertical: container.isVerticalSplit, active: true)
+        } else {
+            headerView.resetSplitButtons()
         }
     }
 
@@ -11776,6 +14972,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     }
                 }
             }
+        case "followAllSpaces":
+            if let v = value as? Bool {
+                window.collectionBehavior = v ? [.canJoinAllSpaces] : [.moveToActiveSpace]
+            }
         case "autoDim":
             if let on = value as? Bool, !on, !window.isKeyWindow {
                 restoreWindowOpacity()
@@ -11810,6 +15010,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         case "autoStartEnabled":
             if let v = value as? Bool { SettingsOverlay.setAutoStart(v) }
+        case "autoCheckUpdates":
+            if let on = value as? Bool {
+                if on {
+                    scheduleUpdateCheck(initialDelay: 0)
+                } else {
+                    updateCheckTimer?.invalidate()
+                    updateCheckTimer = nil
+                }
+            }
         case "fontFamily":
             let size = CGFloat(UserDefaults.standard.double(forKey: "terminalFontSize"))
             for tv in termViews { tv.updateFontSize(size) }
@@ -11827,12 +15036,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 tv.writePTY(Data([0x15]))  // Ctrl+U clear line
                 tv.writePTY(" export QT_PROMPT_THEME='\(themeName)'; source '\(themeDir)/qt-theme-loader.sh'; clear\n")
             }
+        case "colorTheme":
+            let idx = value as? Int ?? 0
+            let t: TerminalTheme
+            switch idx {
+            case 1:  t = .light
+            case 2:  t = .oledBlack
+            case 3:  t = resolveSystemTheme()
+            default: t = .dark
+            }
+            applyTheme(t)
+            visualEffect.material = t.visualMaterial
+            // Force NSAppearance so material renders correctly regardless of system theme
+            switch idx {
+            case 1:  visualEffect.appearance = NSAppearance(named: .aqua)
+            case 3:  applySystemThemeAppearance(to: visualEffect)
+            default: visualEffect.appearance = NSAppearance(named: .darkAqua)
+            }
+            for tv in termViews { tv.needsDisplay = true }
+            for sc in splitContainers {
+                if let sec = sc.secondaryView { sec.needsDisplay = true }
+            }
         case "resetDefaults":
             // --- Full factory reset: delete ALL quickTerminal data from system ---
+            let fm = FileManager.default
+            let home = NSHomeDirectory()
 
             // A) Delete ~/.quickterminal/ directory (shell history files)
-            let qtDir = NSHomeDirectory() + "/.quickterminal"
-            try? FileManager.default.removeItem(atPath: qtDir)
+            try? fm.removeItem(atPath: home + "/.quickterminal")
 
             // B) Remove LaunchAgent via existing abstraction
             SettingsOverlay.setAutoStart(false)
@@ -11846,7 +15077,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
 
-            // D) Re-register defaults so the app works correctly this session
+            // D) Delete caches & stray preference files
+            let cachesDir = (try? fm.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false))?.path ?? (home + "/Library/Caches")
+            let prefsDir  = home + "/Library/Preferences"
+            let toDelete = [
+                cachesDir + "/com.l3v0.quickterminal",   // app cache
+                cachesDir + "/quickTerminal",              // standalone-binary cache
+                prefsDir  + "/quickTerminal.plist",        // standalone-binary prefs
+            ]
+            for path in toDelete { try? fm.removeItem(atPath: path) }
+
+            // E) Re-register defaults so the app works correctly this session
             for (k, v) in SettingsOverlay.defaultSettings {
                 UserDefaults.standard.set(v, forKey: k)
             }
@@ -11931,11 +15172,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             updateHeaderTabs()
             updateFooter()
 
-            // Close & reopen settings to refresh UI
             hideSettings()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-                self?.showSettings()
-            }
         case "defaultShellIndex":
             break // read when creating new tab
         case "copyOnSelect":
@@ -12119,11 +15356,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         layoutGitPanel()
         headerView.setGitActive(activeTab < tabGitPositions.count && tabGitPositions[activeTab] != .none)
+        updateSplitButtonState()
 
         window.makeFirstResponder(termViews[activeTab])
         clearSearchState()
         updateHeaderTabs()
         updateFooter()
+    }
+
+    func resizeWindowAnimated(to size: NSSize) {
+        let midX = window.frame.midX
+        let topY = window.frame.maxY          // anchor top edge, not bottom
+        var f = window.frame
+        f.size = size
+        f.origin.x = midX - size.width / 2
+        f.origin.y = topY - size.height       // keep top fixed
+        if let screen = window.screen ?? NSScreen.main {
+            let minY = screen.visibleFrame.minY
+            if f.origin.y < minY { f.origin.y = minY }
+        }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1.0, 0.36, 1.0)
+            window.animator().setFrame(f, display: true)
+        }, completionHandler: { [weak self] in
+            self?.updateWindowMask()
+        })
     }
 
     func updateHeaderTabs() {
@@ -12162,7 +15420,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    func toggleWebPicker() {
+    @objc func toggleWebPicker() {
         if webPickerSidebarView != nil {
             hideWebPickerSidebar()
         } else {
@@ -12176,22 +15434,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         let view = WebPickerSidebarView()
         view.onClose = { [weak self] in self?.toggleWebPicker() }
+        view.onConnected = { [weak self] in self?.snapRightFull() }
+        view.onMoveUp   = { [weak self] in self?.moveSidebarPanel("picker", direction: -1) }
+        view.onMoveDown = { [weak self] in self?.moveSidebarPanel("picker", direction:  1) }
         view.alphaValue = 0
         superview.addSubview(view)
         webPickerSidebarView = view
-
-        // Only need our own vertical divider when git is NOT in .right (otherwise reuse git's)
-        let pos = activeTab < tabGitPositions.count ? tabGitPositions[activeTab] : .none
-        if pos != .right {
-            let div = GitPanelDividerView()
-            div.isVertical = true
-            div.wantsLayer = true
-            div.layer?.backgroundColor = GitPanelDividerView.normalColor
-            div.alphaValue = 0
-            div.onDrag = { [weak self] delta in self?.handleWebPickerDividerDrag(delta) }
-            superview.addSubview(div)
-            webPickerRightDivider = div
-        }
 
         layoutGitPanel()
         headerView.setWebPickerActive(true)
@@ -12209,14 +15457,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.15
             self.webPickerSidebarView?.animator().alphaValue = 0
-            self.webPickerRightDivider?.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
-            self?.webPickerSidebarView?.removeFromSuperview()
-            self?.webPickerSidebarView = nil
-            self?.webPickerRightDivider?.removeFromSuperview()
-            self?.webPickerRightDivider = nil
-            self?.headerView.setWebPickerActive(false)
-            self?.layoutGitPanel()
+            guard let self else { return }
+            self.webPickerSidebarView?.removeFromSuperview()
+            self.webPickerSidebarView = nil
+            self.headerView.setWebPickerActive(false)
+            self.layoutGitPanel()
         })
     }
 
@@ -12230,9 +15476,141 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         layoutGitPanel()
     }
 
+    func handleSidebarHDividerDrag(topId: String, botId: String, delta: CGFloat) {
+        var topH = sidebarPanelHeights[topId] ?? 260
+        var botH = sidebarPanelHeights[botId] ?? 260
+        let sum = topH + botH
+        topH -= delta
+        topH = max(80, min(sum - 80, topH))
+        botH = sum - topH
+        sidebarPanelHeights[topId] = topH
+        sidebarPanelHeights[botId] = botH
+        layoutGitPanel()
+        if activeTab < splitContainers.count { splitContainers[activeTab].layoutSplit() }
+    }
+
+    private func isActiveSidebarPanel(_ id: String) -> Bool {
+        switch id {
+        case "git":    return activeTab < tabGitPositions.count && tabGitPositions[activeTab] == .right
+        case "picker": return webPickerSidebarView != nil
+        case "ssh":    return sshManagerView != nil
+        default:       return false
+        }
+    }
+
+    func moveSidebarPanel(_ id: String, direction: Int) {
+        let active = sidebarOrder.filter { isActiveSidebarPanel($0) }
+        guard let idx = active.firstIndex(of: id) else { return }
+        let newIdx = idx + direction
+        guard newIdx >= 0, newIdx < active.count else { return }
+        let neighborId = active[newIdx]
+        guard let si = sidebarOrder.firstIndex(of: id),
+              let sj = sidebarOrder.firstIndex(of: neighborId) else { return }
+        sidebarOrder.swapAt(si, sj)
+        layoutGitPanel()
+    }
+
+    func updateSidebarMoveButtons() {
+        let active = sidebarOrder.filter { isActiveSidebarPanel($0) }
+        let count = active.count
+        for (i, sid) in active.enumerated() {
+            let canUp   = count > 1 && i > 0
+            let canDown = count > 1 && i < count - 1
+            switch sid {
+            case "git":
+                if activeTab < tabGitPanels.count {
+                    tabGitPanels[activeTab]?.setMoveButtonsEnabled(up: canUp, down: canDown)
+                }
+            case "picker": webPickerSidebarView?.setMoveButtonsEnabled(up: canUp, down: canDown)
+            case "ssh":    sshManagerView?.setMoveButtonsEnabled(up: canUp, down: canDown)
+            default: break
+            }
+        }
+        // Hide buttons when panel is alone
+        if count < 2 {
+            if activeTab < tabGitPanels.count { tabGitPanels[activeTab]?.setMoveButtonsEnabled(up: false, down: false) }
+            webPickerSidebarView?.setMoveButtonsEnabled(up: false, down: false)
+            sshManagerView?.setMoveButtonsEnabled(up: false, down: false)
+        }
+    }
+
+    // MARK: - SSH Manager
+
+    func previewTheme(_ idx: Int) {
+        let t: TerminalTheme
+        switch idx {
+        case 1:  t = .light
+        case 2:  t = .oledBlack
+        case 3:  t = resolveSystemTheme()
+        default: t = .dark
+        }
+        applyTheme(t)
+        visualEffect.material = t.visualMaterial
+        switch idx {
+        case 1:  visualEffect.appearance = NSAppearance(named: .aqua)
+        case 3:  applySystemThemeAppearance(to: visualEffect)
+        default: visualEffect.appearance = NSAppearance(named: .darkAqua)
+        }
+        for tv in termViews { tv.needsDisplay = true }
+        for sc in splitContainers {
+            if let sec = sc.secondaryView { sec.needsDisplay = true }
+        }
+    }
+
+    @objc func toggleSSHManager() {
+        if sshManagerView != nil {
+            hideSSHManager()
+        } else {
+            showSSHManager()
+        }
+    }
+
+    private func showSSHManager() {
+        guard activeTab >= 0, activeTab < splitContainers.count else { return }
+        guard let superview = splitContainers[activeTab].superview else { return }
+
+        let view = SSHManagerView()
+        view.alphaValue = 0
+        view.onClose   = { [weak self] in self?.hideSSHManager() }
+        view.onMoveUp   = { [weak self] in self?.moveSidebarPanel("ssh", direction: -1) }
+        view.onMoveDown = { [weak self] in self?.moveSidebarPanel("ssh", direction:  1) }
+        view.onConnect = { [weak self] profile in
+            guard let self = self else { return }
+            self.addTab()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                let tv = self.termViews[self.activeTab]
+                tv.writePTY(profile.connectCommand + "\n")
+            }
+        }
+        superview.addSubview(view)
+        sshManagerView = view
+
+        layoutGitPanel()
+        headerView.setSSHActive(true)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            view.animator().alphaValue = 1
+        }
+    }
+
+    private func hideSSHManager() {
+        guard sshManagerView != nil else { return }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.15
+            self.sshManagerView?.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self else { return }
+            self.sshManagerView?.removeFromSuperview()
+            self.sshManagerView = nil
+            self.headerView.setSSHActive(false)
+            self.layoutGitPanel()
+        })
+    }
+
     // MARK: - Git Panel
 
-    func toggleGitPanel() {
+    @objc func toggleGitPanel() {
         guard activeTab >= 0, activeTab < tabGitPositions.count else { return }
         let current = tabGitPositions[activeTab]
 
@@ -12274,13 +15652,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let panel = GitPanelView(frame: .zero)
                 panel.wantsLayer = true
                 panel.alphaValue = 0
+                panel.onMoveUp   = { [weak self] in self?.moveSidebarPanel("git", direction: -1) }
+                panel.onMoveDown = { [weak self] in self?.moveSidebarPanel("git", direction:  1) }
                 let container = splitContainers[activeTab]
                 container.superview?.addSubview(panel)
                 tabGitPanels[activeTab] = panel
 
                 let divider = GitPanelDividerView()
-                divider.wantsLayer = true
-                divider.layer?.backgroundColor = GitPanelDividerView.normalColor
                 divider.isVertical = (tabGitPositions[activeTab] == .right)
                 divider.onDrag = { [weak self] delta in self?.handleGitDividerDrag(delta) }
                 container.superview?.addSubview(divider)
@@ -12309,37 +15687,55 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let container = splitContainers[activeTab]
         let tf = termFrame()
 
-        let pos     = activeTab < tabGitPositions.count ? tabGitPositions[activeTab] : .none
-        let gitPanel  = activeTab < tabGitPanels.count ? tabGitPanels[activeTab] : nil
-        let gitDiv    = activeTab < tabGitDividers.count ? tabGitDividers[activeTab] : nil
-        let ratio     = activeTab < tabGitRatios.count ? tabGitRatios[activeTab] : gitDefaultRatioH
-        let picker    = webPickerSidebarView
-        let divThick: CGFloat = 2
-        let pickerFixedH: CGFloat = 180   // WebPicker takes a fixed 180px at top of right column
+        var pos      = activeTab < tabGitPositions.count ? tabGitPositions[activeTab] : .none
+        let gitPanel = activeTab < tabGitPanels.count    ? tabGitPanels[activeTab]    : nil
+        let gitDiv   = activeTab < tabGitDividers.count  ? tabGitDividers[activeTab]  : nil
+        var ratio    = activeTab < tabGitRatios.count    ? tabGitRatios[activeTab]    : gitDefaultRatioH
+        let divThick: CGFloat = 2                           // visual strip width (used for layout math)
+        let divGrab  = GitPanelDividerView.grab             // extra grab pixels on each side of frame
 
-        // ── Determine right sidebar ──────────────────────────────────────────
-        let hasGitRight   = pos == .right && gitPanel != nil
-        let hasPickerRight = picker != nil
-        let hasRight = hasGitRight || hasPickerRight
+        // Auto-promote git from bottom → right when other sidebar panels are open
+        let hasOtherRightPanels = (webPickerSidebarView != nil) || (sshManagerView != nil)
+        if pos == .bottom, gitPanel != nil, hasOtherRightPanels {
+            tabGitPositions[activeTab] = .right
+            pos   = .right
+            ratio = activeTab < tabGitRatiosV.count ? tabGitRatiosV[activeTab] : gitDefaultRatioV
+            gitDiv?.isVertical = true
+        }
 
-        // Right column width: prefer git's ratio; fall back to saved V-ratio for picker-only
+        // ── Collect active right panels in sidebarOrder (top→bottom) ──────────
+        struct SidePanel { let id: String; let view: NSView }
+        var rightPanels: [SidePanel] = []
+        for sid in sidebarOrder {
+            switch sid {
+            case "git":
+                if pos == .right, let gp = gitPanel { rightPanels.append(SidePanel(id: "git", view: gp)) }
+            case "picker":
+                if let pv = webPickerSidebarView    { rightPanels.append(SidePanel(id: "picker", view: pv)) }
+            case "ssh":
+                if let sv = sshManagerView          { rightPanels.append(SidePanel(id: "ssh", view: sv)) }
+            default: break
+            }
+        }
+        let hasRight = !rightPanels.isEmpty
+
+        // ── Right column width ────────────────────────────────────────────────
         let rightRatio: CGFloat
-        if hasGitRight {
+        if pos == .right && gitPanel != nil {
             rightRatio = ratio
-        } else if hasPickerRight {
+        } else if hasRight {
             rightRatio = activeTab < tabGitRatiosV.count ? tabGitRatiosV[activeTab] : gitDefaultRatioV
         } else {
             rightRatio = 0
         }
-        let rightW  = hasRight ? tf.width * rightRatio : 0
-        let termW   = tf.width - (hasRight ? rightW + divThick : 0)
+        let rightW   = hasRight ? tf.width * rightRatio : 0
+        let termW    = tf.width - (hasRight ? rightW + divThick : 0)
         let sidebarX = tf.origin.x + termW + divThick
 
-        // ── Bottom git (does not affect horizontal layout) ───────────────────
+        // ── Bottom git (no effect on horizontal layout) ───────────────────────
         let hasBottom = pos == .bottom && gitPanel != nil
         let bottomH   = hasBottom ? tf.height * ratio : 0
         let bottomDiv: CGFloat = hasBottom ? divThick : 0
-
         let termH = tf.height - bottomH - bottomDiv
         let termY = tf.origin.y + bottomH + bottomDiv
 
@@ -12349,34 +15745,98 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             gitPanel?.isHorizontal = true
             gitDiv?.isVertical = false
             gitPanel?.frame = NSRect(x: tf.origin.x, y: tf.origin.y, width: termW, height: bottomH)
-            gitDiv?.frame   = NSRect(x: tf.origin.x, y: tf.origin.y + bottomH, width: termW, height: divThick)
+            // Divider frame: expand ±divGrab vertically so the full grab zone IS the frame
+            gitDiv?.frame   = NSRect(x: tf.origin.x, y: tf.origin.y + bottomH - divGrab,
+                                     width: termW, height: divThick + 2 * divGrab)
         }
 
-        // ── Right sidebar vertical divider ───────────────────────────────────
+        // ── Right sidebar vertical divider (lazy create/remove) ───────────────
         if hasRight {
-            if hasGitRight {
-                gitDiv?.isVertical = true
-                gitDiv?.frame = NSRect(x: tf.origin.x + termW, y: tf.origin.y, width: divThick, height: tf.height)
+            if pos == .right, let gd = gitDiv {
+                gd.isVertical = true
+                // Divider frame: expand ±divGrab horizontally so the full grab zone IS the frame
+                gd.frame = NSRect(x: tf.origin.x + termW - divGrab, y: tf.origin.y,
+                                  width: divThick + 2 * divGrab, height: tf.height)
+                // gitDiv owns the vertical divider for all right panels — remove any stale picker divider
+                if webPickerRightDivider != nil {
+                    webPickerRightDivider?.removeFromSuperview()
+                    webPickerRightDivider = nil
+                }
             } else {
-                webPickerRightDivider?.frame = NSRect(x: tf.origin.x + termW, y: tf.origin.y, width: divThick, height: tf.height)
+                // Lazy create when git is not on right
+                if webPickerRightDivider == nil, let sv = rightPanels.first?.view.superview {
+                    let d = GitPanelDividerView()
+                    d.isVertical = true
+                    d.onDrag = { [weak self] delta in self?.handleWebPickerDividerDrag(delta) }
+                    sv.addSubview(d)
+                    webPickerRightDivider = d
+                }
+                // Expanded frame: ±divGrab horizontally so the full grab zone IS the frame
+                webPickerRightDivider?.frame = NSRect(x: tf.origin.x + termW - divGrab, y: tf.origin.y,
+                                                      width: divThick + 2 * divGrab, height: tf.height)
             }
+            if pos == .right { gitPanel?.isHorizontal = false }
+        } else {
+            // No right panels — remove picker's vertical divider
+            webPickerRightDivider?.removeFromSuperview()
+            webPickerRightDivider = nil
         }
 
-        // ── Right sidebar content ────────────────────────────────────────────
-        if hasGitRight {
-            gitPanel?.isHorizontal = false
-            if let pv = picker {
-                // Both: picker on top (fixed height), git fills rest
-                let gitSideH = max(60, tf.height - pickerFixedH - 1)
-                pv.frame      = NSRect(x: sidebarX, y: tf.origin.y + gitSideH + 1, width: rightW, height: pickerFixedH)
-                gitPanel?.frame = NSRect(x: sidebarX, y: tf.origin.y, width: rightW, height: gitSideH)
-            } else {
-                gitPanel?.frame = NSRect(x: sidebarX, y: tf.origin.y, width: rightW, height: tf.height)
+        // ── Stack right panels top→bottom ─────────────────────────────────────
+        if hasRight {
+            let totalDivH   = CGFloat(rightPanels.count - 1) * divThick
+            let availContent = tf.height - totalDivH
+
+            // Scale stored heights to fill available space
+            let rawH  = rightPanels.map { sidebarPanelHeights[$0.id] ?? 260 }
+            let rawSum = rawH.reduce(0, +)
+            let scale = rawSum > 0 ? availContent / rawSum : 1
+            var heights = rawH.map { max(60, $0 * scale) }
+            // Re-normalize after clamping
+            let hSum = heights.reduce(0, +)
+            if hSum > 0 { heights = heights.map { $0 * availContent / hSum } }
+
+            // Place panels from top (tf.maxY) downward
+            var curY = tf.origin.y + tf.height
+            for i in 0..<rightPanels.count {
+                let h = heights[i]
+                curY -= h
+                rightPanels[i].view.frame = NSRect(x: sidebarX, y: curY, width: rightW, height: h)
+
+                if i < rightPanels.count - 1 {
+                    curY -= divThick
+                    let key = "\(rightPanels[i].id)-\(rightPanels[i+1].id)"
+                    let div: GitPanelDividerView
+                    if let existing = sidebarHDividers[key] {
+                        div = existing
+                    } else {
+                        let d = GitPanelDividerView()
+                        d.isVertical = false
+                        let topId = rightPanels[i].id
+                        let botId = rightPanels[i+1].id
+                        d.onDrag = { [weak self] delta in
+                            self?.handleSidebarHDividerDrag(topId: topId, botId: botId, delta: delta)
+                        }
+                        if let sv = rightPanels[i].view.superview { sv.addSubview(d) }
+                        sidebarHDividers[key] = d
+                        div = d
+                    }
+                    // Expanded frame: ±divGrab vertically so the full grab zone IS the frame
+                    div.frame = NSRect(x: sidebarX, y: curY - divGrab,
+                                       width: rightW, height: divThick + 2 * divGrab)
+                }
             }
-        } else if let pv = picker {
-            // Only picker, no git on right
-            pv.frame = NSRect(x: sidebarX, y: tf.origin.y, width: rightW, height: tf.height)
+
+            // Remove orphaned horizontal dividers
+            let activeKeys = Set((0..<rightPanels.count-1).map { "\(rightPanels[$0].id)-\(rightPanels[$0+1].id)" })
+            let orphans = sidebarHDividers.keys.filter { !activeKeys.contains($0) }
+            for key in orphans { sidebarHDividers.removeValue(forKey: key)?.removeFromSuperview() }
+        } else {
+            for div in sidebarHDividers.values { div.removeFromSuperview() }
+            sidebarHDividers.removeAll()
         }
+
+        updateSidebarMoveButtons()
     }
 
     func handleGitDividerDrag(_ delta: CGFloat) {
@@ -12420,17 +15880,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func statusItemClicked() {
         let event = NSApp.currentEvent!
         if event.type == .rightMouseUp {
-            // Right click → context menu
+            // Right click → localized context menu
             let menu = NSMenu()
-            menu.addItem(NSMenuItem(title: "Show/Hide", action: #selector(toggleWindow), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: Loc.showHide, action: #selector(toggleWindow), keyEquivalent: ""))
+            let detachTitle = isWindowDetached ? Loc.reattachWindow : Loc.detachWindow
+            let detachItem = NSMenuItem(title: detachTitle, action: #selector(toggleDetach), keyEquivalent: "")
+            detachItem.state = isWindowDetached ? .on : .off
+            menu.addItem(detachItem)
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(NSMenuItem(title: "New Tab", action: #selector(addTab), keyEquivalent: ""))
+            menu.addItem(NSMenuItem(title: Loc.newTab, action: #selector(addTab), keyEquivalent: ""))
             menu.addItem(NSMenuItem.separator())
             menu.addItem(NSMenuItem(title: "zsh", action: #selector(menuSwitchZsh), keyEquivalent: ""))
             menu.addItem(NSMenuItem(title: "bash", action: #selector(menuSwitchBash), keyEquivalent: ""))
             menu.addItem(NSMenuItem(title: "sh", action: #selector(menuSwitchSh), keyEquivalent: ""))
             menu.addItem(NSMenuItem.separator())
-            menu.addItem(NSMenuItem(title: "Quit quickTerminal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            menu.addItem(NSMenuItem(title: Loc.quitApp, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
             statusItem.menu = menu
             statusItem.button?.performClick(nil)
             statusItem.menu = nil  // reset so left click works again
@@ -12440,29 +15904,65 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func positionWindowUnderTrayIcon() {
-        // Use saved position if user previously moved/resized the window
-        if UserDefaults.standard.object(forKey: "windowX") != nil {
-            let sx = CGFloat(UserDefaults.standard.double(forKey: "windowX"))
-            let sy = CGFloat(UserDefaults.standard.double(forKey: "windowY"))
-            let saved = NSPoint(x: sx, y: sy)
-            // Validate: at least part of the window must be on a visible screen
-            let testRect = NSRect(origin: saved, size: window.frame.size)
-            let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(testRect) }
-            if onScreen {
-                window.setFrameOrigin(saved)
-                return
-            }
-        }
         guard let button = statusItem.button, let buttonWindow = button.window else { return }
         let buttonRect = button.convert(button.bounds, to: nil)
         let screenRect = buttonWindow.convertToScreen(buttonRect)
         let wSize = window.frame.size
-        let x = round(screenRect.midX - wSize.width / 2)
-        let y = round(screenRect.minY - 4 - wSize.height)  // 4pt gap below menu bar
+        // Y is ALWAYS calculated from the tray icon — never from saved value.
+        // Using a saved Y after resize causes a small rounding drift (~3px on Retina)
+        // because the saved value and the tray calculation can disagree by 1-2 points.
+        let y = round(screenRect.minY - 4 - wSize.height)
+        // Sanity check: if the status-bar button hasn't been placed by macOS yet,
+        // convertToScreen returns a bogus rect near (0, -11). A real menu-bar button
+        // is always near the TOP of a screen so y must be positive.
+        guard y > 0 else { return }
+        // X uses saved value if available (respects user horizontal resize preference).
+        let defaultX = round(screenRect.midX - wSize.width / 2)
+        let x: CGFloat
+        if UserDefaults.standard.object(forKey: "windowX") != nil {
+            let sx = CGFloat(UserDefaults.standard.double(forKey: "windowX"))
+            let testRect = NSRect(origin: NSPoint(x: sx, y: y), size: wSize)
+            let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(testRect) }
+            x = onScreen ? sx : defaultX
+        } else {
+            x = defaultX
+        }
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
     @objc func toggleWindow() {
+        // If an animation is in progress, queue this toggle and let the completion handler execute it
+        if isAnimating {
+            pendingToggle = !pendingToggle
+            return
+        }
+        pendingToggle = false  // clear any stale pending on fresh (non-animated) toggle
+
+        // Detached: just show/hide at current position — never auto-reattach
+        if isWindowDetached {
+            if window.isVisible {
+                hideWindowAnimated()
+            } else {
+                isAnimating = true
+                window.alphaValue = 0
+                let lvl = UserDefaults.standard.bool(forKey: "alwaysOnTop")
+                    ? NSWindow.Level.floating : .normal
+                window.level = lvl
+                window.makeKeyAndOrderFront(nil)
+                if #available(macOS 14.0, *) { NSApp.activate() }
+                else { NSApp.activate(ignoringOtherApps: true) }
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = 0.15
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    self.window.animator().alphaValue = 1
+                }, completionHandler: { [weak self] in
+                    guard let self = self else { return }
+                    self.isAnimating = false
+                    if self.pendingToggle { self.pendingToggle = false; self.toggleWindow() }
+                })
+            }
+            return
+        }
         if window.isVisible {
             // Check if window is on a different space — if so, move it here and re-show
             if !window.isOnActiveSpace {
@@ -12480,6 +15980,90 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             showWindowAnimated()
         }
+    }
+
+    @objc func toggleDetach() {
+        if isWindowDetached {
+            // ── Reattach: fade out → snap to tray → show from tray with arrow ─
+            isWindowDetached = false
+            UserDefaults.standard.set(false, forKey: "windowDetached")
+            (window as? BorderlessWindow)?.isDetached = false
+            window.styleMask.remove(.resizable)
+            updateWindowMask()
+            updateHeaderArrowLayout()
+            let wasVisible = window.isVisible
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = wasVisible ? 0.15 : 0
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                self.window.animator().alphaValue = 0
+            }, completionHandler: { [weak self] in
+                guard let self = self else { return }
+                self.window.alphaValue = 1
+                self.window.orderOut(nil)
+                // Clear saved detached position so tray calculation is used
+                UserDefaults.standard.removeObject(forKey: "windowX")
+                UserDefaults.standard.removeObject(forKey: "windowY")
+                self.positionWindowUnderTrayIcon()
+                self.layoutGitPanel()
+                self.showWindowAnimated()   // drop-down from tray with arrow
+            })
+        } else {
+            // ── Detach: float window free at current position ─────────────────
+            isWindowDetached = true
+            UserDefaults.standard.set(true, forKey: "windowDetached")
+            (window as? BorderlessWindow)?.isDetached = true
+            window.styleMask.insert(.resizable)
+            if !window.isVisible { window.makeKeyAndOrderFront(nil) }
+            updateWindowMask()
+            updateHeaderArrowLayout()
+            layoutGitPanel()
+        }
+    }
+
+    /// Called on launch when the window was in detached mode during the previous session.
+    func restoreDetachedWindowState() {
+        isWindowDetached = true
+        (window as? BorderlessWindow)?.isDetached = true
+        window.styleMask.insert(.resizable)
+        updateWindowMask()
+        updateHeaderArrowLayout()
+        layoutGitPanel()
+
+        // Restore saved position (X and Y both saved for detached windows)
+        let savedX = UserDefaults.standard.double(forKey: "windowX")
+        let savedY = UserDefaults.standard.double(forKey: "windowY")
+        if savedX != 0 || savedY != 0 {
+            let origin = NSPoint(x: CGFloat(savedX), y: CGFloat(savedY))
+            let testRect = NSRect(origin: origin, size: window.frame.size)
+            let onScreen = NSScreen.screens.contains { $0.visibleFrame.intersects(testRect) }
+            if onScreen { window.setFrameOrigin(origin) }
+        }
+
+        // Show immediately at restored position — no fade-in animation at startup.
+        // A fade-in with alphaValue=0 + makeKeyAndOrderFront leaves window in an
+        // "isVisible=true but alpha=0" state if anything blocks the animation,
+        // causing the first tray-click to hide instead of show.
+        let targetLevel = UserDefaults.standard.bool(forKey: "alwaysOnTop")
+            ? NSWindow.Level.floating : .normal
+        window.level = targetLevel
+        window.alphaValue = 1
+        window.makeKeyAndOrderFront(nil)
+        if #available(macOS 14.0, *) { NSApp.activate() }
+        else { NSApp.activate(ignoringOtherApps: true) }
+        if !termViews.isEmpty && activeTab < termViews.count {
+            window.makeFirstResponder(termViews[activeTab])
+        }
+    }
+
+    /// Hides/shows arrow tint and shifts headerView up when detached (no arrow = no gap).
+    private func updateHeaderArrowLayout() {
+        arrowTintView?.isHidden = isWindowDetached
+        guard let hv = headerView, let cv = window.contentView else { return }
+        let w = cv.bounds.width
+        let headerH = HeaderBarView.barHeight
+        let topOffset: CGFloat = isWindowDetached ? 0 : arrowH
+        hv.frame = NSRect(x: 0, y: cv.bounds.height - headerH - topOffset,
+                          width: w, height: headerH)
     }
 
     // MARK: Double-Ctrl → Command Palette
@@ -12579,7 +16163,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             PaletteCommand(title: "Check for Updates", shortcut: "") { [weak self] in self?.manualCheckForUpdate() },
             PaletteCommand(title: pendingRelease != nil ? "Install Update (\(pendingRelease!.tagName))" : "Install Update", shortcut: "") { [weak self] in
                 guard let self = self, let release = self.pendingRelease else {
-                    self?.showGenericToast(badge: "UPDATE", text: "No update available", badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0))
+                    self?.showGenericToast(badge: "UPDATE", text: Loc.noUpdateAvailable, badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0))
                     return
                 }
                 self.startUpdateDownload(release: release)
@@ -12745,13 +16329,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let contentView = window.contentView else { return }
         contentView.subviews.filter { $0.identifier == NSUserInterfaceItemIdentifier("searchToast") }.forEach { $0.removeFromSuperview() }
 
-        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
-        let toastH: CGFloat = 30
-        let padOuter: CGFloat = 10
-        let padInner: CGFloat = 8
-        let badgePadX: CGFloat = 7
-        let badgeH: CGFloat = 18
-        let badgeR: CGFloat = 4
+        let font = NSFont.monospacedSystemFont(ofSize: 15, weight: .medium)
+        let toastH: CGFloat = 42
+        let padOuter: CGFloat = 14
+        let padInner: CGFloat = 11
+        let badgePadX: CGFloat = 10
+        let badgeH: CGFloat = 25
+        let badgeR: CGFloat = 6
 
         let badgeStr: String
         let queryStr: String
@@ -12843,13 +16427,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let contentView = window.contentView else { return }
         contentView.subviews.filter { $0.identifier == NSUserInterfaceItemIdentifier(identifier) }.forEach { $0.removeFromSuperview() }
 
-        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
-        let toastH: CGFloat = 30
-        let padOuter: CGFloat = 10
-        let padInner: CGFloat = 8
-        let badgePadX: CGFloat = 7
-        let badgeH: CGFloat = 18
-        let badgeR: CGFloat = 4
+        let font = NSFont.monospacedSystemFont(ofSize: 15, weight: .medium)
+        let toastH: CGFloat = 42
+        let padOuter: CGFloat = 14
+        let padInner: CGFloat = 11
+        let badgePadX: CGFloat = 10
+        let badgeH: CGFloat = 25
+        let badgeR: CGFloat = 6
 
         let badgeTextSz = (badgeStr as NSString).size(withAttributes: [.font: font])
         let queryTextSz = (queryStr as NSString).size(withAttributes: [.font: font])
@@ -12873,7 +16457,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         toast.identifier = NSUserInterfaceItemIdentifier(identifier)
         toast.wantsLayer = true
         toast.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.93).cgColor
-        toast.layer?.cornerRadius = 4
+        toast.layer?.cornerRadius = 6
         toast.layer?.borderWidth = 0.5
         toast.layer?.borderColor = NSColor(calibratedWhite: 0.28, alpha: 0.5).cgColor
         toast.layer?.zPosition = 99999
@@ -12928,7 +16512,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func showUpdateToast(version: String) {
         let v = version.hasPrefix("v") ? version : "v\(version)"
-        showGenericToast(badge: "UPDATE", text: "\(v) available — click to install",
+        showGenericToast(badge: "UPDATE", text: String(format: Loc.updateAvailable, v),
                          badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0),
                          dismissAfter: 12.0, onClick: { [weak self] in
                              guard let self = self, let release = self.pendingRelease else { return }
@@ -12944,14 +16528,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for id in ["updateToast", "searchToast"] {
             contentView.subviews.filter { $0.identifier == NSUserInterfaceItemIdentifier(id) }.forEach { $0.removeFromSuperview() }
         }
-        let font = NSFont.monospacedSystemFont(ofSize: 11, weight: .medium)
-        let toastH: CGFloat = 34
-        let padOuter: CGFloat = 10
-        let padInner: CGFloat = 8
-        let badgePadX: CGFloat = 7
-        let badgeH: CGFloat = 18
-        let badgeR: CGFloat = 4
-        let progressH: CGFloat = 3
+        let font = NSFont.monospacedSystemFont(ofSize: 15, weight: .medium)
+        let toastH: CGFloat = 48
+        let padOuter: CGFloat = 14
+        let padInner: CGFloat = 11
+        let badgePadX: CGFloat = 10
+        let badgeH: CGFloat = 25
+        let badgeR: CGFloat = 6
+        let progressH: CGFloat = 4
 
         let pctStr = "\(Int(percent * 100))%"
         let msgStr = "Downloading update…"
@@ -12984,7 +16568,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         toast.identifier = NSUserInterfaceItemIdentifier(identifier)
         toast.wantsLayer = true
         toast.layer?.backgroundColor = NSColor(calibratedWhite: 0.07, alpha: 0.93).cgColor
-        toast.layer?.cornerRadius = 4
+        toast.layer?.cornerRadius = 6
         toast.layer?.borderWidth = 0.5
         toast.layer?.borderColor = NSColor(calibratedWhite: 0.28, alpha: 0.5).cgColor
         toast.layer?.zPosition = 99999
@@ -13085,12 +16669,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func manualCheckForUpdate() {
         // Dev-build guard
         guard Bundle.main.bundlePath.hasSuffix(".app") else {
-            showGenericToast(badge: "UPDATE", text: "Only works with .app bundle",
+            showGenericToast(badge: "UPDATE", text: Loc.onlyWithAppBundle,
                              badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0))
             return
         }
 
-        showGenericToast(badge: "UPDATE", text: "Checking…",
+        showGenericToast(badge: "UPDATE", text: Loc.checking,
                          badgeColor: NSColor(calibratedWhite: 0.35, alpha: 1.0), dismissAfter: 3.0)
 
         updateChecker.checkForUpdate { [weak self] result in
@@ -13101,11 +16685,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     self.pendingRelease = release
                     self.showUpdateToast(version: release.tagName)
                 } else {
-                    self.showGenericToast(badge: "UPDATE", text: "Already up to date (v\(kAppVersion))",
+                    self.showGenericToast(badge: "UPDATE", text: String(format: Loc.alreadyUpToDate, kAppVersion),
                                           badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0))
                 }
             case .failure:
-                self.showGenericToast(badge: "UPDATE", text: "Check failed — try again later",
+                self.showGenericToast(badge: "UPDATE", text: Loc.checkFailed,
                                       badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0))
             }
         }
@@ -13113,7 +16697,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func startUpdateDownload(release: GitHubRelease) {
         guard Bundle.main.bundlePath.hasSuffix(".app") else {
-            showGenericToast(badge: "UPDATE", text: "Only works with .app bundle",
+            showGenericToast(badge: "UPDATE", text: Loc.onlyWithAppBundle,
                              badgeColor: NSColor(calibratedRed: 0.6, green: 0.2, blue: 0.18, alpha: 1.0))
             return
         }
@@ -13126,7 +16710,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             switch result {
             case .success:
                 // SUCCESS toast (matching dummy design)
-                self.showGenericToast(badge: "SUCCESS", text: "Update installed — restarting…",
+                self.showGenericToast(badge: "SUCCESS", text: Loc.updateInstalled,
                                       badgeColor: NSColor(calibratedRed: 0.18, green: 0.55, blue: 0.34, alpha: 1.0),
                                       dismissAfter: 3.0)
                 // Note: installUpdate already handles saveSession + relaunch + exit
@@ -13230,6 +16814,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         snapAnimate(to: NSRect(x: sf.origin.x + sf.width / 2, y: sf.origin.y + sf.height / 2, width: sf.width / 2, height: sf.height / 2))
     }
 
+    func snapRightFull() {
+        guard let screen = window.screen ?? NSScreen.main else { return }
+        let sf = screen.visibleFrame
+        clearSnapStates()
+        snapAnimate(to: NSRect(x: sf.origin.x + sf.width / 2, y: sf.origin.y, width: sf.width / 2, height: sf.height))
+    }
+
     func toggleVertical() {
         guard let screen = window.screen ?? NSScreen.main else { return }
         if let saved = preVerticalFrame {
@@ -13299,55 +16890,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showWindowAnimated() {
         guard !isAnimating else { return }
         isAnimating = true
+
+        // Position + mask BEFORE making window invisible and ordering front.
+        // Then re-position AFTER ordering to override any macOS screen-constraint
+        // repositioning that can happen during makeKeyAndOrderFront.
+        // The window is alpha=0 throughout so neither position is ever visible.
         positionWindowUnderTrayIcon()
         updateWindowMask()
-
-        // Suppress terminal resize during animation to preserve grid content
-        for tv in termViews { tv.suppressResize = true }
-        for sc in splitContainers { sc.secondaryView?.suppressResize = true }
-
-        // Save full frame, then collapse to just the arrow at the top edge
-        let fullFrame = window.frame
-        var startFrame = fullFrame
-        startFrame.size.height = arrowH + 2
-        startFrame.origin.y = fullFrame.maxY - startFrame.size.height
-
-        window.setFrame(startFrame, display: false)
         window.alphaValue = 0
-
-        // Temporarily raise above all other windows (including other tray popups)
         let targetLevel = UserDefaults.standard.bool(forKey: "alwaysOnTop")
             ? NSWindow.Level.floating : NSWindow.Level.normal
-        window.level = .popUpMenu
+        window.level = targetLevel
         window.makeKeyAndOrderFront(nil)
-        window.orderFrontRegardless()
+        window.orderFrontRegardless()  // Ensures window appears even when app is not active
+        // Re-position after ordering: alpha=0 so windowDidMove guard (alpha>0) skips
+        // saving, and we override any macOS screen-constraint repositioning cleanly.
+        positionWindowUnderTrayIcon()
 
-        // Activate BEFORE animation so other tray popovers (e.g. quickGit) dismiss immediately
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        if #available(macOS 14.0, *) { NSApp.activate() }
+        else { NSApp.activate(ignoringOtherApps: true) }
 
-        // Expand downward from top with pop overshoot + fade in
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.28
-            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.22, 1.0, 0.36, 1.0)
-            window.animator().setFrame(fullFrame, display: true)
+            ctx.duration = 0.15
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             window.animator().alphaValue = 1
         }, completionHandler: { [weak self] in
             guard let self = self else { return }
-            // Snap to exact frame to correct any animation rounding (prevents 1-2px Y-drift)
-            self.window.setFrame(fullFrame, display: false)
-            self.updateWindowMask()
             self.isAnimating = false
-            // Re-enable terminal resize and sync to actual size
-            for tv in self.termViews { tv.suppressResize = false; tv.setFrameSize(tv.frame.size) }
-            for sc in self.splitContainers {
-                if let sec = sc.secondaryView { sec.suppressResize = false; sec.setFrameSize(sec.frame.size) }
-            }
-            // Restore configured window level after animation
-            self.window.level = targetLevel
+            if self.pendingToggle { self.pendingToggle = false; self.toggleWindow() }
         })
 
         if !termViews.isEmpty && activeTab < termViews.count {
@@ -13360,12 +16930,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             globalClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
                 guard let self = self, self.window.isVisible else { return }
                 if self.isAnyDragSessionActive { return }
-                // Don't hide when clicking on the menu bar (other tray icons, menus, etc.)
-                let clickLocation = event.locationInWindow // screen coordinates for global events
+                let clickLocation = event.locationInWindow
                 if let screen = NSScreen.screens.first(where: { NSMouseInRect(clickLocation, $0.frame, false) }) {
-                    if clickLocation.y >= screen.visibleFrame.maxY {
-                        return
-                    }
+                    if clickLocation.y >= screen.visibleFrame.maxY { return }
                 }
                 self.hideWindowAnimated()
             }
@@ -13389,26 +16956,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         for tv in termViews { tv.suppressResize = true }
         for sc in splitContainers { sc.secondaryView?.suppressResize = true }
 
-        // Collapse upward to just the arrow, then hide
-        let fullFrame = window.frame
-        var endFrame = fullFrame
-        endFrame.size.height = arrowH + 2
-        endFrame.origin.y = fullFrame.maxY - endFrame.size.height
+        if isWindowDetached {
+            // Detached window: plain fade-out — no frame change to avoid any position drift
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.15
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                window.animator().alphaValue = 0
+            }, completionHandler: { [weak self] in
+                guard let self = self else { return }
+                for tv in self.termViews { tv.suppressResize = false }
+                for sc in self.splitContainers { sc.secondaryView?.suppressResize = false }
+                self.window.orderOut(nil)
+                self.isAnimating = false
+                if self.pendingToggle { self.pendingToggle = false; self.toggleWindow() }
+            })
+            return
+        }
 
+        // Docked window: simple fade-out, no frame collapse
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.15
+            ctx.duration = 0.12
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            window.animator().setFrame(endFrame, display: true)
             window.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self = self else { return }
-            // Re-enable terminal resize before restoring frame
             for tv in self.termViews { tv.suppressResize = false }
             for sc in self.splitContainers { sc.secondaryView?.suppressResize = false }
-            // Restore full frame while hidden for correct positioning next show
-            self.window.setFrame(fullFrame, display: false)
             self.window.orderOut(nil)
             self.isAnimating = false
+            if self.pendingToggle { self.pendingToggle = false; self.toggleWindow() }
         })
     }
 
@@ -13453,11 +17029,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !isAnimating, window.isVisible else { return }
         guard UserDefaults.standard.bool(forKey: "autoDim") else { return }
         if isAnyDragSessionActive { return }
-        NSAnimationContext.runAnimationGroup { ctx in
+        let pinnedOrigin = window.frame.origin
+        NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             window.animator().alphaValue = effectiveOpacity * 0.55
-        }
+        }, completionHandler: { [weak self] in
+            guard let self = self else { return }
+            if self.window.frame.origin != pinnedOrigin {
+                self.window.setFrameOrigin(pinnedOrigin)
+            }
+        })
     }
 
     func windowDidResize(_ notification: Notification) {
@@ -13469,8 +17051,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         UserDefaults.standard.set(Double(frame.size.width), forKey: "windowWidth")
         UserDefaults.standard.set(Double(frame.size.height), forKey: "windowHeight")
         UserDefaults.standard.set(Double(frame.origin.x), forKey: "windowX")
-        UserDefaults.standard.set(Double(frame.origin.y), forKey: "windowY")
-        settingsOverlay?.updateResetButtonState()
+        if isWindowDetached {
+            // Detached: also save Y so position is fully restored on next launch.
+            UserDefaults.standard.set(Double(frame.origin.y), forKey: "windowY")
+        }
+        // When docked, do NOT save Y — it is always derived from the tray icon.
+        if !isWindowDetached { settingsOverlay?.updateResetButtonState() }
     }
 
     func centerCommandPalette() {
@@ -13486,55 +17072,65 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidMove(_ notification: Notification) {
         guard !isAnimating, window.isVisible, window.alphaValue > 0 else { return }
-        let origin = window.frame.origin
-        UserDefaults.standard.set(Double(origin.x), forKey: "windowX")
-        UserDefaults.standard.set(Double(origin.y), forKey: "windowY")
-        settingsOverlay?.updateResetButtonState()
+        windowMoveWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            let origin = self.window.frame.origin
+            UserDefaults.standard.set(Double(origin.x), forKey: "windowX")
+            if self.isWindowDetached {
+                UserDefaults.standard.set(Double(origin.y), forKey: "windowY")
+            }
+            if !self.isWindowDetached { self.settingsOverlay?.updateResetButtonState() }
+        }
+        windowMoveWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: item)
     }
 
     func updateWindowMask() {
         guard let cv = window?.contentView, let layer = cv.layer else { return }
         let b = cv.bounds
         let r: CGFloat = 12
-        let bodyH = b.height - arrowH
-
-        // Arrow anchored at tray icon screen position — stays fixed on screen
-        var ax = b.midX
-        if let button = statusItem?.button, let btnWindow = button.window {
-            let btnRect = button.convert(button.bounds, to: nil)
-            let screenX = btnWindow.convertToScreen(btnRect).midX
-            ax = screenX - window.frame.origin.x
-            let pad = r + arrowW / 2 + 2
-            ax = max(pad, min(b.width - pad, ax))
-        }
+        let effectiveArrowH: CGFloat = isWindowDetached ? 0 : arrowH
+        let bodyH = b.height - effectiveArrowH
 
         let path = CGMutablePath()
-        // Start bottom-left (above corner radius)
         path.move(to: CGPoint(x: 0, y: r))
-        // Bottom-left corner
         path.addArc(tangent1End: CGPoint(x: 0, y: 0),
                      tangent2End: CGPoint(x: r, y: 0), radius: r)
-        // Bottom edge
         path.addLine(to: CGPoint(x: b.width - r, y: 0))
-        // Bottom-right corner
         path.addArc(tangent1End: CGPoint(x: b.width, y: 0),
                      tangent2End: CGPoint(x: b.width, y: r), radius: r)
-        // Right edge
         path.addLine(to: CGPoint(x: b.width, y: bodyH - r))
-        // Top-right corner
         path.addArc(tangent1End: CGPoint(x: b.width, y: bodyH),
                      tangent2End: CGPoint(x: b.width - r, y: bodyH), radius: r)
-        // Top edge → arrow right base
-        path.addLine(to: CGPoint(x: ax + arrowW / 2, y: bodyH))
-        // Arrow tip
-        path.addLine(to: CGPoint(x: ax, y: b.height))
-        // Arrow left base
-        path.addLine(to: CGPoint(x: ax - arrowW / 2, y: bodyH))
-        // Top edge → top-left corner
-        path.addLine(to: CGPoint(x: r, y: bodyH))
-        // Top-left corner
-        path.addArc(tangent1End: CGPoint(x: 0, y: bodyH),
-                     tangent2End: CGPoint(x: 0, y: bodyH - r), radius: r)
+
+        if isWindowDetached {
+            // Pure rounded rect — no arrow
+            path.addLine(to: CGPoint(x: r, y: bodyH))
+            path.addArc(tangent1End: CGPoint(x: 0, y: bodyH),
+                         tangent2End: CGPoint(x: 0, y: bodyH - r), radius: r)
+        } else {
+            // Arrow anchored at tray icon screen position
+            var ax = b.midX
+            if let button = statusItem?.button, let btnWindow = button.window {
+                let btnRect = button.convert(button.bounds, to: nil)
+                let screenX = btnWindow.convertToScreen(btnRect).midX
+                // Sanity-check: if the button hasn't been placed by macOS yet,
+                // convertToScreen returns a bogus screenX near 0. A real menu-bar
+                // button is always > 100pt from the left edge of any screen.
+                if screenX > 100 {
+                    ax = screenX - window.frame.origin.x
+                    let pad = r + arrowW / 2 + 2
+                    ax = max(pad, min(b.width - pad, ax))
+                }
+            }
+            path.addLine(to: CGPoint(x: ax + arrowW / 2, y: bodyH))
+            path.addLine(to: CGPoint(x: ax, y: b.height))
+            path.addLine(to: CGPoint(x: ax - arrowW / 2, y: bodyH))
+            path.addLine(to: CGPoint(x: r, y: bodyH))
+            path.addArc(tangent1End: CGPoint(x: 0, y: bodyH),
+                         tangent2End: CGPoint(x: 0, y: bodyH - r), radius: r)
+        }
         path.closeSubpath()
 
         // Reuse mask layer — only update path
@@ -13560,10 +17156,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             border.frame = b
             border.zPosition = 9999
         }
+
+        // Invalidate shadow so macOS recomputes it from the new mask shape.
+        // Without this, the shadow lags behind the mask on first display after
+        // a shape change and snaps when the mouse enters — visually looks like
+        // the window shifted position.
+        window?.invalidateShadow()
     }
 
     // Cached border layer + pre-allocated colors
     private var windowBorderLayer: CAShapeLayer?
+    private var arrowTintView: NSView?
     private var isBorderHovered = false
     private static let borderNormalColor = NSColor(calibratedWhite: 1.0, alpha: 0.10).cgColor
     private static let borderHoverColor = NSColor(calibratedWhite: 1.0, alpha: 0.35).cgColor
@@ -13620,6 +17223,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let m = globalClickMonitor { NSEvent.removeMonitor(m); globalClickMonitor = nil }
         if let ref = hotKeyRef { UnregisterEventHotKey(ref) }
         footerTimer?.invalidate()
+        windowMoveWorkItem?.cancel()
         perfOverlay?.stopUpdating()
         parserOverlay?.stopUpdating()
         termViews.removeAll()
@@ -13677,7 +17281,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         UserDefaults.standard.set(tabs, forKey: "sessionTabs")
         UserDefaults.standard.set(activeTab, forKey: "sessionActiveTab")
-        UserDefaults.standard.synchronize()
+
+        // Save window geometry
+        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: "windowFrame")
+
+        // Save sidebar state
+        UserDefaults.standard.set(webPickerSidebarView != nil, forKey: "webPickerOpen")
+        UserDefaults.standard.set(sshManagerView != nil, forKey: "sshManagerOpen")
+        UserDefaults.standard.set(sidebarOrder, forKey: "sidebarOrder")
+        let sidebarHeights = sidebarPanelHeights.mapValues { Double($0) }
+        UserDefaults.standard.set(sidebarHeights, forKey: "sidebarPanelHeights")
+
     }
 
     func restoreSession() -> Bool {
@@ -13720,8 +17334,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     tabGitPanels[idx] = panel
 
                     let divider = GitPanelDividerView()
-                    divider.wantsLayer = true
-                    divider.layer?.backgroundColor = GitPanelDividerView.normalColor
                     divider.isVertical = (pos == .right)
                     divider.onDrag = { [weak self] delta in self?.handleGitDividerDrag(delta) }
                     container.superview?.addSubview(divider)
@@ -13764,6 +17376,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if activeTab < tabGitPositions.count, tabGitPositions[activeTab] != .none {
             headerView.setGitActive(true)
         }
+
+        // Restore window frame
+        if let frameStr = UserDefaults.standard.string(forKey: "windowFrame") {
+            let f = NSRectFromString(frameStr)
+            if f.width >= 320, f.height >= 220,
+               NSScreen.screens.contains(where: { $0.frame.intersects(f) }) {
+                window.setFrame(f, display: false)
+            }
+        }
+
+        // Restore sidebar panel order and heights
+        if let order = UserDefaults.standard.array(forKey: "sidebarOrder") as? [String] {
+            sidebarOrder = order
+        }
+        if let heights = UserDefaults.standard.dictionary(forKey: "sidebarPanelHeights") as? [String: Double] {
+            for (k, v) in heights { sidebarPanelHeights[k] = CGFloat(v) }
+        }
+
+        // Restore open sidebar panels
+        if UserDefaults.standard.bool(forKey: "webPickerOpen") { showWebPickerSidebar() }
+        if UserDefaults.standard.bool(forKey: "sshManagerOpen") { showSSHManager() }
 
         return true
     }

@@ -32,9 +32,22 @@ This roadmap reflects current priorities and may change.
 - ~~Onboarding video.~~ **Done** — first-launch AVKit video panel (480×300, auto-close, skip button, plays once).
 - ~~Demo GIF.~~ **Done** — MP4 → GIF in README, 2.4 MB at 700px width.
 
-## 1.4 Upcoming
+## ✅ 1.4 Developer UX & Customization (Done)
 
-- Signed app bundle and notarization flow.
+- ~~SSH Manager.~~ **Done** — floating sidebar, save/connect/delete SSH profiles, `SSHProfile.connectCommand`, UserDefaults persistence.
+- ~~Keyboard shortcuts: tab navigation.~~ **Done** — `Ctrl+1–9` switch, `Ctrl+Shift+1–9` rename, `Ctrl+⌥+1/2/3` window presets.
+- ~~Color themes.~~ **Done** — Dark, Light, OLED Black, System (follows macOS appearance). Live switching via `AppleInterfaceThemeChangedNotification`.
+- ~~Follow All Spaces.~~ **Done** — window visible on all macOS Spaces, toggleable in Settings.
+- ~~Tray detach / reattach.~~ **Done** — float freely on desktop, all 8 resize handles, snap back to tray icon.
+- ~~Right-click context menu.~~ **Done** — Copy, Paste, Select All (respects mouse-tracking mode).
+- ~~Sidebar right-click to toggle panels.~~ **Done** — Git, WebPicker, SSH buttons respond to right-click.
+- ~~Full 10-language localization update.~~ **Done** — all new strings in EN, DE, TR, ES, FR, IT, AR, JA, ZH, RU.
+- ~~Updater security hardening.~~ **Done** — SHA256 sidecar verification, HTTPS + host allowlist, bundle-ID guard, background-thread install, relaunch bound to open exit code, backup preserved until relaunch confirmed.
+- ~~Test coverage.~~ **Done** — 197 tests; new Updater Logic section covers version comparison, host allowlist, HTTPS check, relaunch guard.
+
+## 1.5 Upcoming
+
+- Signed app bundle and notarization flow (resolves remaining updater trust-anchor gap).
 - Homebrew formula support.
 - Safari WebPicker support (Web Inspector Protocol).
 - More quickBAR commands and inline prompt improvements.

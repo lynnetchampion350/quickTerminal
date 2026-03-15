@@ -5,9 +5,11 @@ cd "$(dirname "$0")"
 APP_NAME="quickTerminal"
 BUNDLE="${APP_NAME}.app"
 ICON_SRC="icon.png"
-# NOTE: Keep VERSION in sync with kAppVersion in quickTerminal.swift
-VERSION="1.3.0"
 BUNDLE_ID="com.l3v0.quickterminal"
+
+# ─── Read version from source of truth ───
+VERSION="$(sed -nE 's/^let kAppVersion = "([^"]+)".*/\1/p' quickTerminal.swift | head -n1)"
+[ -n "$VERSION" ] || { echo "ERROR: kAppVersion not found in quickTerminal.swift"; exit 1; }
 
 echo "=== Building ${APP_NAME}.app ==="
 
@@ -40,7 +42,8 @@ swiftc -O quickTerminal.swift -o "${APP_NAME}_bin" \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __jbmono -Xlinker _JetBrainsMono-LightItalic-terminal.ttf \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __monocraft -Xlinker _Monocraft-terminal.ttf \
   -Xlinker -sectcreate -Xlinker __DATA -Xlinker __readme -Xlinker README.md \
-  -Xlinker -sectcreate -Xlinker __DATA -Xlinker __commands -Xlinker COMMANDS.md
+  -Xlinker -sectcreate -Xlinker __DATA -Xlinker __commands -Xlinker COMMANDS.md \
+  -Xlinker -sectcreate -Xlinker __DATA -Xlinker __changelog -Xlinker CHANGELOG.md
 echo "    Binary compiled"
 
 # ─── Step 3: Assemble .app bundle ───

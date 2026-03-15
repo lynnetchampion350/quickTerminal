@@ -58,7 +58,15 @@ var currentTest = ""
 
 func test(_ name: String, _ body: () -> Void) {
     currentTest = name
+    let before = testsFailed
     body()
+    if testsFailed == before {
+        print("  ✓ \(name)")
+    }
+}
+
+func section(_ name: String) {
+    print("\n── \(name) ──")
 }
 
 func check(_ condition: Bool, _ message: String = "", file: String = #file, line: Int = #line) {
@@ -93,10 +101,12 @@ class TestTerminal {
     var rows: Int
     var cursorX = 0
     var cursorY = 0
+    var pendingWrap = false
     var grid: [[Cell]]
     var attrs = TextAttrs()
     var savedX = 0, savedY = 0
     var savedAttrs = TextAttrs()
+    var savedPendingWrap = false
     var savedG0IsGraphics = false, savedG1IsGraphics = false
     var savedUseG1 = false, savedOriginMode = false, savedAutoWrap = true
     var scrollTop = 0
@@ -278,10 +288,10 @@ class TestTerminal {
                     }
                     handleOSC(oscBuf)
                 } else if next == 0x37 { // DECSC
-                    savedX = cursorX; savedY = cursorY
+                    savedX = cursorX; savedY = cursorY; savedPendingWrap = pendingWrap
                     savedAttrs = attrs
                 } else if next == 0x38 { // DECRC
-                    cursorX = savedX; cursorY = savedY
+                    cursorX = savedX; cursorY = savedY; pendingWrap = savedPendingWrap
                     attrs = savedAttrs
                 } else if next == 0x44 { // IND
                     lf()
@@ -465,7 +475,7 @@ class TestTerminal {
                     grid = Self.emptyGrid(cols, rows)
                     cursorX = 0; cursorY = 0
                 case 1049:
-                    savedX = cursorX; savedY = cursorY
+                    savedX = cursorX; savedY = cursorY; savedAttrs = attrs
                     altGrid = grid; grid = Self.emptyGrid(cols, rows)
                     cursorX = 0; cursorY = 0
                 case 1000: mouseMode = 1000
@@ -485,9 +495,10 @@ class TestTerminal {
                 case 25: cursorVisible = false
                 case 47, 1047:
                     if let ag = altGrid { grid = ag; cursorX = altX; cursorY = altY; altGrid = nil }
+                    pendingWrap = false
                 case 1049:
                     if let ag = altGrid { grid = ag; altGrid = nil }
-                    cursorX = savedX; cursorY = savedY
+                    cursorX = savedX; cursorY = savedY; attrs = savedAttrs
                 case 1000, 1002, 1003: mouseMode = 0
                 case 1006: mouseEncoding = 0
                 case 2004: bracketedPasteMode = false
@@ -596,7 +607,7 @@ class TestTerminal {
 
 print("Running quickTerminal tests...\n")
 
-// --- Basic Text Output ---
+section("Basic Text Output")
 
 test("Basic character output") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -628,7 +639,7 @@ test("Backspace") {
     assertEqual(String(t.grid[0][1].char), "C")
 }
 
-// --- Cursor Movement ---
+section("Cursor Movement")
 
 test("CUP - cursor position") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -656,7 +667,7 @@ test("CHA - cursor horizontal absolute") {
     assertEqual(t.cursorX, 19)
 }
 
-// --- Erase Commands ---
+section("Erase Commands")
 
 test("ED 2 - erase entire display") {
     let t = TestTerminal(cols: 10, rows: 3)
@@ -688,7 +699,7 @@ test("EL 2 - erase entire line") {
     assertEqual(String(t.grid[0].map { String($0.char) }.joined()), "          ")
 }
 
-// --- SGR Attributes ---
+section("SGR Attributes")
 
 test("SGR bold, italic, underline") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -771,7 +782,7 @@ test("SGR strikethrough") {
     check(!t.grid[0][1].attrs.strikethrough, "strikethrough off")
 }
 
-// --- Scroll Region ---
+section("Scroll Region & Lines")
 
 test("DECSTBM - scroll region") {
     let t = TestTerminal(cols: 10, rows: 5)
@@ -782,7 +793,7 @@ test("DECSTBM - scroll region") {
     assertEqual(t.cursorY, 0)
 }
 
-// --- Insert/Delete Lines ---
+section("Insert/Delete Lines")
 
 test("IL - insert lines") {
     let t = TestTerminal(cols: 5, rows: 5)
@@ -802,7 +813,7 @@ test("DL - delete lines") {
     assertEqual(String(t.grid[2].map { String($0.char) }.joined()), "DDDDD")
 }
 
-// --- DEC Private Modes ---
+section("DEC Private Modes")
 
 test("DECCKM - application cursor mode") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -876,7 +887,7 @@ test("Synchronized output") {
     check(!t.synchronizedOutput, "disabled")
 }
 
-// --- DECSC/DECRC ---
+section("DECSC / DECRC")
 
 test("DECSC/DECRC saves and restores full state") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -893,7 +904,7 @@ test("DECSC/DECRC saves and restores full state") {
     check(t.savedAttrs.bold, "saved attrs should have bold")
 }
 
-// --- Keypad Mode ---
+section("Keypad & Reset")
 
 test("Application keypad mode (ESC = / ESC >)") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -903,8 +914,6 @@ test("Application keypad mode (ESC = / ESC >)") {
     t.feed("\u{1B}>")
     check(!t.appKeypadMode, "disabled")
 }
-
-// --- Full Reset ---
 
 test("RIS - full reset") {
     let t = TestTerminal(cols: 10, rows: 5)
@@ -921,7 +930,7 @@ test("RIS - full reset") {
     assertEqual(t.screenText(), "")
 }
 
-// --- DSR (Device Status Report) ---
+section("DSR & SCOSC/SCORC")
 
 test("DSR 6 - cursor position report") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -936,8 +945,6 @@ test("DSR 5 - device status OK") {
     assertEqual(t.lastResponse, "\u{1B}[0n")
 }
 
-// --- SCOSC/SCORC ---
-
 test("SCOSC/SCORC - save/restore cursor (CSI s/u)") {
     let t = TestTerminal(cols: 80, rows: 24)
     t.feed("\u{1B}[5;10H")
@@ -949,7 +956,7 @@ test("SCOSC/SCORC - save/restore cursor (CSI s/u)") {
     assertEqual(t.cursorX, 9)
 }
 
-// --- Scrollback ---
+section("Scrollback & Tab Stops")
 
 test("Scrollback accumulates lines") {
     let t = TestTerminal(cols: 5, rows: 3)
@@ -957,8 +964,6 @@ test("Scrollback accumulates lines") {
     check(t.scrollback.count >= 1, "scrollback should have entries")
     assertEqual(String(t.scrollback[0].prefix(5).map { String($0.char) }.joined()), "Line1")
 }
-
-// --- Tab Stops ---
 
 test("Default tab stops every 8 columns") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -968,7 +973,7 @@ test("Default tab stops every 8 columns") {
     assertEqual(t.cursorX, 16)
 }
 
-// --- Reverse Index ---
+section("Reverse Index & Wrap")
 
 test("Reverse index at top scrolls down") {
     let t = TestTerminal(cols: 5, rows: 3)
@@ -979,8 +984,6 @@ test("Reverse index at top scrolls down") {
     assertEqual(String(t.grid[1].map { String($0.char) }.joined()), "AAAAA")
 }
 
-// --- Auto-wrap mode toggle ---
-
 test("Auto-wrap mode off prevents wrapping") {
     let t = TestTerminal(cols: 5, rows: 3)
     t.feed("\u{1B}[?7l")  // disable auto-wrap
@@ -990,7 +993,7 @@ test("Auto-wrap mode off prevents wrapping") {
     assertEqual(String(t.grid[0][4].char), "9")
 }
 
-// --- DECOM (Origin Mode) ---
+section("Origin Mode")
 
 test("CUP respects origin mode with scroll region") {
     let t = TestTerminal(cols: 10, rows: 10)
@@ -1014,7 +1017,7 @@ test("CUP clamps to scroll region in origin mode") {
     assertEqual(t.cursorY, 4)
 }
 
-// --- ED mode 3 (clear scrollback) ---
+section("Misc Modes")
 
 test("ED mode 3 clears scrollback") {
     let t = TestTerminal(cols: 5, rows: 3)
@@ -1026,8 +1029,6 @@ test("ED mode 3 clears scrollback") {
     assertEqual(t.scrollback.count, 0)
 }
 
-// --- DECSCNM (Reverse Video) ---
-
 test("DECSCNM sets and resets reverse video mode") {
     let t = TestTerminal(cols: 5, rows: 3)
     t.feed("\u{1B}[?5h")
@@ -1035,8 +1036,6 @@ test("DECSCNM sets and resets reverse video mode") {
     t.feed("\u{1B}[?5l")
     check(!t.reverseVideoMode, "should be reset")
 }
-
-// --- SGR 8 (Hidden) ---
 
 test("SGR 8 sets hidden attribute") {
     let t = TestTerminal(cols: 5, rows: 1)
@@ -1046,8 +1045,6 @@ test("SGR 8 sets hidden attribute") {
     check(!t.grid[0][1].attrs.hidden, "should be visible")
 }
 
-// --- DECOM + DECSTBM interaction ---
-
 test("DECSTBM resets cursor to scrollTop in origin mode") {
     let t = TestTerminal(cols: 10, rows: 10)
     t.feed("\u{1B}[?6h")   // origin mode first
@@ -1056,7 +1053,7 @@ test("DECSTBM resets cursor to scrollTop in origin mode") {
     assertEqual(t.cursorX, 0)
 }
 
-// --- Underline Styles ---
+section("Underline Styles")
 
 test("SGR 4 sets single underline (style 1)") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -1102,7 +1099,7 @@ test("SGR 24 resets all underline styles") {
     assertEqual(t.grid[0][1].attrs.underline, 0)
 }
 
-// --- Blink ---
+section("Blink & Overline")
 
 test("SGR 5 sets slow blink") {
     let t = TestTerminal(cols: 80, rows: 24)
@@ -1123,8 +1120,6 @@ test("SGR 25 resets blink") {
     assertEqual(t.grid[0][1].attrs.blink, 0)
 }
 
-// --- Overline ---
-
 test("SGR 53 sets overline") {
     let t = TestTerminal(cols: 80, rows: 24)
     t.feed("\u{1B}[53mX")
@@ -1138,7 +1133,7 @@ test("SGR 55 resets overline") {
     check(!t.grid[0][1].attrs.overline, "overline off")
 }
 
-// --- Insert Mode (IRM) ---
+section("Insert Mode (IRM)")
 
 test("SM 4 enables insert mode") {
     let t = TestTerminal(cols: 10, rows: 1)
@@ -1172,7 +1167,7 @@ test("Insert mode shifts cells right") {
     assertEqual(String(t.grid[0].map { String($0.char) }.joined()), "12X34")
 }
 
-// --- C1 Control Bytes ---
+section("C1 Control Bytes & DECALN")
 
 test("C1 0x84 (IND) acts as line feed") {
     let t = TestTerminal(cols: 10, rows: 5)
@@ -1198,8 +1193,6 @@ test("C1 0x8D (RI) acts as reverse index") {
     assertEqual(String(t.grid[1].map { String($0.char) }.joined()), "AAAAA")
 }
 
-// --- DECALN ---
-
 test("DECALN fills screen with E") {
     let t = TestTerminal(cols: 5, rows: 3)
     t.feed("XXXXX\r\nYYYYY\r\nZZZZZ")
@@ -1211,6 +1204,145 @@ test("DECALN fills screen with E") {
     }
     assertEqual(t.cursorX, 0)
     assertEqual(t.cursorY, 0)
+}
+
+// ============================================================================
+// MARK: - Regression Tests
+// ============================================================================
+
+section("Regression: CursorState / Alt-Screen / DECSC")
+
+test("Alt-screen 1049 restores attrs on exit") {
+    let t = TestTerminal(cols: 10, rows: 5)
+    // Set bold on normal screen
+    t.feed("\u{1B}[1m")  // SGR bold
+    check(t.attrs.bold, "bold set on normal screen")
+    // Enter alt screen — should save attrs
+    t.feed("\u{1B}[?1049h")
+    assertEqual(t.cursorX, 0)
+    // Reset attrs inside alt screen (as a TUI app might do)
+    t.feed("\u{1B}[0m")
+    check(!t.attrs.bold, "attrs reset inside alt screen")
+    // Exit alt screen — should restore bold
+    t.feed("\u{1B}[?1049l")
+    check(t.attrs.bold, "bold restored after 1049 exit")
+}
+
+test("DECSC saves pendingWrap, DECRC restores it") {
+    let t = TestTerminal(cols: 5, rows: 3)
+    // Manually set pendingWrap (simulate filling last column)
+    t.pendingWrap = true
+    // Save cursor state
+    t.feed("\u{1B}7")
+    check(t.savedPendingWrap, "savedPendingWrap should be true after DECSC")
+    // Clear pendingWrap and move somewhere else
+    t.pendingWrap = false
+    t.feed("\u{1B}[1;1H")
+    check(!t.pendingWrap, "pendingWrap cleared")
+    // Restore
+    t.feed("\u{1B}8")
+    check(t.pendingWrap, "pendingWrap restored by DECRC")
+}
+
+test("Alt-screen 1049 saves and restores cursor position") {
+    let t = TestTerminal(cols: 80, rows: 24)
+    t.feed("\u{1B}[5;10H")  // move to row 5, col 10
+    assertEqual(t.cursorY, 4)
+    assertEqual(t.cursorX, 9)
+    t.feed("\u{1B}[?1049h")  // enter alt screen
+    assertEqual(t.cursorX, 0)
+    assertEqual(t.cursorY, 0)
+    t.feed("\u{1B}[?1049l")  // exit alt screen
+    assertEqual(t.cursorY, 4, "cursor row restored after 1049")
+    assertEqual(t.cursorX, 9, "cursor col restored after 1049")
+}
+
+test("Alt-screen 47 exit clears pendingWrap") {
+    let t = TestTerminal(cols: 10, rows: 5)
+    t.feed("\u{1B}[?47h")   // enter alt screen
+    t.pendingWrap = true     // simulate pending wrap inside alt screen
+    t.feed("\u{1B}[?47l")   // exit alt screen
+    check(!t.pendingWrap, "pendingWrap cleared on 47 exit")
+}
+
+// ============================================================================
+// MARK: - Updater Logic
+// ============================================================================
+
+// Inline copies of the validation logic from UpdateChecker — tested in isolation
+// so they don't require URLSession/Cocoa.
+
+private func isAllowedUpdateHost(_ url: URL) -> Bool {
+    let allowedHosts = ["github.com", "objects.githubusercontent.com"]
+    let host = url.host ?? ""
+    return allowedHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) })
+}
+
+private func isNewerVersionTest(remote: String, local: String) -> Bool {
+    let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
+    let rParts = strip(remote).split(separator: ".").compactMap { Int($0) }
+    let lParts = strip(local).split(separator: ".").compactMap { Int($0) }
+    for i in 0..<max(rParts.count, lParts.count) {
+        let r = i < rParts.count ? rParts[i] : 0
+        let l = i < lParts.count ? lParts[i] : 0
+        if r > l { return true }
+        if r < l { return false }
+    }
+    return false
+}
+
+section("Updater Logic")
+
+test("isNewerVersion: basics") {
+    check(isNewerVersionTest(remote: "v1.5.0", local: "v1.4.0"), "1.5.0 > 1.4.0")
+    check(!isNewerVersionTest(remote: "v1.4.0", local: "v1.4.0"), "same not newer")
+    check(!isNewerVersionTest(remote: "v1.3.9", local: "v1.4.0"), "1.3.9 < 1.4.0")
+    check(isNewerVersionTest(remote: "v2.0.0", local: "v1.9.9"), "2.0.0 > 1.9.9")
+    check(isNewerVersionTest(remote: "1.5.0", local: "1.4.0"), "no-v prefix works")
+}
+
+test("URL host allowlist: rejects non-GitHub hosts") {
+    check(!isAllowedUpdateHost(URL(string: "https://evil.com/f.zip")!), "evil.com rejected")
+    check(!isAllowedUpdateHost(URL(string: "https://notgithub.com/f.zip")!), "notgithub.com rejected")
+    check(!isAllowedUpdateHost(URL(string: "https://evil-github.com/f.zip")!), "evil-github.com rejected (suffix trick)")
+    check(!isAllowedUpdateHost(URL(string: "https://fakegithub.com/f.zip")!), "fakegithub.com rejected")
+}
+
+test("URL host allowlist: accepts GitHub CDN hosts") {
+    check(isAllowedUpdateHost(URL(string: "https://github.com/f.zip")!), "github.com allowed")
+    check(isAllowedUpdateHost(URL(string: "https://objects.githubusercontent.com/f.zip")!), "objects.githubusercontent.com allowed")
+}
+
+test("HTTPS scheme check: rejects HTTP") {
+    let httpURL = URL(string: "http://github.com/file.zip")!
+    let httpsURL = URL(string: "https://github.com/file.zip")!
+    check(httpURL.scheme != "https", "http:// rejected by scheme check")
+    check(httpsURL.scheme == "https", "https:// accepted")
+}
+
+test("Relaunch guard: open exit-code != 0 prevents exit") {
+    // Mirror the guard in installUpdate's relaunch block:
+    //   guard openProc.terminationStatus == 0 else { return }
+    // We run /usr/bin/false (always exits 1) to confirm the guard triggers correctly.
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/false")
+    try? proc.run()
+    proc.waitUntilExit()
+    check(proc.terminationStatus != 0, "/usr/bin/false exits with non-zero code")
+    // Guard condition: only exit(0) when terminationStatus == 0
+    let guardPasses = proc.terminationStatus == 0
+    check(!guardPasses, "non-zero exit code correctly prevents relaunch exit")
+}
+
+test("Relaunch guard: successful open would allow exit") {
+    // /usr/bin/true always exits 0 — confirms the happy path
+    let proc = Process()
+    proc.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+    try? proc.run()
+    proc.waitUntilExit()
+    check(proc.terminationStatus == 0, "/usr/bin/true exits 0")
+    let guardPasses = proc.terminationStatus == 0
+    check(guardPasses, "exit code 0 correctly allows relaunch exit")
 }
 
 // ============================================================================

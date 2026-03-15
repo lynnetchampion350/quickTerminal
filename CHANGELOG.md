@@ -4,6 +4,42 @@ All notable changes to quickTERMINAL are documented here.
 
 ---
 
+## v1.4.0 — 2026-03-14
+
+### New Features
+- **SSH Manager** — Floating sidebar for SSH profile management. Save connections (label, user@host, port, identity file), connect via new tab with one click, delete profiles. Profiles stored in UserDefaults as JSON. `SSHProfile.connectCommand` builds the correct `ssh` invocation automatically.
+- **Keyboard Shortcuts: Tab Navigation** — `Ctrl+1–9` to switch directly to any tab. `Ctrl+Shift+1–9` to trigger inline rename for that tab.
+- **Keyboard Shortcuts: Window Presets** — `Ctrl+⌥+1` (compact 620×340), `Ctrl+⌥+2` (medium 860×480), `Ctrl+⌥+3` (large 1200×680) — animated spring resize.
+- **Color Themes** — 4 terminal color schemes in Settings: Dark (default), Light, OLED Black, System (auto-follows macOS Dark/Light Mode). System theme observes `AppleInterfaceThemeChangedNotification` for live switching.
+- **Follow All Spaces** — New setting: window appears on all macOS Spaces simultaneously. Toggle in Settings or via tray right-click menu.
+- **Tray Detach / Reattach** — Right-click tray icon → "Detach Window" floats the terminal freely on the desktop. Detached window is fully resizable from all 8 edges/corners. "Reattach Window" snaps it back under the tray icon. State survives hide/show cycles.
+- **Terminal Right-Click Context Menu** — Right-click: Copy, Paste, Select All (respects mouse-tracking mode; falls through to app when tracking is active).
+- **Sidebar Right-Click** — Right-click on any header panel button (Git, WebPicker, SSH) to toggle that panel without opening quickBAR.
+- **Full 10-Language Localization Update** — All new UI strings (`showHide`, `detachWindow`, `reattachWindow`, `quitApp`) added to all 10 language dictionaries: EN, DE, TR, ES, FR, IT, AR, JA, ZH, RU.
+
+### Security
+- **Updater: SHA256 integrity check** — Downloads a `.sha256` sidecar from GitHub Releases and verifies the ZIP before installation. Absent sidecar falls back gracefully without blocking the update.
+- **Updater: HTTPS + host allowlist** — Both download and checksum URLs are enforced to use `https://` and restricted to `github.com` / `objects.githubusercontent.com`. Redirects to any other host are rejected.
+- **Updater: Bundle ID verification** — Extracted `.app` must match the current app's `CFBundleIdentifier` before installation proceeds.
+
+### Bug Fixes
+- **Header gap when detached** — Floating window no longer shows a 4–5 px empty strip at the top. Arrow view is hidden and `headerView.frame` repositions flush to the window top edge.
+- **Terminal area when detached** — `termFrame()` now uses `effectiveArrowH = 0` when detached, so the terminal expands to fill the recovered space.
+- **Sidebar drag moved window** — `isMovableByWindowBackground` removed entirely; drag-to-move is now handled exclusively in `HeaderBarView.mouseDragged` and only activates when `isWindowDetached == true`.
+- **Diagonal resize when detached** — `BorderlessWindow.edgeAt()` now exposes top-left and top-right corner resize zones when `isDetached == true`.
+- **First-click on sidebar divider** — `GitPanelDividerView.acceptsFirstMouse` returns `true`, fixing the two-click interaction when the window is not yet frontmost.
+- **Window position saved while detached** — `windowDidMove` / `windowDidResize` guard against `isWindowDetached` to prevent the desktop position from overwriting the tray-snap coordinates.
+- **Reattach position** — `toggleDetach()` clears `windowX` / `windowY` from UserDefaults before reattaching, so `positionWindowUnderTrayIcon()` always recalculates from the current tray icon position.
+- **Detach state not preserved on hide/show** — `toggleWindow()` now preserves the detached state; showing a hidden detached window no longer auto-reattaches it.
+- **Updater: parse error vs. "up to date"** — HTTP errors, missing data, and JSON parse failures now return `.failure(error)` instead of silently reporting no update available.
+- **Updater: background-thread install** — `installUpdate` runs on `DispatchQueue.global(qos: .utility)`, eliminating UI freeze during extraction and file operations.
+- **Updater: relaunch exit guarded by open exit code** — `exit(0)` is only called when `/usr/bin/open` returns exit code 0. A failed relaunch no longer terminates the running process.
+- **Updater: backup preserved until relaunch confirmed** — Old `.app` backup is deleted only after `open` succeeds, retaining rollback capability on relaunch failure.
+- **Auto-Check Updates: toggle reschedules timer** — Enabling/disabling in Settings now immediately schedules or cancels the repeating timer.
+- **Startup window fade** — `showWindowAnimated()` is now used on first launch, ensuring consistent fade-in and correct `hideOnClickOutside` monitor setup.
+
+---
+
 ## v1.3.0 — 2026-03-12
 
 ### New Features
