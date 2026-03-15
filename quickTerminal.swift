@@ -10,7 +10,7 @@ import AVKit
 
 // MARK: - Version
 
-let kAppVersion = "1.4.0"
+let kAppVersion = "1.4.1"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -13843,6 +13843,12 @@ class UpdateChecker {
     func downloadAndInstall(release: GitHubRelease,
                             onProgress: @escaping (Double) -> Void,
                             onComplete: @escaping (Result<Void, Error>) -> Void) {
+        // Require .app bundle for install — raw dev binaries can detect updates but not self-replace
+        guard Bundle.main.bundlePath.hasSuffix(".app") else {
+            onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "Auto-install requires the .app bundle. Copy quickTerminal.app to /Applications first."])))
+            return
+        }
         // [P1] Verify HTTPS scheme — reject plain HTTP downloads
         guard release.downloadURL.scheme == "https" else {
             onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
@@ -14214,6 +14220,271 @@ class OnboardingPanel: NSPanel {
 
     deinit {
         if let obs = endObserver { NotificationCenter.default.removeObserver(obs) }
+    }
+}
+
+// MARK: - Text Editor
+
+enum TabType { case terminal, editor }
+
+// ── Syntax Highlighting ────────────────────────────────────────────────────
+
+enum TokenType {
+    case keyword, string, comment, number, operator_, type_, identifier
+    case punctuation, literal, attribute, plain
+}
+
+struct SyntaxToken {
+    let range: NSRange
+    let type: TokenType
+}
+
+enum EditorLanguage: String {
+    case swift, json, yaml, javascript, typescript, python
+    case shell, markdown, html, css, go, rust, ruby, xml, plain
+}
+
+struct SyntaxHighlighter {
+
+    // ── Language detection ─────────────────────────────────────────────────
+    static func detectLanguage(from url: URL?) -> EditorLanguage {
+        guard let ext = url?.pathExtension.lowercased() else { return .plain }
+        switch ext {
+        case "swift":               return .swift
+        case "json":                return .json
+        case "yaml", "yml":         return .yaml
+        case "js", "mjs":           return .javascript
+        case "ts", "tsx":           return .typescript
+        case "py":                  return .python
+        case "sh", "bash", "zsh":   return .shell
+        case "md", "markdown":      return .markdown
+        case "html", "htm":         return .html
+        case "css", "scss", "less": return .css
+        case "go":                  return .go
+        case "rs":                  return .rust
+        case "rb":                  return .ruby
+        case "xml", "plist":        return .xml
+        default:                    return .plain
+        }
+    }
+
+    // ── Tokenize ───────────────────────────────────────────────────────────
+    static func tokenize(source: String, language: EditorLanguage) -> [SyntaxToken] {
+        switch language {
+        case .swift:      return tokenizeSwift(source)
+        case .json:       return tokenizeJSON(source)
+        case .yaml:       return tokenizeYAML(source)
+        case .javascript, .typescript: return tokenizeJS(source)
+        case .python:     return tokenizePython(source)
+        case .shell:      return tokenizeShell(source)
+        case .markdown:   return tokenizeMarkdown(source)
+        case .html:       return tokenizeHTML(source)
+        case .css:        return tokenizeCSS(source)
+        case .go:         return tokenizeGo(source)
+        case .rust:       return tokenizeRust(source)
+        case .ruby:       return tokenizeRuby(source)
+        case .xml:        return tokenizeHTML(source)
+        case .plain:      return []
+        }
+    }
+
+    // ── Helper: apply regex patterns ───────────────────────────────────────
+    private static func tokens(source: String,
+                                patterns: [(String, TokenType)]) -> [SyntaxToken] {
+        var result: [SyntaxToken] = []
+        for (pattern, type_) in patterns {
+            guard let rx = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { continue }
+            let ns = source as NSString
+            let matches = rx.matches(in: source, range: NSRange(location: 0, length: ns.length))
+            for m in matches {
+                let r = m.numberOfRanges > 1 ? m.range(at: 1) : m.range
+                if r.location != NSNotFound { result.append(SyntaxToken(range: r, type: type_)) }
+            }
+        }
+        result.sort { $0.range.location < $1.range.location }
+        var clean: [SyntaxToken] = []
+        var cursor = 0
+        for tok in result {
+            if tok.range.location >= cursor {
+                clean.append(tok)
+                cursor = tok.range.location + tok.range.length
+            }
+        }
+        return clean
+    }
+
+    private static func tokenizeSwift(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(func|class|struct|enum|protocol|extension|var|let|if|else|guard|return|for|while|in|import|typealias|associatedtype|where|switch|case|default|break|continue|throw|throws|rethrows|try|catch|defer|do|init|deinit|subscript|override|final|static|mutating|nonmutating|open|public|internal|fileprivate|private|weak|unowned|lazy|indirect|as|is|nil|true|false|self|Self|super|any|some|async|await|actor|nonisolated|isolated)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("\"\"\"[\\s\\S]*?\"\"\"",              .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("#?\"(?:[^\"\\\\]|\\\\.)*\"",          .string),
+            (kw,                                    .keyword),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("@\\w+",                               .attribute),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+            ("[+\\-*/=<>!&|^~%?:,;.()\\[\\]{}]+",  .operator_),
+        ])
+    }
+
+    private static func tokenizeJSON(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("\"(?:[^\"\\\\]|\\\\.)*\"\\s*(?=:)",   .keyword),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("\\b(true|false|null)\\b",             .keyword),
+            ("\\b-?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\\b", .number),
+            ("[{}\\[\\]:,]",                        .operator_),
+        ])
+    }
+
+    private static func tokenizeYAML(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("^\\s*([\\w-]+)\\s*(?=:)",            .keyword),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            ("\\b(true|false|null|yes|no)\\b",     .keyword),
+            ("\\b-?[0-9]+(?:\\.[0-9]+)?\\b",       .number),
+            ("^---",                                .operator_),
+        ])
+    }
+
+    private static func tokenizeJS(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(function|const|let|var|if|else|return|for|while|do|switch|case|break|continue|class|extends|new|this|import|export|default|from|async|await|try|catch|finally|throw|typeof|instanceof|in|of|null|undefined|true|false|void|delete|yield|super|static|get|set|type|interface|enum|implements|readonly|abstract|declare|module|namespace|keyof|as|is|any|never|unknown|infer)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("`[^`]*`",                             .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            (kw,                                    .keyword),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+
+    private static func tokenizePython(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(def|class|if|elif|else|for|while|in|return|import|from|as|with|try|except|finally|raise|pass|break|continue|lambda|yield|global|nonlocal|del|assert|not|and|or|is|None|True|False|async|await)\\b"
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("\"\"\"[\\s\\S]*?\"\"\"",              .string),
+            ("'''[\\s\\S]*?'''",                    .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            (kw,                                    .keyword),
+            ("@\\w+",                               .attribute),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+
+    private static func tokenizeShell(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(if|then|else|elif|fi|for|do|done|while|case|esac|in|function|return|export|local|source|echo|cd|ls|grep|awk|sed|cat|rm|cp|mv|mkdir|chmod|chown)\\b"
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'[^']*'",                             .string),
+            (kw,                                    .keyword),
+            ("\\$[\\w{][\\w}]*",                   .type_),
+            ("\\b[0-9]+\\b",                        .number),
+        ])
+    }
+
+    private static func tokenizeMarkdown(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("^#{1,6} [^\n]+",                      .keyword),
+            ("`{3}[\\s\\S]*?`{3}",                  .string),
+            ("`[^`]+`",                             .string),
+            ("\\*\\*[^*]+\\*\\*",                   .type_),
+            ("__[^_]+__",                           .type_),
+            ("\\*[^*]+\\*",                         .comment),
+            ("_[^_]+_",                             .comment),
+            ("\\[[^\\]]+\\]\\([^)]+\\)",            .attribute),
+            ("^[-*+] ",                             .operator_),
+            ("^\\d+\\. ",                           .operator_),
+        ])
+    }
+
+    private static func tokenizeHTML(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("<!--[\\s\\S]*?-->",                   .comment),
+            ("<[/!]?[A-Za-z][A-Za-z0-9-]*",        .keyword),
+            ("[A-Za-z-]+(?=\\s*=)",                 .type_),
+            ("\"[^\"]*\"",                          .string),
+            ("'[^']*'",                             .string),
+            (">",                                   .keyword),
+            ("&[A-Za-z0-9#]+;",                    .number),
+        ])
+    }
+
+    private static func tokenizeCSS(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("[.#]?[A-Za-z][A-Za-z0-9_-]*\\s*(?=\\{)", .keyword),
+            ("[A-Za-z-]+(?=\\s*:)",                 .type_),
+            ("\"[^\"]*\"|'[^']*'",                  .string),
+            ("#[0-9A-Fa-f]{3,8}\\b",               .number),
+            ("\\b[0-9]+(?:\\.[0-9]+)?(?:px|em|rem|%|vh|vw|pt|s|ms)?\\b", .number),
+            ("@[A-Za-z-]+",                         .attribute),
+        ])
+    }
+
+    private static func tokenizeGo(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(func|var|const|type|struct|interface|map|chan|go|defer|select|case|default|break|continue|return|if|else|for|range|switch|import|package|fallthrough|goto|nil|true|false|iota|make|new|append|len|cap|close|delete|copy|panic|recover|print|println)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("`[^`]*`",                             .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            (kw,                                    .keyword),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+
+    private static func tokenizeRust(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(fn|let|mut|const|static|struct|enum|trait|impl|type|where|use|mod|pub|crate|super|self|Self|if|else|match|loop|for|while|in|return|break|continue|as|ref|move|async|await|dyn|extern|unsafe|true|false|None|Some|Ok|Err)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("r#?\"[\\s\\S]*?\"#?",                .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            (kw,                                    .keyword),
+            ("#\\[.*?\\]",                          .attribute),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+            ("'[a-z_]+",                            .type_),
+        ])
+    }
+
+    private static func tokenizeRuby(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(def|class|module|if|elsif|else|unless|end|do|begin|rescue|ensure|raise|return|yield|require|include|extend|attr_reader|attr_writer|attr_accessor|puts|print|true|false|nil|self|super|and|or|not|in|then|case|when)\\b"
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            (kw,                                    .keyword),
+            (":[A-Za-z_]\\w*",                     .type_),
+            ("@{1,2}[A-Za-z_]\\w*",               .attribute),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+
+    static func color(for type_: TokenType, dark: Bool) -> NSColor {
+        switch type_ {
+        case .keyword:    return dark ? NSColor(calibratedRed: 0.80, green: 0.45, blue: 0.90, alpha: 1) : NSColor(calibratedRed: 0.55, green: 0.10, blue: 0.70, alpha: 1)
+        case .string:     return dark ? NSColor(calibratedRed: 0.90, green: 0.65, blue: 0.35, alpha: 1) : NSColor(calibratedRed: 0.70, green: 0.30, blue: 0.10, alpha: 1)
+        case .comment:    return dark ? NSColor(calibratedWhite: 0.45, alpha: 1) : NSColor(calibratedWhite: 0.55, alpha: 1)
+        case .number:     return dark ? NSColor(calibratedRed: 0.65, green: 0.90, blue: 0.65, alpha: 1) : NSColor(calibratedRed: 0.10, green: 0.50, blue: 0.10, alpha: 1)
+        case .type_:      return dark ? NSColor(calibratedRed: 0.40, green: 0.80, blue: 0.95, alpha: 1) : NSColor(calibratedRed: 0.05, green: 0.40, blue: 0.65, alpha: 1)
+        case .attribute:  return dark ? NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.40, alpha: 1) : NSColor(calibratedRed: 0.65, green: 0.40, blue: 0.05, alpha: 1)
+        case .operator_:  return dark ? NSColor(calibratedWhite: 0.65, alpha: 1) : NSColor(calibratedWhite: 0.40, alpha: 1)
+        case .identifier, .punctuation, .literal, .plain:
+            return dark ? NSColor(calibratedWhite: 0.90, alpha: 1) : NSColor(calibratedWhite: 0.10, alpha: 1)
+        }
     }
 }
 
@@ -16641,7 +16912,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func scheduleUpdateCheck(initialDelay: TimeInterval) {
         updateCheckTimer?.invalidate()
         guard UserDefaults.standard.bool(forKey: "autoCheckUpdates") else { return }
-        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
+        // Note: .app guard intentionally removed — checking is harmless for any build type.
+        // Install guard remains in downloadAndInstall (write permission check covers non-.app paths).
 
         let interval: TimeInterval = 72 * 60 * 60  // 72 hours
 

@@ -1346,6 +1346,302 @@ test("Relaunch guard: successful open would allow exit") {
 }
 
 // ============================================================================
+// MARK: - SyntaxHighlighter Stubs (Foundation-only, no Cocoa)
+// ============================================================================
+
+enum TokenType {
+    case keyword, string, comment, number, operator_, type_, identifier
+    case punctuation, literal, attribute, plain
+}
+
+struct SyntaxToken {
+    let range: NSRange
+    let type: TokenType
+}
+
+enum EditorLanguage: String {
+    case swift, json, yaml, javascript, typescript, python
+    case shell, markdown, html, css, go, rust, ruby, xml, plain
+}
+
+struct SyntaxHighlighter {
+
+    static func detectLanguage(from url: URL?) -> EditorLanguage {
+        guard let ext = url?.pathExtension.lowercased() else { return .plain }
+        switch ext {
+        case "swift":               return .swift
+        case "json":                return .json
+        case "yaml", "yml":         return .yaml
+        case "js", "mjs":           return .javascript
+        case "ts", "tsx":           return .typescript
+        case "py":                  return .python
+        case "sh", "bash", "zsh":   return .shell
+        case "md", "markdown":      return .markdown
+        case "html", "htm":         return .html
+        case "css", "scss", "less": return .css
+        case "go":                  return .go
+        case "rs":                  return .rust
+        case "rb":                  return .ruby
+        case "xml", "plist":        return .xml
+        default:                    return .plain
+        }
+    }
+
+    static func tokenize(source: String, language: EditorLanguage) -> [SyntaxToken] {
+        switch language {
+        case .swift:      return tokenizeSwift(source)
+        case .json:       return tokenizeJSON(source)
+        case .yaml:       return tokenizeYAML(source)
+        case .javascript, .typescript: return tokenizeJS(source)
+        case .python:     return tokenizePython(source)
+        case .shell:      return tokenizeShell(source)
+        case .markdown:   return tokenizeMarkdown(source)
+        case .html:       return tokenizeHTML(source)
+        case .css:        return tokenizeCSS(source)
+        case .go:         return tokenizeGo(source)
+        case .rust:       return tokenizeRust(source)
+        case .ruby:       return tokenizeRuby(source)
+        case .xml:        return tokenizeHTML(source)
+        case .plain:      return []
+        }
+    }
+
+    private static func tokens(source: String,
+                                patterns: [(String, TokenType)]) -> [SyntaxToken] {
+        var result: [SyntaxToken] = []
+        for (pattern, type_) in patterns {
+            guard let rx = try? NSRegularExpression(pattern: pattern, options: [.dotMatchesLineSeparators]) else { continue }
+            let ns = source as NSString
+            let matches = rx.matches(in: source, range: NSRange(location: 0, length: ns.length))
+            for m in matches {
+                let r = m.numberOfRanges > 1 ? m.range(at: 1) : m.range
+                if r.location != NSNotFound { result.append(SyntaxToken(range: r, type: type_)) }
+            }
+        }
+        result.sort { $0.range.location < $1.range.location }
+        var clean: [SyntaxToken] = []
+        var cursor = 0
+        for tok in result {
+            if tok.range.location >= cursor {
+                clean.append(tok)
+                cursor = tok.range.location + tok.range.length
+            }
+        }
+        return clean
+    }
+
+    private static func tokenizeSwift(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(func|class|struct|enum|protocol|extension|var|let|if|else|guard|return|for|while|in|import|typealias|associatedtype|where|switch|case|default|break|continue|throw|throws|rethrows|try|catch|defer|do|init|deinit|subscript|override|final|static|mutating|nonmutating|open|public|internal|fileprivate|private|weak|unowned|lazy|indirect|as|is|nil|true|false|self|Self|super|any|some|async|await|actor|nonisolated|isolated)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("\"\"\"[\\s\\S]*?\"\"\"",              .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("#?\"(?:[^\"\\\\]|\\\\.)*\"",          .string),
+            (kw,                                    .keyword),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("@\\w+",                               .attribute),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+            ("[+\\-*/=<>!&|^~%?:,;.()\\[\\]{}]+",  .operator_),
+        ])
+    }
+
+    private static func tokenizeJSON(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("\"(?:[^\"\\\\]|\\\\.)*\"\\s*(?=:)",   .keyword),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("\\b(true|false|null)\\b",             .keyword),
+            ("\\b-?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\\b", .number),
+            ("[{}\\[\\]:,]",                        .operator_),
+        ])
+    }
+
+    private static func tokenizeYAML(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("^\\s*([\\w-]+)\\s*(?=:)",            .keyword),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            ("\\b(true|false|null|yes|no)\\b",     .keyword),
+            ("\\b-?[0-9]+(?:\\.[0-9]+)?\\b",       .number),
+            ("^---",                                .operator_),
+        ])
+    }
+
+    private static func tokenizeJS(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(function|const|let|var|if|else|return|for|while|do|switch|case|break|continue|class|extends|new|this|import|export|default|from|async|await|try|catch|finally|throw|typeof|instanceof|in|of|null|undefined|true|false|void|delete|yield|super|static|get|set|type|interface|enum|implements|readonly|abstract|declare|module|namespace|keyof|as|is|any|never|unknown|infer)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("`[^`]*`",                             .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            (kw,                                    .keyword),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+
+    private static func tokenizePython(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(def|class|if|elif|else|for|while|in|return|import|from|as|with|try|except|finally|raise|pass|break|continue|lambda|yield|global|nonlocal|del|assert|not|and|or|is|None|True|False|async|await)\\b"
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("\"\"\"[\\s\\S]*?\"\"\"",              .string),
+            ("'''[\\s\\S]*?'''",                    .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            (kw,                                    .keyword),
+            ("@\\w+",                               .attribute),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+
+    private static func tokenizeShell(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(if|then|else|elif|fi|for|do|done|while|case|esac|in|function|return|export|local|source|echo|cd|ls|grep|awk|sed|cat|rm|cp|mv|mkdir|chmod|chown)\\b"
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'[^']*'",                             .string),
+            (kw,                                    .keyword),
+            ("\\$[\\w{][\\w}]*",                   .type_),
+            ("\\b[0-9]+\\b",                        .number),
+        ])
+    }
+
+    private static func tokenizeMarkdown(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("^#{1,6} [^\n]+",                      .keyword),
+            ("`{3}[\\s\\S]*?`{3}",                  .string),
+            ("`[^`]+`",                             .string),
+            ("\\*\\*[^*]+\\*\\*",                   .type_),
+            ("__[^_]+__",                           .type_),
+            ("\\*[^*]+\\*",                         .comment),
+            ("_[^_]+_",                             .comment),
+            ("\\[[^\\]]+\\]\\([^)]+\\)",            .attribute),
+            ("^[-*+] ",                             .operator_),
+            ("^\\d+\\. ",                           .operator_),
+        ])
+    }
+
+    private static func tokenizeHTML(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("<!--[\\s\\S]*?-->",                   .comment),
+            ("<[/!]?[A-Za-z][A-Za-z0-9-]*",        .keyword),
+            ("[A-Za-z-]+(?=\\s*=)",                 .type_),
+            ("\"[^\"]*\"",                          .string),
+            ("'[^']*'",                             .string),
+            (">",                                   .keyword),
+            ("&[A-Za-z0-9#]+;",                    .number),
+        ])
+    }
+
+    private static func tokenizeCSS(_ s: String) -> [SyntaxToken] {
+        return tokens(source: s, patterns: [
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("[.#]?[A-Za-z][A-Za-z0-9_-]*\\s*(?=\\{)", .keyword),
+            ("[A-Za-z-]+(?=\\s*:)",                 .type_),
+            ("\"[^\"]*\"|'[^']*'",                  .string),
+            ("#[0-9A-Fa-f]{3,8}\\b",               .number),
+            ("\\b[0-9]+(?:\\.[0-9]+)?(?:px|em|rem|%|vh|vw|pt|s|ms)?\\b", .number),
+            ("@[A-Za-z-]+",                         .attribute),
+        ])
+    }
+
+    private static func tokenizeGo(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(func|var|const|type|struct|interface|map|chan|go|defer|select|case|default|break|continue|return|if|else|for|range|switch|import|package|fallthrough|goto|nil|true|false|iota|make|new|append|len|cap|close|delete|copy|panic|recover|print|println)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("`[^`]*`",                             .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            (kw,                                    .keyword),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+
+    private static func tokenizeRust(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(fn|let|mut|const|static|struct|enum|trait|impl|type|where|use|mod|pub|crate|super|self|Self|if|else|match|loop|for|while|in|return|break|continue|as|ref|move|async|await|dyn|extern|unsafe|true|false|None|Some|Ok|Err)\\b"
+        return tokens(source: s, patterns: [
+            ("//[^\n]*",                            .comment),
+            ("/\\*[\\s\\S]*?\\*/",                  .comment),
+            ("r#?\"[\\s\\S]*?\"#?",                .string),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            (kw,                                    .keyword),
+            ("#\\[.*?\\]",                          .attribute),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+            ("'[a-z_]+",                            .type_),
+        ])
+    }
+
+    private static func tokenizeRuby(_ s: String) -> [SyntaxToken] {
+        let kw = "\\b(def|class|module|if|elsif|else|unless|end|do|begin|rescue|ensure|raise|return|yield|require|include|extend|attr_reader|attr_writer|attr_accessor|puts|print|true|false|nil|self|super|and|or|not|in|then|case|when)\\b"
+        return tokens(source: s, patterns: [
+            ("#[^\n]*",                             .comment),
+            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
+            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
+            (kw,                                    .keyword),
+            (":[A-Za-z_]\\w*",                     .type_),
+            ("@{1,2}[A-Za-z_]\\w*",               .attribute),
+            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
+            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
+        ])
+    }
+}
+
+// ── SyntaxHighlighter tests ────────────────────────────────────────────────
+test("SyntaxHighlighter: detectLanguage swift") {
+    let url = URL(fileURLWithPath: "/tmp/foo.swift")
+    let lang = SyntaxHighlighter.detectLanguage(from: url)
+    check(lang == .swift, "Expected .swift got \(lang)")
+}
+test("SyntaxHighlighter: detectLanguage json") {
+    let url = URL(fileURLWithPath: "/tmp/data.json")
+    check(SyntaxHighlighter.detectLanguage(from: url) == .json, "json")
+}
+test("SyntaxHighlighter: detectLanguage plain") {
+    let url = URL(fileURLWithPath: "/tmp/Makefile")
+    check(SyntaxHighlighter.detectLanguage(from: url) == .plain, "plain")
+}
+test("SyntaxHighlighter: tokenize swift keywords") {
+    let src = "func hello() -> String { return \"world\" }"
+    let toks = SyntaxHighlighter.tokenize(source: src, language: .swift)
+    let kwTokens = toks.filter { $0.type == .keyword }
+    check(!kwTokens.isEmpty, "Should have keyword tokens")
+    let funcTok = kwTokens.first
+    let range = funcTok?.range ?? NSRange(location: 0, length: 0)
+    let word = (src as NSString).substring(with: range)
+    check(word == "func", "First keyword should be 'func', got '\(word)'")
+}
+test("SyntaxHighlighter: tokenize swift string") {
+    let src = "let x = \"hello world\""
+    let toks = SyntaxHighlighter.tokenize(source: src, language: .swift)
+    let strToks = toks.filter { $0.type == .string }
+    check(!strToks.isEmpty, "Should have string token")
+}
+test("SyntaxHighlighter: tokenize JSON keys vs values") {
+    let src = "{\"name\": \"Alice\", \"age\": 30}"
+    let toks = SyntaxHighlighter.tokenize(source: src, language: .json)
+    let kwToks = toks.filter { $0.type == .keyword }
+    let numToks = toks.filter { $0.type == .number }
+    check(!kwToks.isEmpty, "JSON key tokens")
+    check(!numToks.isEmpty, "JSON number tokens")
+}
+test("SyntaxHighlighter: no overlapping tokens") {
+    let src = "func foo() { return 42 }"
+    let toks = SyntaxHighlighter.tokenize(source: src, language: .swift)
+    var cursor = 0
+    var ok = true
+    for t in toks {
+        if t.range.location < cursor { ok = false; break }
+        cursor = t.range.location + t.range.length
+    }
+    check(ok, "Tokens must not overlap")
+}
+
+// ============================================================================
 // MARK: - Results
 // ============================================================================
 
