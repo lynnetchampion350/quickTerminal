@@ -1031,6 +1031,13 @@ func applyTheme(_ t: TerminalTheme) {
         }
         return nsColorFromAnsi(i)
     }
+    // Update all open editor tabs
+    if let del = NSApp.delegate as? AppDelegate {
+        let editorDark = t.id != "light"
+        for ev in del.tabEditorViews.compactMap({ $0 }) {
+            ev.isDark = editorDark
+        }
+    }
 }
 
 func resolveSystemTheme() -> TerminalTheme {
@@ -4828,6 +4835,32 @@ class BorderlessWindow: NSWindow {
 
         super.setFrame(rect, display: displayFlag)
     }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let cmd  = event.modifierFlags.contains(.command)
+        let shft = event.modifierFlags.contains(.shift)
+        guard cmd else { return super.performKeyEquivalent(with: event) }
+        let key  = event.charactersIgnoringModifiers ?? ""
+        let del  = NSApp.delegate as? AppDelegate
+        let isEditor = (del?.activeTab ?? -1) < (del?.tabTypes.count ?? 0)
+                    && del?.tabTypes[del!.activeTab] == .editor
+
+        switch key {
+        case "s" where !shft && isEditor:
+            del?.saveCurrentEditor(); return true
+        case "s" where shft && isEditor:
+            del?.saveCurrentEditorAs(); return true
+        case "f" where !shft && isEditor:
+            (del?.tabEditorViews[del!.activeTab] as? EditorView)?.showSearch(replace: false)
+            return true
+        case "h" where !shft && isEditor:
+            (del?.tabEditorViews[del!.activeTab] as? EditorView)?.showSearch(replace: true)
+            return true
+        default:
+            break
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 }
 
 // MARK: - Header Interactive Views
@@ -5357,6 +5390,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
 
     var onTabClicked: ((Int) -> Void)?
     var onAddTab: (() -> Void)?
+    var onAddEditorTab: (() -> Void)?
     var onCloseTab: ((Int) -> Void)?
     var onReorderTab: ((Int, Int) -> Void)?
     var onTabDoubleClicked: ((Int) -> Void)?
@@ -5416,6 +5450,9 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
             cornerRadius: 6)
         addBtn.hoverScale = 1.3
         addBtn.onClick = { [weak self] in self?.onAddTab?() }
+        let press = NSPressGestureRecognizer(target: self, action: #selector(addBtnLongPress(_:)))
+        press.minimumPressDuration = 0.4
+        addBtn.addGestureRecognizer(press)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(addBtn)
 
@@ -5511,6 +5548,8 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
             sep.trailingAnchor.constraint(equalTo: trailingAnchor),
             sep.heightAnchor.constraint(equalToConstant: 1),
         ])
+
+        registerForDraggedTypes([.fileURL])
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -5792,6 +5831,45 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         if tabIndex != movedToSlot {
             onReorderTab?(tabIndex, movedToSlot)
         }
+    }
+
+    // MARK: Long-press on + button
+
+    @objc private func addBtnLongPress(_ gr: NSPressGestureRecognizer) {
+        guard gr.state == .began else { return }
+        let menu = NSMenu()
+        let termItem = NSMenuItem(title: "Terminal", action: #selector(longPressAddTerminal), keyEquivalent: "")
+        termItem.target = self
+        let editorItem = NSMenuItem(title: "Text Editor", action: #selector(longPressAddEditor), keyEquivalent: "")
+        editorItem.target = self
+        menu.addItem(termItem)
+        menu.addItem(editorItem)
+        let btnBounds = addBtn.bounds
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: btnBounds.midX, y: btnBounds.minY),
+                   in: addBtn)
+    }
+    @objc private func longPressAddTerminal() { onAddTab?() }
+    @objc private func longPressAddEditor()   { onAddEditorTab?() }
+
+    // MARK: Drag destination (file drop → editor tab)
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard sender.draggingPasteboard.canReadObject(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) else { return [] }
+        return .copy
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL],
+              let url = urls.first else { return false }
+        DispatchQueue.main.async {
+            (NSApp.delegate as? AppDelegate)?.createEditorTab(url: url)
+        }
+        return true
     }
 }
 
@@ -7275,6 +7353,7 @@ class SettingsOverlay: NSView {
         rows.append(makeToggleRow(label: Loc.copyOnSelect, settingsKey: "copyOnSelect"))
         rows.append(makeToggleRow(label: Loc.launchAtLogin, settingsKey: "autoStartEnabled"))
         rows.append(makeToggleRow(label: Loc.autoCheckUpdates, settingsKey: "autoCheckUpdates"))
+        rows.append(makeToggleRow(label: "Tabs verwenden (Editor)", settingsKey: "editorUseTabs"))
 
         // WebPicker
         rows.append(makeSectionHeader(Loc.webpickerSection))
@@ -8001,6 +8080,7 @@ class SettingsOverlay: NSView {
         "promptTheme": "default",
         "autoStartEnabled": false,
         "autoCheckUpdates": true,
+        "editorUseTabs": false,
         "webPickerBrowser": 0,
         "showAIUsage": true,
         "aiUsageRefreshIndex": 0,
@@ -15435,6 +15515,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         headerView.autoresizingMask = [.width, .minYMargin]
         headerView.onTabClicked = { [weak self] index in self?.switchToTab(index) }
         headerView.onAddTab = { [weak self] in self?.addTab() }
+        headerView.onAddEditorTab = { [weak self] in self?.newEditorTab() }
         headerView.onCloseTab = { [weak self] index in self?.closeTab(index: index) }
         headerView.onReorderTab = { [weak self] from, to in self?.reorderTab(from: from, to: to) }
         headerView.onTabRenamed = { [weak self] index, name in
@@ -16117,6 +16198,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     updateCheckTimer = nil
                 }
             }
+        case "editorUseTabs":
+            let useTabs = UserDefaults.standard.bool(forKey: "editorUseTabs")
+            for ev in tabEditorViews.compactMap({ $0 }) {
+                ev.useTabs = useTabs
+            }
         case "fontFamily":
             let size = CGFloat(UserDefaults.standard.double(forKey: "terminalFontSize"))
             for tv in termViews { tv?.updateFontSize(size) }
@@ -16527,8 +16613,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func updateFooter() {
         guard !splitContainers.isEmpty && activeTab < splitContainers.count else { return }
-        // Editor tabs don't update the terminal footer
-        if activeTab < tabTypes.count && tabTypes[activeTab] == .editor { return }
+        // Editor mode: hide terminal-specific footer content
+        if activeTab < tabTypes.count && tabTypes[activeTab] == .editor {
+            footerView.isHidden = true
+            return
+        }
+        footerView.isHidden = false
         // Use the focused pane (may be secondary in split mode)
         let container = splitContainers[activeTab]
         let tv: TerminalView
@@ -18386,7 +18476,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func saveSession() {
         var tabs: [[String: Any]] = []
         for (i, tv) in termViews.enumerated() {
-            // Skip editor tabs in session save (handled separately)
+            // Editor tab
+            if i < tabTypes.count && tabTypes[i] == .editor {
+                var t: [String: Any] = ["type": "editor"]
+                if let url = i < tabEditorURLs.count ? tabEditorURLs[i] : nil {
+                    t["editorURL"] = url.path
+                }
+                tabs.append(t)
+                continue
+            }
+            // Skip nil terminal slots
             guard let tv = tv else { continue }
             var info: [String: Any] = [
                 "shell": tv.currentShell,
@@ -18454,6 +18553,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let savedActive = UserDefaults.standard.integer(forKey: "sessionActiveTab")
 
         for tabInfo in tabs {
+            // Restore editor tab
+            if let type_ = tabInfo["type"] as? String, type_ == "editor" {
+                let url = (tabInfo["editorURL"] as? String).map { URL(fileURLWithPath: $0) }
+                createEditorTab(url: url)
+                continue
+            }
             let shell = tabInfo["shell"] as? String ?? "/bin/zsh"
             let cwd = tabInfo["cwd"] as? String
             let hue = tabInfo["colorHue"] as? Double
