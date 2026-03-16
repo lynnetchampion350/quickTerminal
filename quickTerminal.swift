@@ -10,7 +10,7 @@ import AVKit
 
 // MARK: - Version
 
-let kAppVersion = "1.4.1"
+let kAppVersion = "1.4.0"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -1030,13 +1030,6 @@ func applyTheme(_ t: TerminalTheme) {
             return NSColor(calibratedRed: r, green: g, blue: b, alpha: 1)
         }
         return nsColorFromAnsi(i)
-    }
-    // Update all open editor tabs
-    if let del = NSApp.delegate as? AppDelegate {
-        let editorDark = t.id != "light"
-        for ev in del.tabEditorViews.compactMap({ $0 }) {
-            ev.isDark = editorDark
-        }
     }
 }
 
@@ -3733,14 +3726,14 @@ class TerminalView: NSView {
             // Cmd+Arrow Left/Right → switch tabs
             if event.keyCode == 123 { // Left arrow
                 if let d = NSApp.delegate as? AppDelegate {
-                    let prev = d.activeTab > 0 ? d.activeTab - 1 : d.splitContainers.count - 1
+                    let prev = d.activeTab > 0 ? d.activeTab - 1 : d.termViews.count - 1
                     d.switchToTab(prev)
                 }
                 return
             }
             if event.keyCode == 124 { // Right arrow
                 if let d = NSApp.delegate as? AppDelegate {
-                    let next = d.activeTab < d.splitContainers.count - 1 ? d.activeTab + 1 : 0
+                    let next = d.activeTab < d.termViews.count - 1 ? d.activeTab + 1 : 0
                     d.switchToTab(next)
                 }
                 return
@@ -3788,7 +3781,7 @@ class TerminalView: NSView {
         }
         // Ctrl+Shift+1-9: Tab umbenennen
         if flags == [.control, .shift], let idx = Self.numberKeyCodes[event.keyCode] {
-            if let d = NSApp.delegate as? AppDelegate, idx < d.splitContainers.count {
+            if let d = NSApp.delegate as? AppDelegate, idx < d.termViews.count {
                 let title = idx < d.tabCustomNames.count ? (d.tabCustomNames[idx] ?? "") : ""
                 d.headerView.startEditingTab(at: idx, currentTitle: title)
             }
@@ -4835,32 +4828,6 @@ class BorderlessWindow: NSWindow {
 
         super.setFrame(rect, display: displayFlag)
     }
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let cmd  = event.modifierFlags.contains(.command)
-        let shft = event.modifierFlags.contains(.shift)
-        guard cmd else { return super.performKeyEquivalent(with: event) }
-        let key  = event.charactersIgnoringModifiers ?? ""
-        let del  = NSApp.delegate as? AppDelegate
-        let isEditor = (del?.activeTab ?? -1) < (del?.tabTypes.count ?? 0)
-                    && del?.tabTypes[del!.activeTab] == .editor
-
-        switch key {
-        case "s" where !shft && isEditor:
-            del?.saveCurrentEditor(); return true
-        case "s" where shft && isEditor:
-            del?.saveCurrentEditorAs(); return true
-        case "f" where !shft && isEditor:
-            (del?.tabEditorViews[del!.activeTab] as? EditorView)?.showSearch(replace: false)
-            return true
-        case "h" where !shft && isEditor:
-            (del?.tabEditorViews[del!.activeTab] as? EditorView)?.showSearch(replace: true)
-            return true
-        default:
-            break
-        }
-        return super.performKeyEquivalent(with: event)
-    }
 }
 
 // MARK: - Header Interactive Views
@@ -5390,7 +5357,6 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
 
     var onTabClicked: ((Int) -> Void)?
     var onAddTab: (() -> Void)?
-    var onAddEditorTab: (() -> Void)?
     var onCloseTab: ((Int) -> Void)?
     var onReorderTab: ((Int, Int) -> Void)?
     var onTabDoubleClicked: ((Int) -> Void)?
@@ -5450,9 +5416,6 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
             cornerRadius: 6)
         addBtn.hoverScale = 1.3
         addBtn.onClick = { [weak self] in self?.onAddTab?() }
-        let press = NSPressGestureRecognizer(target: self, action: #selector(addBtnLongPress(_:)))
-        press.minimumPressDuration = 0.4
-        addBtn.addGestureRecognizer(press)
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(addBtn)
 
@@ -5548,8 +5511,6 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
             sep.trailingAnchor.constraint(equalTo: trailingAnchor),
             sep.heightAnchor.constraint(equalToConstant: 1),
         ])
-
-        registerForDraggedTypes([.fileURL])
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -5831,45 +5792,6 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         if tabIndex != movedToSlot {
             onReorderTab?(tabIndex, movedToSlot)
         }
-    }
-
-    // MARK: Long-press on + button
-
-    @objc private func addBtnLongPress(_ gr: NSPressGestureRecognizer) {
-        guard gr.state == .began else { return }
-        let menu = NSMenu()
-        let termItem = NSMenuItem(title: "Terminal", action: #selector(longPressAddTerminal), keyEquivalent: "")
-        termItem.target = self
-        let editorItem = NSMenuItem(title: "Text Editor", action: #selector(longPressAddEditor), keyEquivalent: "")
-        editorItem.target = self
-        menu.addItem(termItem)
-        menu.addItem(editorItem)
-        let btnBounds = addBtn.bounds
-        menu.popUp(positioning: nil,
-                   at: NSPoint(x: btnBounds.midX, y: btnBounds.minY),
-                   in: addBtn)
-    }
-    @objc private func longPressAddTerminal() { onAddTab?() }
-    @objc private func longPressAddEditor()   { onAddEditorTab?() }
-
-    // MARK: Drag destination (file drop → editor tab)
-
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard sender.draggingPasteboard.canReadObject(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]) else { return [] }
-        return .copy
-    }
-
-    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        guard let urls = sender.draggingPasteboard.readObjects(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]) as? [URL],
-              let url = urls.first else { return false }
-        DispatchQueue.main.async {
-            (NSApp.delegate as? AppDelegate)?.createEditorTab(url: url)
-        }
-        return true
     }
 }
 
@@ -7353,7 +7275,6 @@ class SettingsOverlay: NSView {
         rows.append(makeToggleRow(label: Loc.copyOnSelect, settingsKey: "copyOnSelect"))
         rows.append(makeToggleRow(label: Loc.launchAtLogin, settingsKey: "autoStartEnabled"))
         rows.append(makeToggleRow(label: Loc.autoCheckUpdates, settingsKey: "autoCheckUpdates"))
-        rows.append(makeToggleRow(label: "Tabs verwenden (Editor)", settingsKey: "editorUseTabs"))
 
         // WebPicker
         rows.append(makeSectionHeader(Loc.webpickerSection))
@@ -8080,7 +8001,6 @@ class SettingsOverlay: NSView {
         "promptTheme": "default",
         "autoStartEnabled": false,
         "autoCheckUpdates": true,
-        "editorUseTabs": false,
         "webPickerBrowser": 0,
         "showAIUsage": true,
         "aiUsageRefreshIndex": 0,
@@ -12554,7 +12474,7 @@ class PassthroughBlurView: NSVisualEffectView {
 }
 
 class SplitContainer: NSView {
-    var primaryView: TerminalView!
+    var primaryView: TerminalView
     var secondaryView: TerminalView?
     var isVerticalSplit = true  // vertical = side by side, horizontal = top/bottom
     var splitRatio: CGFloat = 0.5
@@ -12573,13 +12493,6 @@ class SplitContainer: NSView {
         addSubview(primary)
         primary.frame = bounds
         primary.autoresizingMask = [.width, .height]
-    }
-
-    /// Placeholder init for editor tabs — no terminal view attached
-    init(placeholderFrame: NSRect) {
-        super.init(frame: placeholderFrame)
-        wantsLayer = true
-        isHidden = true
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -13930,12 +13843,6 @@ class UpdateChecker {
     func downloadAndInstall(release: GitHubRelease,
                             onProgress: @escaping (Double) -> Void,
                             onComplete: @escaping (Result<Void, Error>) -> Void) {
-        // Require .app bundle for install — raw dev binaries can detect updates but not self-replace
-        guard Bundle.main.bundlePath.hasSuffix(".app") else {
-            onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
-                userInfo: [NSLocalizedDescriptionKey: "Auto-install requires the .app bundle. Copy quickTerminal.app to /Applications first."])))
-            return
-        }
         // [P1] Verify HTTPS scheme — reject plain HTTP downloads
         guard release.downloadURL.scheme == "https" else {
             onComplete(.failure(NSError(domain: "UpdateChecker", code: 0,
@@ -14310,1101 +14217,20 @@ class OnboardingPanel: NSPanel {
     }
 }
 
-// MARK: - Text Editor
-
-enum TabType { case terminal, editor }
-
-// ── Syntax Highlighting ────────────────────────────────────────────────────
-
-enum TokenType {
-    case keyword, string, comment, number, operator_, type_, attribute, plain
-}
-
-struct SyntaxToken {
-    let range: NSRange
-    let type: TokenType
-}
-
-enum EditorLanguage: String {
-    case swift, json, yaml, javascript, typescript, python
-    case shell, markdown, html, css, go, rust, ruby, xml, plain
-}
-
-struct SyntaxHighlighter {
-
-    // ── Language detection ─────────────────────────────────────────────────
-    static func detectLanguage(from url: URL?) -> EditorLanguage {
-        guard let ext = url?.pathExtension.lowercased() else { return .plain }
-        switch ext {
-        case "swift":               return .swift
-        case "json":                return .json
-        case "yaml", "yml":         return .yaml
-        case "js", "mjs":           return .javascript
-        case "ts", "tsx":           return .typescript
-        case "py":                  return .python
-        case "sh", "bash", "zsh":   return .shell
-        case "md", "markdown":      return .markdown
-        case "html", "htm":         return .html
-        case "css", "scss", "less": return .css
-        case "go":                  return .go
-        case "rs":                  return .rust
-        case "rb":                  return .ruby
-        case "xml", "plist":        return .xml
-        default:                    return .plain
-        }
-    }
-
-    // ── Tokenize ───────────────────────────────────────────────────────────
-    static func tokenize(source: String, language: EditorLanguage) -> [SyntaxToken] {
-        switch language {
-        case .swift:      return tokenizeSwift(source)
-        case .json:       return tokenizeJSON(source)
-        case .yaml:       return tokenizeYAML(source)
-        case .javascript, .typescript: return tokenizeJS(source)
-        case .python:     return tokenizePython(source)
-        case .shell:      return tokenizeShell(source)
-        case .markdown:   return tokenizeMarkdown(source)
-        case .html:       return tokenizeHTML(source)
-        case .css:        return tokenizeCSS(source)
-        case .go:         return tokenizeGo(source)
-        case .rust:       return tokenizeRust(source)
-        case .ruby:       return tokenizeRuby(source)
-        case .xml:        return tokenizeHTML(source)
-        case .plain:      return []
-        }
-    }
-
-    // ── Helper: cached NSRegularExpression ────────────────────────────────
-    private static var rxCache: [String: NSRegularExpression] = [:]
-    private static let rxCacheLock = NSLock()
-
-    private static func cachedRegex(pattern: String, options: NSRegularExpression.Options) -> NSRegularExpression? {
-        let key = "\(options.rawValue):\(pattern)"
-        rxCacheLock.lock()
-        defer { rxCacheLock.unlock() }
-        if let cached = rxCache[key] { return cached }
-        guard let rx = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
-        rxCache[key] = rx
-        return rx
-    }
-
-    // ── Helper: apply regex patterns ───────────────────────────────────────
-    private static func tokens(source: String,
-                                patterns: [(String, TokenType)],
-                                options: NSRegularExpression.Options = []) -> [SyntaxToken] {
-        var result: [SyntaxToken] = []
-        let ns = source as NSString
-        let fullRange = NSRange(location: 0, length: ns.length)
-        for (pattern, type_) in patterns {
-            guard let rx = cachedRegex(pattern: pattern, options: options) else { continue }
-            let matches = rx.matches(in: source, range: fullRange)
-            for m in matches {
-                let r = m.numberOfRanges > 1 ? m.range(at: 1) : m.range
-                if r.location != NSNotFound { result.append(SyntaxToken(range: r, type: type_)) }
-            }
-        }
-        result.sort { $0.range.location < $1.range.location }
-        var clean: [SyntaxToken] = []
-        var cursor = 0
-        for tok in result {
-            if tok.range.location >= cursor {
-                clean.append(tok)
-                cursor = tok.range.location + tok.range.length
-            }
-        }
-        return clean
-    }
-
-    private static func tokenizeSwift(_ s: String) -> [SyntaxToken] {
-        let kw = "\\b(func|class|struct|enum|protocol|extension|var|let|if|else|guard|return|for|while|in|import|typealias|associatedtype|where|switch|case|default|break|continue|throw|throws|rethrows|try|catch|defer|do|init|deinit|subscript|override|final|static|mutating|nonmutating|open|public|internal|fileprivate|private|weak|unowned|lazy|indirect|as|is|nil|true|false|self|Self|super|any|some|async|await|actor|nonisolated|isolated)\\b"
-        return tokens(source: s, patterns: [
-            ("//[^\n]*",                            .comment),
-            ("/\\*[\\s\\S]*?\\*/",                  .comment),
-            ("\"\"\"[\\s\\S]*?\"\"\"",              .string),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            ("#?\"(?:[^\"\\\\]|\\\\.)*\"",          .string),
-            (kw,                                    .keyword),
-            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
-            ("@\\w+",                               .attribute),
-            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
-            ("[+\\-*/=<>!&|^~%?:,;.()\\[\\]{}]+",  .operator_),
-        ], options: [.dotMatchesLineSeparators])
-    }
-
-    private static func tokenizeJSON(_ s: String) -> [SyntaxToken] {
-        return tokens(source: s, patterns: [
-            ("\"(?:[^\"\\\\]|\\\\.)*\"\\s*(?=:)",   .keyword),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            ("\\b(true|false|null)\\b",             .keyword),
-            ("\\b-?[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\\b", .number),
-            ("[{}\\[\\]:,]",                        .operator_),
-        ])
-    }
-
-    private static func tokenizeYAML(_ s: String) -> [SyntaxToken] {
-        return tokens(source: s, patterns: [
-            ("#[^\n]*",                             .comment),
-            ("^\\s*([\\w-]+)\\s*(?=:)",            .keyword),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
-            ("\\b(true|false|null|yes|no)\\b",     .keyword),
-            ("\\b-?[0-9]+(?:\\.[0-9]+)?\\b",       .number),
-            ("^---",                                .operator_),
-        ], options: [.anchorsMatchLines])
-    }
-
-    private static func tokenizeJS(_ s: String) -> [SyntaxToken] {
-        let kw = "\\b(function|const|let|var|if|else|return|for|while|do|switch|case|break|continue|class|extends|new|this|import|export|default|from|async|await|try|catch|finally|throw|typeof|instanceof|in|of|null|undefined|true|false|void|delete|yield|super|static|get|set|type|interface|enum|implements|readonly|abstract|declare|module|namespace|keyof|as|is|any|never|unknown|infer)\\b"
-        return tokens(source: s, patterns: [
-            ("//[^\n]*",                            .comment),
-            ("/\\*[\\s\\S]*?\\*/",                  .comment),
-            ("`[^`]*`",                             .string),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
-            (kw,                                    .keyword),
-            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
-            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
-        ], options: [.dotMatchesLineSeparators])
-    }
-
-    private static func tokenizePython(_ s: String) -> [SyntaxToken] {
-        let kw = "\\b(def|class|if|elif|else|for|while|in|return|import|from|as|with|try|except|finally|raise|pass|break|continue|lambda|yield|global|nonlocal|del|assert|not|and|or|is|None|True|False|async|await)\\b"
-        return tokens(source: s, patterns: [
-            ("#[^\n]*",                             .comment),
-            ("\"\"\"[\\s\\S]*?\"\"\"",              .string),
-            ("'''[\\s\\S]*?'''",                    .string),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
-            (kw,                                    .keyword),
-            ("@\\w+",                               .attribute),
-            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
-            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
-        ], options: [.dotMatchesLineSeparators])
-    }
-
-    private static func tokenizeShell(_ s: String) -> [SyntaxToken] {
-        let kw = "\\b(if|then|else|elif|fi|for|do|done|while|case|esac|in|function|return|export|local|source|echo|cd|ls|grep|awk|sed|cat|rm|cp|mv|mkdir|chmod|chown)\\b"
-        return tokens(source: s, patterns: [
-            ("#[^\n]*",                             .comment),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            ("'[^']*'",                             .string),
-            (kw,                                    .keyword),
-            ("\\$\\{[\\w@#?!*-]+\\}|\\$[\\w@#?!*]+",  .type_),
-            ("\\b[0-9]+\\b",                        .number),
-        ])
-    }
-
-    private static func tokenizeMarkdown(_ s: String) -> [SyntaxToken] {
-        return tokens(source: s, patterns: [
-            ("^#{1,6} [^\n]+",                      .keyword),
-            ("`{3}[\\s\\S]*?`{3}",                  .string),
-            ("`[^`]+`",                             .string),
-            ("\\*\\*[^*]+\\*\\*",                   .type_),
-            ("__[^_]+__",                           .type_),
-            ("\\*[^*]+\\*",                         .comment),
-            ("_[^_]+_",                             .comment),
-            ("\\[[^\\]]+\\]\\([^)]+\\)",            .attribute),
-            ("^[-*+] ",                             .operator_),
-            ("^\\d+\\. ",                           .operator_),
-        ], options: [.anchorsMatchLines])
-    }
-
-    private static func tokenizeHTML(_ s: String) -> [SyntaxToken] {
-        return tokens(source: s, patterns: [
-            ("<!--[\\s\\S]*?-->",                   .comment),
-            ("<[/!]?[A-Za-z][A-Za-z0-9-]*",        .keyword),
-            ("[A-Za-z-]+(?=\\s*=)",                 .type_),
-            ("\"[^\"]*\"",                          .string),
-            ("'[^']*'",                             .string),
-            (">",                                   .keyword),
-            ("&[A-Za-z0-9#]+;",                    .number),
-        ], options: [.dotMatchesLineSeparators])
-    }
-
-    private static func tokenizeCSS(_ s: String) -> [SyntaxToken] {
-        return tokens(source: s, patterns: [
-            ("/\\*[\\s\\S]*?\\*/",                  .comment),
-            ("[.#]?[A-Za-z][A-Za-z0-9_-]*\\s*(?=\\{)", .keyword),
-            ("[A-Za-z-]+(?=\\s*:)",                 .type_),
-            ("\"[^\"]*\"|'[^']*'",                  .string),
-            ("#[0-9A-Fa-f]{3,8}\\b",               .number),
-            ("\\b[0-9]+(?:\\.[0-9]+)?(?:px|em|rem|%|vh|vw|pt|s|ms)?\\b", .number),
-            ("@[A-Za-z-]+",                         .attribute),
-        ], options: [.dotMatchesLineSeparators])
-    }
-
-    private static func tokenizeGo(_ s: String) -> [SyntaxToken] {
-        let kw = "\\b(func|var|const|type|struct|interface|map|chan|go|defer|select|case|default|break|continue|return|if|else|for|range|switch|import|package|fallthrough|goto|nil|true|false|iota|make|new|append|len|cap|close|delete|copy|panic|recover|print|println)\\b"
-        return tokens(source: s, patterns: [
-            ("//[^\n]*",                            .comment),
-            ("/\\*[\\s\\S]*?\\*/",                  .comment),
-            ("`[^`]*`",                             .string),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            (kw,                                    .keyword),
-            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
-            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
-        ], options: [.dotMatchesLineSeparators])
-    }
-
-    private static func tokenizeRust(_ s: String) -> [SyntaxToken] {
-        let kw = "\\b(fn|let|mut|const|static|struct|enum|trait|impl|type|where|use|mod|pub|crate|super|self|Self|if|else|match|loop|for|while|in|return|break|continue|as|ref|move|async|await|dyn|extern|unsafe|true|false|None|Some|Ok|Err)\\b"
-        return tokens(source: s, patterns: [
-            ("//[^\n]*",                            .comment),
-            ("/\\*[\\s\\S]*?\\*/",                  .comment),
-            ("r#{0,5}\"[\\s\\S]*?\"#{0,5}",        .string),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            (kw,                                    .keyword),
-            ("#\\[.*?\\]",                          .attribute),
-            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
-            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
-            ("'[a-z_]+",                            .type_),
-        ], options: [.dotMatchesLineSeparators])
-    }
-
-    private static func tokenizeRuby(_ s: String) -> [SyntaxToken] {
-        let kw = "\\b(def|class|module|if|elsif|else|unless|end|do|begin|rescue|ensure|raise|return|yield|require|include|extend|attr_reader|attr_writer|attr_accessor|puts|print|true|false|nil|self|super|and|or|not|in|then|case|when)\\b"
-        return tokens(source: s, patterns: [
-            ("#[^\n]*",                             .comment),
-            ("\"(?:[^\"\\\\]|\\\\.)*\"",            .string),
-            ("'(?:[^'\\\\]|\\\\.)*'",              .string),
-            (kw,                                    .keyword),
-            (":[A-Za-z_]\\w*",                     .type_),
-            ("@{1,2}[A-Za-z_]\\w*",               .attribute),
-            ("\\b[A-Z][A-Za-z0-9_]*\\b",           .type_),
-            ("\\b[0-9]+(?:\\.[0-9]+)?\\b",          .number),
-        ])
-    }
-
-    static func color(for type_: TokenType, dark: Bool) -> NSColor {
-        switch type_ {
-        case .keyword:    return dark ? NSColor(calibratedRed: 0.80, green: 0.45, blue: 0.90, alpha: 1) : NSColor(calibratedRed: 0.55, green: 0.10, blue: 0.70, alpha: 1)
-        case .string:     return dark ? NSColor(calibratedRed: 0.90, green: 0.65, blue: 0.35, alpha: 1) : NSColor(calibratedRed: 0.70, green: 0.30, blue: 0.10, alpha: 1)
-        case .comment:    return dark ? NSColor(calibratedWhite: 0.45, alpha: 1) : NSColor(calibratedWhite: 0.55, alpha: 1)
-        case .number:     return dark ? NSColor(calibratedRed: 0.65, green: 0.90, blue: 0.65, alpha: 1) : NSColor(calibratedRed: 0.10, green: 0.50, blue: 0.10, alpha: 1)
-        case .type_:      return dark ? NSColor(calibratedRed: 0.40, green: 0.80, blue: 0.95, alpha: 1) : NSColor(calibratedRed: 0.05, green: 0.40, blue: 0.65, alpha: 1)
-        case .attribute:  return dark ? NSColor(calibratedRed: 0.95, green: 0.75, blue: 0.40, alpha: 1) : NSColor(calibratedRed: 0.65, green: 0.40, blue: 0.05, alpha: 1)
-        case .operator_:  return dark ? NSColor(calibratedWhite: 0.65, alpha: 1) : NSColor(calibratedWhite: 0.40, alpha: 1)
-        case .plain:
-            return dark ? NSColor(calibratedWhite: 0.90, alpha: 1) : NSColor(calibratedWhite: 0.10, alpha: 1)
-        }
-    }
-}
-
-// ── EditorTextStorage ──────────────────────────────────────────────────────
-
-class EditorTextStorage: NSTextStorage {
-    private var _backing = NSMutableAttributedString()
-    var language: EditorLanguage = .plain
-    var isDark: Bool = true
-
-    override var string: String { _backing.string }
-
-    override func attributes(at location: Int,
-                              effectiveRange range: NSRangePointer?) -> [NSAttributedString.Key: Any] {
-        return _backing.attributes(at: location, effectiveRange: range)
-    }
-
-    override func replaceCharacters(in range: NSRange, with str: String) {
-        beginEditing()
-        _backing.replaceCharacters(in: range, with: str)
-        edited(.editedCharacters, range: range,
-               changeInLength: str.utf16.count - range.length)
-        endEditing()
-    }
-
-    override func setAttributes(_ attrs: [NSAttributedString.Key: Any]?, range: NSRange) {
-        beginEditing()
-        _backing.setAttributes(attrs, range: range)
-        edited(.editedAttributes, range: range, changeInLength: 0)
-        endEditing()
-    }
-
-    override func processEditing() {
-        super.processEditing()
-        guard editedMask.contains(.editedCharacters) else { return }
-        applyHighlighting()
-    }
-
-    func applyHighlighting() {
-        let full = NSRange(location: 0, length: _backing.length)
-        guard full.length > 0 else { return }
-        let fg = isDark ? NSColor(calibratedWhite: 0.90, alpha: 1) : NSColor(calibratedWhite: 0.10, alpha: 1)
-        beginEditing()
-        _backing.setAttributes([.foregroundColor: fg], range: full)
-        let tokens = SyntaxHighlighter.tokenize(source: _backing.string, language: language)
-        for tok in tokens {
-            guard tok.range.location + tok.range.length <= _backing.length else { continue }
-            let c = SyntaxHighlighter.color(for: tok.type, dark: isDark)
-            _backing.addAttribute(.foregroundColor, value: c, range: tok.range)
-        }
-        edited(.editedAttributes, range: full, changeInLength: 0)
-        endEditing()
-    }
-}
-
-// ── EditorLayoutManager ────────────────────────────────────────────────────
-
-class EditorLayoutManager: NSLayoutManager {
-    weak var gutterView: GutterView?
-
-    override func processEditing(for textStorage: NSTextStorage,
-                                  edited editMask: NSTextStorageEditActions,
-                                  range newCharRange: NSRange,
-                                  changeInLength delta: Int,
-                                  invalidatedRange invalidatedCharRange: NSRange) {
-        super.processEditing(for: textStorage, edited: editMask,
-                              range: newCharRange, changeInLength: delta,
-                              invalidatedRange: invalidatedCharRange)
-        if let ev = gutterView?.superview as? EditorView, !ev.foldedLineStarts.isEmpty {
-            DispatchQueue.main.async { [weak self, weak textStorage] in
-                guard let self, let ts = textStorage else { return }
-                self.hideFoldedGlyphs(foldedLineStarts: ev.foldedLineStarts, in: ts)
-            }
-        }
-        DispatchQueue.main.async { [weak self] in
-            self?.gutterView?.needsDisplay = true
-        }
-    }
-
-    // setNotShownAttribute: available macOS 10.0+
-    // Hides glyphs for all folded ranges by iterating over each glyph index
-    func hideFoldedGlyphs(foldedLineStarts: Set<Int>, in textStorage: NSTextStorage) {
-        guard !foldedLineStarts.isEmpty else { return }
-        let str = textStorage.string as NSString
-        for lineStart in foldedLineStarts {
-            // Find the range to hide (from line end to block end)
-            let lineEndRange = str.range(of: "\n", options: [],
-                range: NSRange(location: lineStart, length: str.length - lineStart))
-            let lineEndChar = lineEndRange.location == NSNotFound ? str.length : lineEndRange.location
-            if lineEndChar >= str.length { continue }
-            // Find matching }
-            var depth = 0
-            var i = lineEndChar
-            var blockEnd = str.length
-            while i < str.length {
-                let c = str.character(at: i)
-                if c == 0x7B { depth += 1 }
-                else if c == 0x7D {
-                    depth -= 1
-                    if depth <= 0 { blockEnd = i + 1; break }
-                }
-                i += 1
-            }
-            let hideRange = NSRange(location: lineEndChar, length: blockEnd - lineEndChar)
-            let glyphRange = self.glyphRange(forCharacterRange: hideRange, actualCharacterRange: nil)
-            if glyphRange.location != NSNotFound && glyphRange.length > 0 {
-                for gi in glyphRange.location ..< NSMaxRange(glyphRange) {
-                    self.setNotShownAttribute(true, forGlyphAt: gi)
-                }
-            }
-        }
-    }
-}
-
-// ── GutterView ─────────────────────────────────────────────────────────────
-
-class GutterView: NSView {
-    static let width: CGFloat = 52
-    weak var textView: NSTextView?
-    weak var layoutManager: EditorLayoutManager?
-    var isDark: Bool = true
-
-    private var bgColor:   NSColor { isDark ? NSColor(calibratedWhite: 0.09, alpha: 1) : NSColor(calibratedWhite: 0.93, alpha: 1) }
-    private var numColor:  NSColor { isDark ? NSColor(calibratedWhite: 0.38, alpha: 1) : NSColor(calibratedWhite: 0.60, alpha: 1) }
-    private var curColor:  NSColor { isDark ? NSColor(calibratedWhite: 0.75, alpha: 1) : NSColor(calibratedWhite: 0.25, alpha: 1) }
-    private var borderCol: NSColor { isDark ? NSColor(calibratedWhite: 0.16, alpha: 1) : NSColor(calibratedWhite: 0.82, alpha: 1) }
-
-    override func draw(_ dirtyRect: NSRect) {
-        guard let lm = layoutManager,
-              let tc = lm.textContainers.first,
-              let tv = textView,
-              let ctx = NSGraphicsContext.current?.cgContext else { return }
-
-        ctx.setFillColor(bgColor.cgColor)
-        ctx.fill(bounds)
-
-        ctx.setFillColor(borderCol.cgColor)
-        ctx.fill(NSRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height))
-
-        let font = tv.font ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: numColor]
-        let curAttrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: curColor]
-
-        let visibleRect = tv.visibleRect
-        let insetY = tv.textContainerInset.height
-
-        let glyphRange = lm.glyphRange(forBoundingRect: visibleRect, in: tc)
-        let charRange  = lm.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
-
-        let str = lm.textStorage?.string ?? ""
-        var lineNum = 1
-        if charRange.location > 0 {
-            let before = (str as NSString).substring(to: charRange.location)
-            lineNum = before.components(separatedBy: "\n").count
-        }
-
-        let cursorLine = currentLineNumber(in: tv)
-
-        var glyphIdx = glyphRange.location
-        while glyphIdx < NSMaxRange(glyphRange) {
-            var lineGlyphRange = NSRange()
-            let lineRect = lm.lineFragmentRect(forGlyphAt: glyphIdx, effectiveRange: &lineGlyphRange)
-            let y = lineRect.minY + insetY - visibleRect.minY
-
-            let label = "\(lineNum)" as NSString
-            let a = lineNum == cursorLine ? curAttrs : attrs
-            let size = label.size(withAttributes: a)
-            label.draw(at: NSPoint(x: bounds.width - size.width - 10, y: y), withAttributes: a)
-
-            // Draw fold triangle if line contains a block opener
-            if let ts = lm.textStorage {
-                let lineCharRange = lm.characterRange(forGlyphRange: lineGlyphRange, actualGlyphRange: nil)
-                let lineStr = (ts.string as NSString).substring(with: lineCharRange)
-                if lineStr.contains("{") {
-                    let triX: CGFloat = 4
-                    let triY: CGFloat = y + lineRect.height / 2 - 4
-                    ctx.setFillColor(numColor.cgColor)
-                    ctx.beginPath()
-                    ctx.move(to: CGPoint(x: triX, y: triY))
-                    ctx.addLine(to: CGPoint(x: triX + 8, y: triY + 4))
-                    ctx.addLine(to: CGPoint(x: triX, y: triY + 8))
-                    ctx.closePath()
-                    ctx.fillPath()
-                }
-            }
-
-            lineNum += 1
-            glyphIdx = NSMaxRange(lineGlyphRange)
-        }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        guard let lm = layoutManager,
-              let tc = lm.textContainers.first,
-              let tv = textView,
-              let ev = superview as? EditorView else { return }
-        let pt = convert(event.locationInWindow, from: nil)
-        // Only react to clicks in the triangle area (left 18px)
-        guard pt.x < 18 else { return }
-        let visibleRect = tv.visibleRect
-        let insetY = tv.textContainerInset.height
-        // Find which line was clicked
-        let clickY = pt.y + visibleRect.minY - insetY
-        let glyphRange = lm.glyphRange(forBoundingRect: visibleRect, in: tc)
-        var glyphIdx = glyphRange.location
-        while glyphIdx < NSMaxRange(glyphRange) {
-            var lineGlyphRange = NSRange()
-            let lineRect = lm.lineFragmentRect(forGlyphAt: glyphIdx, effectiveRange: &lineGlyphRange)
-            if clickY >= lineRect.minY && clickY < lineRect.maxY {
-                let charRange = lm.characterRange(forGlyphRange: lineGlyphRange, actualGlyphRange: nil)
-                // Check this line has a {
-                let lineStr = (lm.textStorage?.string as? NSString)?.substring(with: charRange) ?? ""
-                if lineStr.contains("{") {
-                    ev.toggleFold(atCharIndex: charRange.location)
-                }
-                return
-            }
-            glyphIdx = NSMaxRange(lineGlyphRange)
-        }
-    }
-
-    private func currentLineNumber(in tv: NSTextView) -> Int {
-        let loc = tv.selectedRange().location
-        let str = tv.string as NSString
-        var line = 1
-        var i = 0
-        while i < loc && i < str.length {
-            if str.character(at: i) == 0x0A { line += 1 }
-            i += 1
-        }
-        return line
-    }
-}
-
-// ── EditorFooter ───────────────────────────────────────────────────────────
-
-class EditorFooter: NSView {
-    static let height: CGFloat = 24
-    private let infoLabel = NSTextField(labelWithString: "")
-    private let encBtn    = NSButton()
-    private let leBtn     = NSButton()
-    var isDark: Bool = true {
-        didSet { updateColors() }
-    }
-    var onEncodingClick:    (() -> Void)?
-    var onLineEndingClick:  (() -> Void)?
-
-    var line: Int = 1        { didSet { updateLabel() } }
-    var column: Int = 1      { didSet { updateLabel() } }
-    var encoding: String = "UTF-8"  { didSet { updateLabel() } }
-    var lineEnding: String = "LF"   { didSet { updateLabel() } }
-    var language: EditorLanguage = .plain { didSet { updateLabel() } }
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-
-        infoLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        infoLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(infoLabel)
-
-        for btn in [encBtn, leBtn] {
-            btn.isBordered = false
-            btn.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-            btn.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(btn)
-        }
-        encBtn.target = self; encBtn.action = #selector(clickEnc)
-        leBtn.target  = self; leBtn.action  = #selector(clickLE)
-
-        NSLayoutConstraint.activate([
-            infoLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            infoLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            leBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            leBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            encBtn.trailingAnchor.constraint(equalTo: leBtn.leadingAnchor, constant: -12),
-            encBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-        updateColors()
-        updateLabel()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    private func updateColors() {
-        layer?.backgroundColor = (isDark ? NSColor(calibratedWhite: 0.09, alpha: 1)
-                                         : NSColor(calibratedWhite: 0.93, alpha: 1)).cgColor
-        let fg = isDark ? NSColor(calibratedWhite: 0.45, alpha: 1) : NSColor(calibratedWhite: 0.55, alpha: 1)
-        infoLabel.textColor = fg
-        encBtn.contentTintColor = fg
-        leBtn.contentTintColor = fg
-    }
-
-    private func updateLabel() {
-        let langName = language == .plain ? "Plain Text" : language.rawValue.capitalized
-        infoLabel.stringValue = "Ln \(line), Col \(column)  ·  \(langName)"
-        encBtn.title = encoding
-        leBtn.title  = lineEnding
-    }
-
-    @objc private func clickEnc() { onEncodingClick?() }
-    @objc private func clickLE()  { onLineEndingClick?() }
-}
-
-// ── EditorSearchPanel ──────────────────────────────────────────────────────
-
-class EditorSearchPanel: NSView {
-    static let height: CGFloat = 36
-    private let findField     = NSTextField()
-    private let replaceField  = NSTextField()
-    private let closeBtn      = NSButton()
-    private let nextBtn       = NSButton()
-    private let prevBtn       = NSButton()
-    private let replaceBtn    = NSButton()
-    private let replaceAllBtn = NSButton()
-    private let modeLabel     = NSTextField(labelWithString: "Find")
-    var isReplaceMode = false { didSet { updateLayout() } }
-    var isDark: Bool = true   { didSet { updateColors() } }
-
-    var onFind:       ((String, Bool) -> Void)?
-    var onReplace:    ((String, String) -> Void)?
-    var onReplaceAll: ((String, String) -> Void)?
-    var onClose:      (() -> Void)?
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-
-        findField.placeholderString = "Suchen…"
-        findField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        findField.translatesAutoresizingMaskIntoConstraints = false
-
-        replaceField.placeholderString = "Ersetzen…"
-        replaceField.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        replaceField.translatesAutoresizingMaskIntoConstraints = false
-        replaceField.isHidden = true
-
-        for (btn, title) in [(closeBtn, "✕"), (prevBtn, "↑"), (nextBtn, "↓"),
-                              (replaceBtn, "Ersetzen"), (replaceAllBtn, "Alle")] {
-            btn.title = title
-            btn.isBordered = false
-            btn.font = NSFont.systemFont(ofSize: 11)
-            btn.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(btn)
-        }
-        replaceBtn.isHidden    = true
-        replaceAllBtn.isHidden = true
-
-        [findField, replaceField, modeLabel].forEach { addSubview($0) }
-        modeLabel.translatesAutoresizingMaskIntoConstraints = false
-        modeLabel.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-
-        closeBtn.target = self; closeBtn.action = #selector(tapClose)
-        nextBtn.target  = self; nextBtn.action  = #selector(tapNext)
-        prevBtn.target  = self; prevBtn.action  = #selector(tapPrev)
-        replaceBtn.target    = self; replaceBtn.action    = #selector(tapReplace)
-        replaceAllBtn.target = self; replaceAllBtn.action = #selector(tapReplaceAll)
-
-        NSLayoutConstraint.activate([
-            closeBtn.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            closeBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            modeLabel.leadingAnchor.constraint(equalTo: closeBtn.trailingAnchor, constant: 8),
-            modeLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            findField.leadingAnchor.constraint(equalTo: modeLabel.trailingAnchor, constant: 8),
-            findField.widthAnchor.constraint(equalToConstant: 180),
-            findField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            prevBtn.leadingAnchor.constraint(equalTo: findField.trailingAnchor, constant: 4),
-            prevBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            nextBtn.leadingAnchor.constraint(equalTo: prevBtn.trailingAnchor, constant: 4),
-            nextBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            replaceField.leadingAnchor.constraint(equalTo: nextBtn.trailingAnchor, constant: 8),
-            replaceField.widthAnchor.constraint(equalToConstant: 160),
-            replaceField.centerYAnchor.constraint(equalTo: centerYAnchor),
-            replaceBtn.leadingAnchor.constraint(equalTo: replaceField.trailingAnchor, constant: 4),
-            replaceBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            replaceAllBtn.leadingAnchor.constraint(equalTo: replaceBtn.trailingAnchor, constant: 4),
-            replaceAllBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-        updateColors()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    func focusFind() { window?.makeFirstResponder(findField) }
-
-    private func updateLayout() {
-        modeLabel.stringValue = isReplaceMode ? "Ersetzen" : "Suchen"
-        replaceField.isHidden = !isReplaceMode
-        replaceBtn.isHidden   = !isReplaceMode
-        replaceAllBtn.isHidden = !isReplaceMode
-    }
-
-    private func updateColors() {
-        layer?.backgroundColor = (isDark ? NSColor(calibratedWhite: 0.11, alpha: 0.97)
-                                         : NSColor(calibratedWhite: 0.91, alpha: 0.97)).cgColor
-        let fg = isDark ? NSColor(calibratedWhite: 0.80, alpha: 1) : NSColor(calibratedWhite: 0.20, alpha: 1)
-        modeLabel.textColor = fg
-        [closeBtn, nextBtn, prevBtn, replaceBtn, replaceAllBtn].forEach { $0.contentTintColor = fg }
-    }
-
-    @objc private func tapClose()      { onClose?() }
-    @objc private func tapNext()       { onFind?(findField.stringValue, true) }
-    @objc private func tapPrev()       { onFind?(findField.stringValue, false) }
-    @objc private func tapReplace()    { onReplace?(findField.stringValue, replaceField.stringValue) }
-    @objc private func tapReplaceAll() { onReplaceAll?(findField.stringValue, replaceField.stringValue) }
-}
-
-// ── EditorView ─────────────────────────────────────────────────────────────
-
-class EditorView: NSView, NSTextViewDelegate {
-
-    private let gutterView    = GutterView()
-    private let scrollView    = NSScrollView()
-    var textView: NSTextView!
-    private let footer        = EditorFooter()
-    private let searchPanel   = EditorSearchPanel()
-    private var searchVisible = false
-
-    private let storage       = EditorTextStorage()
-    private let layoutMgr     = EditorLayoutManager()
-    private let textContainer = NSTextContainer()
-
-    var fileURL: URL? {
-        didSet {
-            storage.language = SyntaxHighlighter.detectLanguage(from: fileURL)
-            footer.language  = storage.language
-            storage.applyHighlighting()
-        }
-    }
-
-    var isDirty: Bool = false {
-        didSet { onDirtyChanged?(isDirty) }
-    }
-    var onDirtyChanged: ((Bool) -> Void)?
-
-    var fileEncoding: String.Encoding = .utf8
-    var lineEnding: String = "LF"
-
-    var isDark: Bool = true {
-        didSet { applyColors() }
-    }
-
-    var useTabs: Bool = true
-
-    // ── Code folding state ────────────────────────────────────────────────
-    private(set) var foldedLineStarts: Set<Int> = []  // char indices of folded line starts
-
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-
-        storage.addLayoutManager(layoutMgr)
-        layoutMgr.addTextContainer(textContainer)
-        // Wire textView into the custom storage chain (must use this init)
-        textView = NSTextView(frame: .zero, textContainer: textContainer)
-        textContainer.widthTracksTextView = true
-        textContainer.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
-                                             height: CGFloat.greatestFiniteMagnitude)
-        textView.minSize = NSSize(width: 0, height: 0)
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
-                                  height: CGFloat.greatestFiniteMagnitude)
-        textView.isVerticallyResizable   = true
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.textContainerInset = NSSize(width: 4, height: 4)
-        textView.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        textView.isAutomaticSpellingCorrectionEnabled = false
-        textView.isAutomaticQuoteSubstitutionEnabled  = false
-        textView.isAutomaticDashSubstitutionEnabled   = false
-        textView.isAutomaticLinkDetectionEnabled      = false
-        textView.isRichText  = false
-        textView.allowsUndo  = true
-        textView.delegate    = self
-
-        layoutMgr.gutterView = gutterView
-        gutterView.textView  = textView
-        gutterView.layoutManager = layoutMgr
-
-        scrollView.documentView          = textView
-        scrollView.hasVerticalScroller   = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autoresizingMask      = []
-        scrollView.drawsBackground       = false
-
-        searchPanel.isHidden = true
-        searchPanel.onClose      = { [weak self] in self?.hideSearch() }
-        searchPanel.onFind       = { [weak self] q, fwd in self?.findNext(query: q, forward: fwd) }
-        searchPanel.onReplace    = { [weak self] q, r in self?.replaceOne(query: q, replacement: r) }
-        searchPanel.onReplaceAll = { [weak self] q, r in self?.replaceAll(query: q, replacement: r) }
-
-        footer.onEncodingClick   = { [weak self] in self?.showEncodingMenu() }
-        footer.onLineEndingClick = { [weak self] in self?.showLineEndingMenu() }
-
-        [gutterView, scrollView, footer, searchPanel].forEach {
-            $0.translatesAutoresizingMaskIntoConstraints = false
-            addSubview($0)
-        }
-
-        NSLayoutConstraint.activate([
-            gutterView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            gutterView.topAnchor.constraint(equalTo: topAnchor),
-            gutterView.widthAnchor.constraint(equalToConstant: GutterView.width),
-            gutterView.bottomAnchor.constraint(equalTo: footer.topAnchor),
-
-            scrollView.leadingAnchor.constraint(equalTo: gutterView.trailingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: topAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor),
-
-            footer.leadingAnchor.constraint(equalTo: leadingAnchor),
-            footer.trailingAnchor.constraint(equalTo: trailingAnchor),
-            footer.bottomAnchor.constraint(equalTo: bottomAnchor),
-            footer.heightAnchor.constraint(equalToConstant: EditorFooter.height),
-
-            searchPanel.leadingAnchor.constraint(equalTo: gutterView.trailingAnchor),
-            searchPanel.trailingAnchor.constraint(equalTo: trailingAnchor),
-            searchPanel.bottomAnchor.constraint(equalTo: footer.topAnchor),
-            searchPanel.heightAnchor.constraint(equalToConstant: EditorSearchPanel.height),
-        ])
-
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(scrollDidChange),
-            name: NSView.boundsDidChangeNotification,
-            object: scrollView.contentView)
-
-        applyColors()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    deinit { NotificationCenter.default.removeObserver(self) }
-
-    // ── Load / Save ────────────────────────────────────────────────────────
-    func loadFile(url: URL) throws {
-        var enc: String.Encoding = .utf8
-        var content: String
-        if let s = try? String(contentsOf: url, encoding: .utf8) {
-            content = s; enc = .utf8
-        } else if let s = try? String(contentsOf: url, encoding: .isoLatin1) {
-            content = s; enc = .isoLatin1
-        } else {
-            content = try String(contentsOf: url, encoding: .utf8)
-        }
-        fileEncoding = enc
-        footer.encoding = enc == .utf8 ? "UTF-8" : "Latin-1"
-
-        if content.contains("\r\n")      { lineEnding = "CRLF" }
-        else if content.contains("\r")   { lineEnding = "CR"   }
-        else                             { lineEnding = "LF"   }
-        footer.lineEnding = lineEnding
-
-        fileURL = url
-        setContent(content)
-        isDirty = false
-    }
-
-    func saveFile(to url: URL? = nil) throws {
-        let target = url ?? fileURL
-        guard let target else { return }
-        var text = textView.string
-        if lineEnding == "CRLF" { text = text.replacingOccurrences(of: "\n", with: "\r\n") }
-        else if lineEnding == "CR" { text = text.replacingOccurrences(of: "\n", with: "\r") }
-        try text.write(to: target, atomically: true, encoding: fileEncoding)
-        fileURL = target
-        isDirty = false
-    }
-
-    func setContent(_ text: String) {
-        let range = NSRange(location: 0, length: storage.length)
-        storage.beginEditing()
-        storage.replaceCharacters(in: range, with: text)
-        storage.endEditing()
-        textView.setSelectedRange(NSRange(location: 0, length: 0))
-        gutterView.needsDisplay = true
-        updateFooterCursor()
-    }
-
-    // ── Colors ─────────────────────────────────────────────────────────────
-    func applyColors() {
-        let bg: NSColor = isDark ? NSColor(calibratedWhite: 0.10, alpha: 1) : NSColor(calibratedWhite: 0.97, alpha: 1)
-        let fg: NSColor = isDark ? NSColor(calibratedWhite: 0.90, alpha: 1) : NSColor(calibratedWhite: 0.10, alpha: 1)
-        layer?.backgroundColor = bg.cgColor
-        textView.backgroundColor = bg
-        textView.textColor = fg
-        textView.insertionPointColor = isDark ? .white : .black
-        storage.isDark = isDark
-        storage.applyHighlighting()
-        gutterView.isDark = isDark
-        gutterView.needsDisplay = true
-        footer.isDark = isDark
-        searchPanel.isDark = isDark
-    }
-
-    // ── NSTextViewDelegate ─────────────────────────────────────────────────
-    func textDidChange(_ notification: Notification) {
-        if !isDirty { isDirty = true }
-        updateFooterCursor()
-        gutterView.needsDisplay = true
-    }
-
-    func textViewDidChangeSelection(_ notification: Notification) {
-        updateFooterCursor()
-        gutterView.needsDisplay = true
-    }
-
-    private func updateFooterCursor() {
-        let sel  = textView.selectedRange()
-        let str  = textView.string as NSString
-        let line = str.substring(to: min(sel.location, str.length))
-                      .components(separatedBy: "\n").count
-        let beforeSel = str.substring(to: min(sel.location, str.length))
-        let lastNL = (beforeSel as NSString).range(of: "\n", options: .backwards)
-        let lineStart = lastNL.location == NSNotFound ? 0 : lastNL.location + 1
-        let col = sel.location - lineStart + 1
-        footer.line   = line
-        footer.column = col
-    }
-
-    @objc private func scrollDidChange() {
-        gutterView.needsDisplay = true
-    }
-
-    // ── Search ─────────────────────────────────────────────────────────────
-    func showSearch(replace: Bool = false) {
-        searchPanel.isReplaceMode = replace
-        searchPanel.isHidden = false
-        searchVisible = true
-        searchPanel.focusFind()
-    }
-
-    func hideSearch() {
-        searchPanel.isHidden = true
-        searchVisible = false
-        window?.makeFirstResponder(textView)
-    }
-
-    private func findNext(query: String, forward: Bool) {
-        guard !query.isEmpty else { return }
-        let text  = textView.string as NSString
-        let sel   = textView.selectedRange()
-        let start = forward ? NSMaxRange(sel) : max(0, sel.location - 1)
-        let opts: NSString.CompareOptions = forward ? [] : .backwards
-        let searchRange = forward
-            ? NSRange(location: start, length: text.length - start)
-            : NSRange(location: 0, length: start)
-        var found = text.range(of: query, options: opts, range: searchRange)
-        if found.location == NSNotFound {
-            // wrap around
-            found = text.range(of: query, options: opts,
-                               range: NSRange(location: 0, length: text.length))
-        }
-        if found.location != NSNotFound {
-            textView.setSelectedRange(found)
-            textView.scrollRangeToVisible(found)
-        }
-    }
-
-    private func replaceOne(query: String, replacement: String) {
-        guard !query.isEmpty else { return }
-        let sel     = textView.selectedRange()
-        let current = (textView.string as NSString).substring(with: sel)
-        if current == query {
-            textView.insertText(replacement, replacementRange: sel)
-        }
-        findNext(query: query, forward: true)
-    }
-
-    private func replaceAll(query: String, replacement: String) {
-        guard !query.isEmpty else { return }
-        let new = textView.string.replacingOccurrences(of: query, with: replacement)
-        if new != textView.string { setContent(new); isDirty = true }
-    }
-
-    // ── Encoding / Line ending menus ───────────────────────────────────────
-    private func showEncodingMenu() {
-        guard let win = window else { return }
-        let menu = NSMenu()
-        let encs: [(String, String.Encoding)] = [("UTF-8", .utf8), ("Latin-1", .isoLatin1), ("UTF-16", .utf16)]
-        for (title, enc) in encs {
-            let item = NSMenuItem(title: title, action: #selector(pickEncoding(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = NSNumber(value: enc.rawValue)
-            menu.addItem(item)
-        }
-        let loc = NSEvent.mouseLocation
-        menu.popUp(positioning: nil, at: win.convertPoint(fromScreen: loc), in: self)
-    }
-
-    @objc private func pickEncoding(_ item: NSMenuItem) {
-        if let raw = (item.representedObject as? NSNumber)?.uintValue {
-            fileEncoding = String.Encoding(rawValue: raw)
-            footer.encoding = item.title
-        }
-    }
-
-    private func showLineEndingMenu() {
-        guard let win = window else { return }
-        let menu = NSMenu()
-        for le in ["LF", "CRLF", "CR"] {
-            let item = NSMenuItem(title: le, action: #selector(pickLineEnding(_:)), keyEquivalent: "")
-            item.target = self
-            menu.addItem(item)
-        }
-        let loc = NSEvent.mouseLocation
-        menu.popUp(positioning: nil, at: win.convertPoint(fromScreen: loc), in: self)
-    }
-
-    @objc private func pickLineEnding(_ item: NSMenuItem) {
-        lineEnding = item.title
-        footer.lineEnding = lineEnding
-    }
-
-    // ── Tab key override ───────────────────────────────────────────────────
-    func textView(_ tv: NSTextView, doCommandBy selector: Selector) -> Bool {
-        if selector == #selector(NSResponder.insertTab(_:)) {
-            let insert = useTabs ? "\t" : String(repeating: " ", count: 4)
-            tv.insertText(insert, replacementRange: tv.selectedRange())
-            return true
-        }
-        return false
-    }
-
-    // ── Multiple cursors: Option+click ─────────────────────────────────────
-    override func mouseDown(with event: NSEvent) {
-        guard event.modifierFlags.contains(.option) else {
-            super.mouseDown(with: event)
-            return
-        }
-        let pt      = textView.convert(event.locationInWindow, from: nil)
-        let frac    = UnsafeMutablePointer<CGFloat>.allocate(capacity: 1)
-        frac.initialize(to: 0)
-        defer { frac.deallocate() }
-        let glyphIdx = layoutMgr.glyphIndex(for: pt, in: textContainer,
-                                             fractionOfDistanceThroughGlyph: frac)
-        let charIdx  = layoutMgr.characterIndexForGlyph(at: glyphIdx)
-        var ranges   = textView.selectedRanges
-        ranges.append(NSValue(range: NSRange(location: charIdx, length: 0)))
-        textView.selectedRanges = ranges
-    }
-
-    // ── Accessors for folding ───────────────────────────────────────────────
-    var editorGutterView: GutterView { gutterView }
-    var editorLayoutManager: EditorLayoutManager { layoutMgr }
-
-    // ── Code Folding ───────────────────────────────────────────────────────
-
-    func toggleFold(atCharIndex lineStartChar: Int) {
-        let str = textView.string as NSString
-        guard lineStartChar < str.length else { return }
-
-        // Find end of this line
-        let lineEndRange = str.range(of: "\n",
-            options: [],
-            range: NSRange(location: lineStartChar, length: str.length - lineStartChar))
-        let lineEndChar = lineEndRange.location == NSNotFound ? str.length : lineEndRange.location
-
-        // Find block end (matching closing brace)
-        let blockEndChar = findBlockEnd(from: lineEndChar, in: str)
-        guard blockEndChar > lineEndChar else { return }
-        let foldRange = NSRange(location: lineEndChar, length: blockEndChar - lineEndChar)
-
-        if foldedLineStarts.contains(lineStartChar) {
-            // Unfold: make glyphs visible again
-            foldedLineStarts.remove(lineStartChar)
-            layoutMgr.invalidateGlyphs(forCharacterRange: foldRange,
-                                        changeInLength: 0, actualCharacterRange: nil)
-            layoutMgr.invalidateLayout(forCharacterRange: foldRange, actualCharacterRange: nil)
-        } else {
-            // Fold: hide glyphs
-            foldedLineStarts.insert(lineStartChar)
-            layoutMgr.invalidateGlyphs(forCharacterRange: foldRange,
-                                        changeInLength: 0, actualCharacterRange: nil)
-            layoutMgr.invalidateLayout(forCharacterRange: foldRange, actualCharacterRange: nil)
-        }
-        gutterView.needsDisplay = true
-    }
-
-    private func findBlockEnd(from start: Int, in str: NSString) -> Int {
-        var depth = 0
-        var i = start
-        var inString = false
-        var inLineComment = false
-        while i < str.length {
-            let c = str.character(at: i)
-            if inLineComment {
-                if c == 0x0A { inLineComment = false }
-            } else if inString {
-                if c == 0x22 { inString = false }  // closing "
-                else if c == 0x5C { i += 1 }       // skip escaped char
-            } else {
-                if c == 0x2F && i + 1 < str.length && str.character(at: i + 1) == 0x2F {
-                    inLineComment = true
-                } else if c == 0x22 {
-                    inString = true
-                } else if c == 0x7B {  // {
-                    depth += 1
-                } else if c == 0x7D {  // }
-                    if depth > 0 {
-                        depth -= 1
-                        if depth == 0 { return i + 1 }
-                    }
-                }
-            }
-            i += 1
-        }
-        return str.length
-    }
+// MARK: - Tab Types
+
+enum TabType {
+    case terminal
+    case editor
 }
 
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
-    var termViews: [TerminalView?] = []   // nil for editor tabs
+    var termViews: [TerminalView] = []
     var splitContainers: [SplitContainer] = []
     var activeTab = 0
-    // Editor tab parallel arrays (indexed same as termViews/splitContainers)
-    var tabTypes: [TabType] = []
-    var tabEditorViews: [EditorView?] = []
-    var tabEditorURLs: [URL?] = []
-    var tabEditorDirty: [Bool] = []
     var statusItem: NSStatusItem!
     var globalClickMonitor: Any?
     var hotKeyRef: EventHotKeyRef?
@@ -15419,7 +14245,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// True if any TerminalView (primary or split secondary) has an active drag session
     private var isAnyDragSessionActive: Bool {
-        termViews.contains { $0?.isDragSessionActive == true } ||
+        termViews.contains { $0.isDragSessionActive } ||
         splitContainers.contains { $0.secondaryView?.isDragSessionActive == true }
     }
 
@@ -15675,7 +14501,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         headerView.autoresizingMask = [.width, .minYMargin]
         headerView.onTabClicked = { [weak self] index in self?.switchToTab(index) }
         headerView.onAddTab = { [weak self] in self?.addTab() }
-        headerView.onAddEditorTab = { [weak self] in self?.newEditorTab() }
         headerView.onCloseTab = { [weak self] index in self?.closeTab(index: index) }
         headerView.onReorderTab = { [weak self] from, to in self?.reorderTab(from: from, to: to) }
         headerView.onTabRenamed = { [weak self] index, name in
@@ -15697,7 +14522,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         footerView = FooterBarView(frame: NSRect(x: 0, y: 0, width: bounds.width, height: footerH))
         footerView.autoresizingMask = [.width, .maxYMargin]
         footerView.onSwitchShell = { [weak self] index in
-            guard let self = self, !self.splitContainers.isEmpty else { return }
+            guard let self = self, !self.termViews.isEmpty else { return }
             // Use focused pane in split mode
             let container = self.splitContainers[self.activeTab]
             let tv: TerminalView
@@ -15705,8 +14530,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                let sec = container.secondaryView {
                 tv = sec
             } else {
-                guard let primaryTV = self.termViews[self.activeTab] else { return }
-                tv = primaryTV
+                tv = self.termViews[self.activeTab]
             }
             switch index {
             case 0: tv.switchToShell1(nil)
@@ -15726,12 +14550,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         footerView.onSwitchSplitPane = { [weak self] in self?.switchSplitPane() }
         footerView.onPrevTab = { [weak self] in
             guard let self = self else { return }
-            let prev = self.activeTab > 0 ? self.activeTab - 1 : self.splitContainers.count - 1
+            let prev = self.activeTab > 0 ? self.activeTab - 1 : self.termViews.count - 1
             self.switchToTab(prev)
         }
         footerView.onNextTab = { [weak self] in
             guard let self = self else { return }
-            let next = self.activeTab < self.splitContainers.count - 1 ? self.activeTab + 1 : 0
+            let next = self.activeTab < self.termViews.count - 1 ? self.activeTab + 1 : 0
             self.switchToTab(next)
         }
         window.contentView?.addSubview(footerView)
@@ -15872,7 +14696,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tv.onShellExit = { [weak self, weak tv] in
             guard let self = self, let tv = tv else { return }
             if let idx = self.termViews.firstIndex(where: { $0 === tv }) {
-                if self.splitContainers.count > 1 {
+                if self.termViews.count > 1 {
                     self.closeTab(index: idx)
                 } else {
                     NSApp.terminate(nil)
@@ -15907,11 +14731,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         termViews.append(tv)
         splitContainers.append(container)
-        tabTypes.append(.terminal)
-        tabEditorViews.append(nil)
-        tabEditorURLs.append(nil)
-        tabEditorDirty.append(false)
-        activeTab = splitContainers.count - 1
+        activeTab = termViews.count - 1
         container.alphaValue = 0
         window.contentView?.addSubview(container)
         window.makeFirstResponder(tv)
@@ -15933,20 +14753,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func closeTab(index: Int) {
-        guard index >= 0 && index < splitContainers.count && splitContainers.count > 1 else { return }
+        guard index >= 0 && index < termViews.count && termViews.count > 1,
+              index < splitContainers.count else { return }
         let container = splitContainers[index]
         termViews.remove(at: index)
         splitContainers.remove(at: index)
-        // Clean up editor tab data
-        if index < tabTypes.count {
-            if tabTypes[index] == .editor {
-                tabEditorViews[index]?.removeFromSuperview()
-            }
-            tabTypes.remove(at: index)
-        }
-        if index < tabEditorViews.count { tabEditorViews.remove(at: index) }
-        if index < tabEditorURLs.count  { tabEditorURLs.remove(at: index)  }
-        if index < tabEditorDirty.count { tabEditorDirty.remove(at: index) }
         if index < tabColors.count { tabColors.remove(at: index) }
         if index < tabCustomNames.count { tabCustomNames.remove(at: index) }
         if index < tabGitPanels.count {
@@ -15962,12 +14773,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // Adjust activeTab
-        if activeTab >= splitContainers.count {
-            activeTab = splitContainers.count - 1
+        if activeTab >= termViews.count {
+            activeTab = termViews.count - 1
         } else if activeTab > index {
             activeTab -= 1
         } else if activeTab == index {
-            activeTab = min(index, splitContainers.count - 1)
+            activeTab = min(index, termViews.count - 1)
         }
 
         // Show the new active tab container with fade-in
@@ -15994,12 +14805,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             container.removeFromSuperview()
         })
 
-        if activeTab >= 0 && activeTab < splitContainers.count {
-            if let ev = activeTab < tabEditorViews.count ? tabEditorViews[activeTab] : nil {
-                window.makeFirstResponder(ev.textView)
-            } else if let tv = activeTab < termViews.count ? termViews[activeTab] : nil {
-                window.makeFirstResponder(tv)
-            }
+        if activeTab >= 0 && activeTab < termViews.count {
+            window.makeFirstResponder(termViews[activeTab])
         }
         // Ensure new active tab's git panel is visible
         if activeTab < tabGitPanels.count {
@@ -16015,159 +14822,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func closeCurrentTab() {
-        if splitContainers.count > 1 {
+        if termViews.count > 1 {
             closeTab(index: activeTab)
         } else {
             hideWindowAnimated()
         }
     }
 
-    // ── Editor Tab Management ──────────────────────────────────────────────
-
-    func createEditorTab(url: URL? = nil) {
-        let tf = termFrame()
-        let ev = EditorView(frame: tf)
-        ev.autoresizingMask = [.width, .height]
-
-        // Detect current dark/light mode
-        let themeKey = UserDefaults.standard.integer(forKey: "colorTheme")
-        let dark: Bool
-        switch themeKey {
-        case 1:  dark = false
-        case 2:  dark = true   // OLED
-        default: dark = NSApp.effectiveAppearance.name != .aqua
-        }
-        ev.isDark = dark
-        ev.useTabs = UserDefaults.standard.bool(forKey: "editorUseTabs")
-
-        ev.onDirtyChanged = { [weak self, weak ev] dirty in
-            guard let self, let ev else { return }
-            if let idx = self.tabEditorViews.firstIndex(where: { $0 === ev }) {
-                if idx < self.tabEditorDirty.count { self.tabEditorDirty[idx] = dirty }
-            }
-            self.updateHeaderTabs()
-        }
-
-        if let url { try? ev.loadFile(url: url) }
-
-        // Parallel arrays
-        let hue = CGFloat.random(in: 0...1)
-        tabColors.append(NSColor(calibratedHue: hue, saturation: 0.65, brightness: 0.85, alpha: 1.0))
-        tabCustomNames.append(nil)
-        tabGitPositions.append(.none)
-        tabGitPanels.append(nil)
-        tabGitDividers.append(nil)
-        tabGitRatios.append(gitDefaultRatioH)
-        tabGitRatiosV.append(gitDefaultRatioV)
-        tabGitRatiosH.append(gitDefaultRatioH)
-
-        // Hide current tab
-        if !splitContainers.isEmpty && activeTab < splitContainers.count {
-            splitContainers[activeTab].isHidden = true
-            if activeTab < tabGitPanels.count {
-                tabGitPanels[activeTab]?.isHidden = true
-                tabGitDividers[activeTab]?.isHidden = true
-            }
-            if activeTab < tabEditorViews.count { tabEditorViews[activeTab]?.isHidden = true }
-        }
-
-        // Placeholder SplitContainer for editor tabs (no terminal)
-        let placeholder = SplitContainer(placeholderFrame: tf)
-        placeholder.autoresizingMask = [.width, .height]
-
-        termViews.append(nil)
-        splitContainers.append(placeholder)
-        tabTypes.append(.editor)
-        tabEditorViews.append(ev)
-        tabEditorURLs.append(url)
-        tabEditorDirty.append(false)
-
-        activeTab = splitContainers.count - 1
-
-        window.contentView?.addSubview(ev)
-        ev.frame = tf
-        ev.alphaValue = 0
-        NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.2
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            ev.animator().alphaValue = 1
-        })
-        window.makeFirstResponder(ev.textView)
-
-        headerView.setGitActive(false)
-        updateHeaderTabs()
-        updateFooter()
-        saveSession()
-    }
-
-    @objc func openEditorTab() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles         = true
-        panel.canChooseDirectories   = false
-        panel.allowsMultipleSelection = false
-        panel.begin { [weak self] resp in
-            guard resp == .OK, let url = panel.url else { return }
-            DispatchQueue.main.async { self?.createEditorTab(url: url) }
-        }
-    }
-
-    @objc func newEditorTab() {
-        createEditorTab(url: nil)
-    }
-
-    func saveCurrentEditor() {
-        guard activeTab < tabEditorViews.count,
-              let ev = tabEditorViews[activeTab] else { return }
-        if ev.fileURL != nil {
-            try? ev.saveFile()
-            updateHeaderTabs()
-        } else {
-            saveCurrentEditorAs()
-        }
-    }
-
-    func saveCurrentEditorAs() {
-        guard activeTab < tabEditorViews.count,
-              let ev = tabEditorViews[activeTab] else { return }
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "Untitled.txt"
-        panel.begin { [weak self] resp in
-            guard resp == .OK, let url = panel.url else { return }
-            try? ev.saveFile(to: url)
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if self.activeTab < self.tabEditorURLs.count {
-                    self.tabEditorURLs[self.activeTab] = url
-                }
-                self.updateHeaderTabs()
-            }
-        }
-    }
-
     func reorderTab(from: Int, to: Int) {
         guard from != to, from >= 0, to >= 0,
+              from < termViews.count, to < termViews.count,
               from < splitContainers.count, to < splitContainers.count,
               from < tabColors.count, to < tabColors.count else { return }
         let tv = termViews.remove(at: from)
         termViews.insert(tv, at: to)
         let sc = splitContainers.remove(at: from)
         splitContainers.insert(sc, at: to)
-        if from < tabTypes.count && to < tabTypes.count {
-            let tt = tabTypes.remove(at: from)
-            tabTypes.insert(tt, at: to)
-        }
-        if from < tabEditorViews.count && to < tabEditorViews.count {
-            let ev = tabEditorViews.remove(at: from)
-            tabEditorViews.insert(ev, at: to)
-        }
-        if from < tabEditorURLs.count && to < tabEditorURLs.count {
-            let u = tabEditorURLs.remove(at: from)
-            tabEditorURLs.insert(u, at: to)
-        }
-        if from < tabEditorDirty.count && to < tabEditorDirty.count {
-            let d = tabEditorDirty.remove(at: from)
-            tabEditorDirty.insert(d, at: to)
-        }
         let color = tabColors.remove(at: from)
         tabColors.insert(color, at: to)
         if from < tabCustomNames.count && to < tabCustomNames.count {
@@ -16201,11 +14871,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func switchSplitPane() {
         guard activeTab >= 0 && activeTab < splitContainers.count else { return }
-        guard activeTab >= tabTypes.count || tabTypes[activeTab] == .terminal else { return }
         let container = splitContainers[activeTab]
         guard container.isSplit, let sec = container.secondaryView else { return }
         let newPrimary = !container.activePaneIsPrimary
-        let target: TerminalView = newPrimary ? container.primaryView : sec
+        let target = newPrimary ? container.primaryView : sec
         window.makeFirstResponder(target)
         container.setActivePane(primary: newPrimary)
         container.onFocusChanged?(target)
@@ -16225,7 +14894,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func toggleSplit(vertical: Bool) {
         guard activeTab >= 0 && activeTab < splitContainers.count else { return }
-        guard activeTab >= tabTypes.count || tabTypes[activeTab] == .terminal else { return }
         let container = splitContainers[activeTab]
 
         if container.isSplit {
@@ -16245,7 +14913,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         } else {
             // Create split
-            let primary: TerminalView = container.primaryView
+            let primary = container.primaryView
             let cwd = cwdForPid(primary.childPid)
             let tf = container.bounds
             let secFrame: NSRect
@@ -16284,19 +14952,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if let v = value as? CGFloat { visualEffect.alphaValue = v }
         case "terminalFontSize":
             guard let size = value as? CGFloat else { return }
-            for tv in termViews { tv?.updateFontSize(size) }
+            for tv in termViews { tv.updateFontSize(size) }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.updateFontSize(size) }
             }
         case "cursorBlink":
             let blink = UserDefaults.standard.bool(forKey: "cursorBlink")
-            for tv in termViews { if let tv { tv.userCursorBlink = blink; tv.setNeedsDisplay(tv.bounds) } }
+            for tv in termViews { tv.userCursorBlink = blink; tv.setNeedsDisplay(tv.bounds) }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.userCursorBlink = blink; sec.setNeedsDisplay(sec.bounds) }
             }
         case "cursorStyle":
             guard let style = value as? Int else { return }
-            for tv in termViews { if let tv { tv.userCursorStyle = style; tv.setNeedsDisplay(tv.bounds) } }
+            for tv in termViews { tv.userCursorStyle = style; tv.setNeedsDisplay(tv.bounds) }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.userCursorStyle = style; sec.setNeedsDisplay(sec.bounds) }
             }
@@ -16358,14 +15026,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     updateCheckTimer = nil
                 }
             }
-        case "editorUseTabs":
-            let useTabs = UserDefaults.standard.bool(forKey: "editorUseTabs")
-            for ev in tabEditorViews.compactMap({ $0 }) {
-                ev.useTabs = useTabs
-            }
         case "fontFamily":
             let size = CGFloat(UserDefaults.standard.double(forKey: "terminalFontSize"))
-            for tv in termViews { tv?.updateFontSize(size) }
+            for tv in termViews { tv.updateFontSize(size) }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.updateFontSize(size) }
             }
@@ -16375,7 +15038,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let themeName = idx < themeNames.count ? themeNames[idx] : "default"
             UserDefaults.standard.set(themeName, forKey: "promptTheme")
             let themeDir = TerminalView.shellConfigDir + "/themes"
-            let allViews: [TerminalView] = termViews.compactMap { $0 } + splitContainers.compactMap { $0.secondaryView }
+            let allViews: [TerminalView] = termViews + splitContainers.compactMap { $0.secondaryView }
             for tv in allViews {
                 tv.writePTY(Data([0x15]))  // Ctrl+U clear line
                 tv.writePTY(" export QT_PROMPT_THEME='\(themeName)'; source '\(themeDir)/qt-theme-loader.sh'; clear\n")
@@ -16397,7 +15060,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case 3:  applySystemThemeAppearance(to: visualEffect)
             default: visualEffect.appearance = NSAppearance(named: .darkAqua)
             }
-            for tv in termViews { tv?.needsDisplay = true }
+            for tv in termViews { tv.needsDisplay = true }
             for sc in splitContainers {
                 if let sec = sc.secondaryView { sec.needsDisplay = true }
             }
@@ -16446,22 +15109,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
             // 2. Clear all histories
             for tv in termViews {
-                tv?.clearScrollback(nil)
+                tv.clearScrollback(nil)
             }
 
             // 3. Close all tabs except the first, reset that one
-            while splitContainers.count > 1 {
-                let idx = splitContainers.count - 1
+            while termViews.count > 1 {
+                let idx = termViews.count - 1
                 let container = splitContainers[idx]
-                if let tv = idx < termViews.count ? termViews[idx] : nil {
-                    if tv.childPid > 0 { kill(tv.childPid, SIGHUP) }
-                }
+                let tv = termViews[idx]
+                if tv.childPid > 0 { kill(tv.childPid, SIGHUP) }
                 termViews.remove(at: idx)
                 splitContainers.remove(at: idx)
-                if idx < tabTypes.count { tabTypes.remove(at: idx) }
-                if idx < tabEditorViews.count { tabEditorViews[idx]?.removeFromSuperview(); tabEditorViews.remove(at: idx) }
-                if idx < tabEditorURLs.count  { tabEditorURLs.remove(at: idx) }
-                if idx < tabEditorDirty.count { tabEditorDirty.remove(at: idx) }
                 if idx < tabColors.count { tabColors.remove(at: idx) }
                 container.removeFromSuperview()
             }
@@ -16472,7 +15130,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
 
             // 4. Restart shell in first tab
-            if !termViews.isEmpty, let tv = termViews[0] {
+            if !termViews.isEmpty {
+                let tv = termViews[0]
                 if tv.childPid > 0 { kill(tv.childPid, SIGHUP) }
                 tv.switchShell("/bin/zsh")
             }
@@ -16481,7 +15140,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.alphaValue = 0.99
             visualEffect.alphaValue = 0.96
             window.level = .floating
-            for tv in termViews { tv?.userCursorStyle = 0; tv?.updateFontSize(10.0) }
+            for tv in termViews { tv.userCursorStyle = 0; tv.updateFontSize(10.0) }
 
             // 6. Reset window size/position and center under tray icon
             let defaultSize = NSSize(width: 860, height: 480)
@@ -16672,7 +15331,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func switchToTab(_ index: Int) {
-        guard index >= 0 && index < splitContainers.count && index != activeTab else { return }
+        guard index >= 0 && index < termViews.count && index != activeTab else { return }
         let oldTab = activeTab
         let oldContainer = splitContainers[activeTab]
         activeTab = index
@@ -16683,10 +15342,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             tabGitPanels[oldTab]?.isHidden = true
             tabGitDividers[oldTab]?.isHidden = true
         }
-
-        // Hide old editor view, show new one if applicable
-        if oldTab < tabEditorViews.count { tabEditorViews[oldTab]?.isHidden = true }
-        if activeTab < tabEditorViews.count { tabEditorViews[activeTab]?.isHidden = false }
 
         // Crossfade containers
         newContainer.isHidden = false
@@ -16710,11 +15365,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         headerView.setGitActive(activeTab < tabGitPositions.count && tabGitPositions[activeTab] != .none)
         updateSplitButtonState()
 
-        if let ev = activeTab < tabEditorViews.count ? tabEditorViews[activeTab] : nil {
-            window.makeFirstResponder(ev.textView)
-        } else if let tv = activeTab < termViews.count ? termViews[activeTab] : nil {
-            window.makeFirstResponder(tv)
-        }
+        window.makeFirstResponder(termViews[activeTab])
         clearSearchState()
         updateHeaderTabs()
         updateFooter()
@@ -16742,43 +15393,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func updateHeaderTabs() {
         let home = NSHomeDirectory()
-        let count = splitContainers.count
-        let titles = (0..<count).map { i -> String in
-            // Editor tab title
-            if i < tabTypes.count && tabTypes[i] == .editor {
-                let dirty = i < tabEditorDirty.count && tabEditorDirty[i]
-                let name: String
-                if let url = i < tabEditorURLs.count ? tabEditorURLs[i] : nil {
-                    name = url.lastPathComponent
-                } else {
-                    name = "Untitled"
-                }
-                return dirty ? "● \(name)" : name
+        let titles = termViews.enumerated().map { (i, tv) -> String in
+            // Use custom name if set, otherwise derive from cwd
+            if i < tabCustomNames.count, let custom = tabCustomNames[i] {
+                return custom
             }
-            // Terminal tab title
-            if let custom = i < tabCustomNames.count ? tabCustomNames[i] : nil { return custom }
-            if let tv = i < termViews.count ? termViews[i] : nil {
-                let pid = tv.childPid
-                if pid > 0 {
-                    let cwd = cwdForPid(pid)
-                    if cwd == home { return "~" }
-                    return (cwd as NSString).lastPathComponent
-                }
+            let pid = tv.childPid
+            if pid > 0 {
+                let cwd = cwdForPid(pid)
+                if cwd == home { return "~" }
+                return (cwd as NSString).lastPathComponent
             }
             return "~"
         }
-        headerView.updateTabs(count: count, activeIndex: activeTab,
+        headerView.updateTabs(count: termViews.count, activeIndex: activeTab,
                               titles: titles, colors: tabColors)
     }
 
     func updateFooter() {
-        guard !splitContainers.isEmpty && activeTab < splitContainers.count else { return }
-        // Editor mode: hide terminal-specific footer content
-        if activeTab < tabTypes.count && tabTypes[activeTab] == .editor {
-            footerView.isHidden = true
-            return
-        }
-        footerView.isHidden = false
+        guard !termViews.isEmpty && activeTab < termViews.count else { return }
         // Use the focused pane (may be secondary in split mode)
         let container = splitContainers[activeTab]
         let tv: TerminalView
@@ -16786,8 +15419,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
            let sec = container.secondaryView {
             tv = sec
         } else {
-            guard let primaryTV = activeTab < termViews.count ? termViews[activeTab] : nil else { return }
-            tv = primaryTV
+            tv = termViews[activeTab]
         }
         let pid = tv.childPid
         if pid > 0 {
@@ -16926,7 +15558,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case 3:  applySystemThemeAppearance(to: visualEffect)
         default: visualEffect.appearance = NSAppearance(named: .darkAqua)
         }
-        for tv in termViews { tv?.needsDisplay = true }
+        for tv in termViews { tv.needsDisplay = true }
         for sc in splitContainers {
             if let sec = sc.secondaryView { sec.needsDisplay = true }
         }
@@ -16953,9 +15585,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self = self else { return }
             self.addTab()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                if let tv = self.activeTab < self.termViews.count ? self.termViews[self.activeTab] : nil {
-                    tv.writePTY(profile.connectCommand + "\n")
-                }
+                let tv = self.termViews[self.activeTab]
+                tv.writePTY(profile.connectCommand + "\n")
             }
         }
         superview.addSubview(view)
@@ -17043,12 +15674,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             layoutGitPanel()
 
             // Start refreshing with current cwd
-            let cwd: String
-            if let tv = activeTab < termViews.count ? termViews[activeTab] : nil {
-                cwd = cwdForPid(tv.childPid)
-            } else {
-                cwd = NSHomeDirectory()
-            }
+            let tv = termViews[activeTab]
+            let cwd = cwdForPid(tv.childPid)
             tabGitPanels[activeTab]?.startRefreshing(cwd: cwd)
 
             // Fade in
@@ -17252,12 +15879,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard activeTab >= 0, activeTab < tabGitPositions.count,
               tabGitPositions[activeTab] != .none,
               let panel = tabGitPanels[activeTab] else { return }
-        let cwd: String
-        if let tv = activeTab < termViews.count ? termViews[activeTab] : nil {
-            cwd = cwdForPid(tv.childPid)
-        } else {
-            cwd = NSHomeDirectory()
-        }
+        let tv = termViews[activeTab]
+        let cwd = cwdForPid(tv.childPid)
         panel.updateCwd(cwd)
     }
 
@@ -17434,12 +16057,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         if #available(macOS 14.0, *) { NSApp.activate() }
         else { NSApp.activate(ignoringOtherApps: true) }
-        if !splitContainers.isEmpty && activeTab < splitContainers.count {
-            if let ev = activeTab < tabEditorViews.count ? tabEditorViews[activeTab] : nil {
-                window.makeFirstResponder(ev.textView)
-            } else if let tv = activeTab < termViews.count ? termViews[activeTab] : nil {
-                window.makeFirstResponder(tv)
-            }
+        if !termViews.isEmpty && activeTab < termViews.count {
+            window.makeFirstResponder(termViews[activeTab])
         }
     }
 
@@ -17498,10 +16117,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             PaletteCommand(title: "Always on Top (\(onOff("alwaysOnTop")))", shortcut: "") { [weak self] in self?.promptToggle("Always on Top", key: "alwaysOnTop") },
             PaletteCommand(title: "Auto-Dim (\(onOff("autoDim")))", shortcut: "") { [weak self] in self?.promptToggle("Auto-Dim", key: "autoDim") },
             PaletteCommand(title: "Clear", shortcut: "\u{2318}K") { [weak self] in
-                guard let self = self, !self.splitContainers.isEmpty else { return }
-                if let tv = self.activeTab < self.termViews.count ? self.termViews[self.activeTab] : nil {
-                    tv.clearScrollback(nil)
-                }
+                guard let self = self, !self.termViews.isEmpty else { return }
+                self.termViews[self.activeTab].clearScrollback(nil)
             },
             PaletteCommand(title: "Hide", shortcut: "Ctrl+<") { [weak self] in self?.toggleWindow() },
             PaletteCommand(title: "Help", shortcut: "?") { [weak self] in
@@ -17616,8 +16233,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func performScrollbackSearch(_ query: String) {
-        guard !splitContainers.isEmpty,
-              let tv = activeTab < termViews.count ? termViews[activeTab] : nil else { return }
+        guard !termViews.isEmpty else { return }
+        let tv = termViews[activeTab]
         let term = tv.terminal
         let q = query.lowercased()
         var highlights: [(row: Int, col: Int, len: Int)] = []
@@ -17700,8 +16317,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if mode == .perf { perfOverlay = nil } else { parserOverlay = nil }
             return
         }
-        guard !splitContainers.isEmpty,
-              let tv = activeTab < termViews.count ? termViews[activeTab] : nil else { return }
+        guard !termViews.isEmpty else { return }
+        let tv = termViews[activeTab]
         let bounds = window.contentView?.bounds ?? .zero
         let (w, h): (CGFloat, CGFloat) = mode == .perf ? (260, 180) : (280, 280)
         let overlay = DiagnosticsOverlay(frame: NSRect(x: bounds.width - w - 10, y: 40, width: w, height: h), mode: mode)
@@ -18031,8 +16648,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func scheduleUpdateCheck(initialDelay: TimeInterval) {
         updateCheckTimer?.invalidate()
         guard UserDefaults.standard.bool(forKey: "autoCheckUpdates") else { return }
-        // Note: .app guard intentionally removed — checking is harmless for any build type.
-        // Install guard remains in downloadAndInstall (write permission check covers non-.app paths).
+        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
 
         let interval: TimeInterval = 72 * 60 * 60  // 72 hours
 
@@ -18148,13 +16764,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func activateAfterSnap() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if !splitContainers.isEmpty {
-            if let ev = activeTab < tabEditorViews.count ? tabEditorViews[activeTab] : nil {
-                window.makeFirstResponder(ev.textView)
-            } else if let tv = activeTab < termViews.count ? termViews[activeTab] : nil {
-                window.makeFirstResponder(tv)
-                tv.needsDisplay = true
-            }
+        if !termViews.isEmpty {
+            window.makeFirstResponder(termViews[activeTab])
+            termViews[activeTab].needsDisplay = true
         }
     }
 
@@ -18234,7 +16846,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func setCursorStyle(_ style: Int) {
         UserDefaults.standard.set(style, forKey: "cursorStyle")
-        for tv in termViews { if let tv { tv.userCursorStyle = style; tv.setNeedsDisplay(tv.bounds) } }
+        for tv in termViews { tv.userCursorStyle = style; tv.setNeedsDisplay(tv.bounds) }
         for sc in splitContainers {
             if let sec = sc.secondaryView { sec.userCursorStyle = style; sec.setNeedsDisplay(sec.bounds) }
         }
@@ -18315,12 +16927,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if self.pendingToggle { self.pendingToggle = false; self.toggleWindow() }
         })
 
-        if !splitContainers.isEmpty && activeTab < splitContainers.count {
-            if let ev = activeTab < tabEditorViews.count ? tabEditorViews[activeTab] : nil {
-                window.makeFirstResponder(ev.textView)
-            } else if let tv = activeTab < termViews.count ? termViews[activeTab] : nil {
-                window.makeFirstResponder(tv)
-            }
+        if !termViews.isEmpty && activeTab < termViews.count {
+            window.makeFirstResponder(termViews[activeTab])
         }
 
         // Monitor clicks outside to auto-close
@@ -18352,7 +16960,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // Suppress terminal resize during animation to preserve grid content
-        for tv in termViews { tv?.suppressResize = true }
+        for tv in termViews { tv.suppressResize = true }
         for sc in splitContainers { sc.secondaryView?.suppressResize = true }
 
         if isWindowDetached {
@@ -18363,7 +16971,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 window.animator().alphaValue = 0
             }, completionHandler: { [weak self] in
                 guard let self = self else { return }
-                for tv in self.termViews { tv?.suppressResize = false }
+                for tv in self.termViews { tv.suppressResize = false }
                 for sc in self.splitContainers { sc.secondaryView?.suppressResize = false }
                 self.window.orderOut(nil)
                 self.isAnimating = false
@@ -18379,7 +16987,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             window.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self = self else { return }
-            for tv in self.termViews { tv?.suppressResize = false }
+            for tv in self.termViews { tv.suppressResize = false }
             for sc in self.splitContainers { sc.secondaryView?.suppressResize = false }
             self.window.orderOut(nil)
             self.isAnimating = false
@@ -18388,27 +16996,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func menuSwitchZsh()  {
-        guard !splitContainers.isEmpty,
-              let tv = activeTab < termViews.count ? termViews[activeTab] : nil else { return }
-        tv.switchToShell1(nil)
+        guard !termViews.isEmpty else { return }
+        termViews[activeTab].switchToShell1(nil)
         updateHeaderTabs(); updateFooter()
     }
     @objc func menuSwitchBash() {
-        guard !splitContainers.isEmpty,
-              let tv = activeTab < termViews.count ? termViews[activeTab] : nil else { return }
-        tv.switchToShell2(nil)
+        guard !termViews.isEmpty else { return }
+        termViews[activeTab].switchToShell2(nil)
         updateHeaderTabs(); updateFooter()
     }
     @objc func menuSwitchSh()   {
-        guard !splitContainers.isEmpty,
-              let tv = activeTab < termViews.count ? termViews[activeTab] : nil else { return }
-        tv.switchToShell3(nil)
+        guard !termViews.isEmpty else { return }
+        termViews[activeTab].switchToShell3(nil)
         updateHeaderTabs(); updateFooter()
     }
 
-    @objc func switchToTab1() { if splitContainers.count > 0 { switchToTab(0) } }
-    @objc func switchToTab2() { if splitContainers.count > 1 { switchToTab(1) } }
-    @objc func switchToTab3() { if splitContainers.count > 2 { switchToTab(2) } }
+    @objc func switchToTab1() { if termViews.count > 0 { switchToTab(0) } }
+    @objc func switchToTab2() { if termViews.count > 1 { switchToTab(1) } }
+    @objc func switchToTab3() { if termViews.count > 2 { switchToTab(2) } }
 
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
         // Enforce minimum: at least enough for header buttons + 1 tab + usable terminal
@@ -18419,7 +17024,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Notification) {
         // Redraw terminal to show cursor
-        if activeTab < termViews.count { termViews[activeTab]?.needsDisplay = true }
+        if activeTab < termViews.count { termViews[activeTab].needsDisplay = true }
         guard !isAnimating else { return }
         guard UserDefaults.standard.bool(forKey: "autoDim") else { return }
         restoreWindowOpacity()
@@ -18427,7 +17032,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         // Redraw terminal to hide cursor when window loses focus
-        if activeTab < termViews.count { termViews[activeTab]?.needsDisplay = true }
+        if activeTab < termViews.count { termViews[activeTab].needsDisplay = true }
         guard !isAnimating, window.isVisible else { return }
         guard UserDefaults.standard.bool(forKey: "autoDim") else { return }
         if isAnyDragSessionActive { return }
@@ -18636,17 +17241,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func saveSession() {
         var tabs: [[String: Any]] = []
         for (i, tv) in termViews.enumerated() {
-            // Editor tab
-            if i < tabTypes.count && tabTypes[i] == .editor {
-                var t: [String: Any] = ["type": "editor"]
-                if let url = i < tabEditorURLs.count ? tabEditorURLs[i] : nil {
-                    t["editorURL"] = url.path
-                }
-                tabs.append(t)
-                continue
-            }
-            // Skip nil terminal slots
-            guard let tv = tv else { continue }
             var info: [String: Any] = [
                 "shell": tv.currentShell,
                 "cwd": cwdForPid(tv.childPid),
@@ -18713,12 +17307,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let savedActive = UserDefaults.standard.integer(forKey: "sessionActiveTab")
 
         for tabInfo in tabs {
-            // Restore editor tab
-            if let type_ = tabInfo["type"] as? String, type_ == "editor" {
-                let url = (tabInfo["editorURL"] as? String).map { URL(fileURLWithPath: $0) }
-                createEditorTab(url: url)
-                continue
-            }
             let shell = tabInfo["shell"] as? String ?? "/bin/zsh"
             let cwd = tabInfo["cwd"] as? String
             let hue = tabInfo["colorHue"] as? Double
@@ -18733,7 +17321,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
             // Restore git panel if saved
             if let gitPos = tabInfo["gitPosition"] as? String, gitPos != "none" {
-                let idx = splitContainers.count - 1
+                let idx = termViews.count - 1
                 if idx >= 0, idx < tabGitPositions.count {
                     let pos: GitPanelPosition = gitPos == "bottom" ? .bottom : .right
                     tabGitPositions[idx] = pos
@@ -18765,7 +17353,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
             // Restore split if saved
             if let splitVertical = tabInfo["splitVertical"] as? Bool {
-                let idx = splitContainers.count - 1
+                let idx = termViews.count - 1
                 let container = splitContainers[idx]
                 let splitShell = tabInfo["splitShell"] as? String ?? shell
                 let splitCwd = tabInfo["splitCwd"] as? String ?? cwd
@@ -18785,7 +17373,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         // Restore active tab
-        let targetTab = min(savedActive, splitContainers.count - 1)
+        let targetTab = min(savedActive, termViews.count - 1)
         if targetTab != activeTab && targetTab >= 0 {
             switchToTab(targetTab)
         }
