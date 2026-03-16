@@ -6447,6 +6447,8 @@ class BadgeButton: NSView {
 class FooterBarView: NSView {
     private var toggleBadge: BadgeButton!
     private var shellButtons: [ShellButton] = []
+    private var editorModeButtons: [ShellButton] = []
+    var onEditorModeChange: ((EditorInputMode) -> Void)?
     private var tabShortcutBadges: [BadgeButton] = []
     var gearBtn: GearButton!
     private var quitBtn: QuitButton!
@@ -6532,6 +6534,24 @@ class FooterBarView: NSView {
         usageBadge.isHidden = !UserDefaults.standard.bool(forKey: "showAIUsage")
         linksContent.addSubview(usageBadge)
 
+        // Editor mode buttons (hidden until editor tab is active)
+        let modeItems: [(String, NSColor)] = [
+            ("NORMAL", NSColor(calibratedWhite: 0.55, alpha: 1.0)),
+            ("NANO",   NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.5, alpha: 1.0)),
+            ("VIM",    NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)),
+        ]
+        for (i, item) in modeItems.enumerated() {
+            let btn = ShellButton(title: item.0, accent: item.1)
+            btn.isHidden = true
+            let mode: EditorInputMode = [EditorInputMode.normal, .nano, .vim][i]
+            btn.onClick = { [weak self] in
+                self?.onEditorModeChange?(mode)
+                self?.setActiveEditorMode(mode)
+            }
+            linksContent.addSubview(btn)
+            editorModeButtons.append(btn)
+        }
+
         let shellItems: [(title: String, accent: NSColor)] = [
             ("\u{2318} 1 zsh",  NSColor(calibratedRed: 0.4, green: 0.65, blue: 1.0, alpha: 1.0)),
             ("\u{2318} 2 bash", NSColor(calibratedRed: 0.45, green: 0.78, blue: 0.45, alpha: 1.0)),
@@ -6604,6 +6624,12 @@ class FooterBarView: NSView {
             usageBadge.frame = NSRect(x: lx, y: cy - ubSz.height / 2, width: ubSz.width, height: ubSz.height)
             lx += ubSz.width + gap
         }
+        let modeBtnW: CGFloat = 54
+        for btn in editorModeButtons {
+            if btn.isHidden { continue }
+            btn.frame = NSRect(x: lx, y: cy - itemH / 2, width: modeBtnW, height: itemH)
+            lx += modeBtnW + gap
+        }
         for btn in shellButtons {
             if btn.isHidden { continue }
             btn.frame = NSRect(x: lx, y: cy - itemH / 2, width: shellBtnW, height: itemH)
@@ -6674,6 +6700,7 @@ class FooterBarView: NSView {
     }
 
     func setEditorMode(_ isEditor: Bool) {
+        for btn in editorModeButtons { btn.isHidden = !isEditor }
         for btn in shellButtons { btn.isHidden = isEditor }
         // [0]=⌥⇥  [1]=⌘T  [2]=⌘W  [3]=⌘D  [4]=⌘⇧D
         if tabShortcutBadges.count > 4 {
@@ -6682,6 +6709,18 @@ class FooterBarView: NSView {
             tabShortcutBadges[4].isHidden = isEditor  // ⌘⇧D split H
         }
         needsLayout = true
+    }
+
+    func setActiveEditorMode(_ mode: EditorInputMode) {
+        let idx: Int
+        switch mode {
+        case .normal: idx = 0
+        case .nano:   idx = 1
+        case .vim:    idx = 2
+        }
+        for (i, btn) in editorModeButtons.enumerated() {
+            btn.setActive(i == idx)
+        }
     }
 }
 
@@ -14680,6 +14719,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let next = self.activeTab < self.termViews.count - 1 ? self.activeTab + 1 : 0
             self.switchToTab(next)
         }
+        footerView.onEditorModeChange = { [weak self] mode in
+            guard let self = self else { return }
+            if self.activeTab < self.tabEditorModes.count {
+                self.tabEditorModes[self.activeTab] = mode
+            }
+            if let ev = self.activeTab < self.tabEditorViews.count ? self.tabEditorViews[self.activeTab] : nil {
+                ev.setInputMode(mode)
+            }
+        }
         window.contentView?.addSubview(footerView)
 
         // AI Usage — always start polling, badge visibility is separate
@@ -15611,6 +15659,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !termViews.isEmpty && activeTab < termViews.count else { return }
         let isEditor = activeTab < tabTypes.count && tabTypes[activeTab] == .editor
         footerView.setEditorMode(isEditor)
+        if isEditor, activeTab < tabEditorModes.count {
+            footerView.setActiveEditorMode(tabEditorModes[activeTab])
+        }
         if isEditor { return }
         // Use the focused pane (may be secondary in split mode)
         let container = splitContainers[activeTab]
