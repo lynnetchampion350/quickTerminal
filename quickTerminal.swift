@@ -5436,49 +5436,15 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         addBtn.translatesAutoresizingMaskIntoConstraints = false
         addSubview(addBtn)
 
-        // Split buttons (left of "+")
+        // Buttons kept initialized (not added to view) so setGitActive/setSplitActive etc. don't crash
         splitVBtn = SplitIconButton(vertical: true)
-        splitVBtn.onClick = { [weak self] in self?.onSplitVertical?() }
-        splitVBtn.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(splitVBtn)
-
         splitHBtn = SplitIconButton(vertical: false)
-        splitHBtn.onClick = { [weak self] in self?.onSplitHorizontal?() }
-        splitHBtn.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(splitHBtn)
-
-        // GIT button
         gitBtn = HoverButton(title: "GIT", fontSize: 9, weight: .bold,
-            normalColor: NSColor(calibratedWhite: 0.5, alpha: 1.0),
-            hoverColor: NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 1.0),
-            hoverBg: NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 0.12),
-            pressBg: NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.25, alpha: 0.25),
-            cornerRadius: 4)
-        gitBtn.onClick = { [weak self] in self?.onGitToggle?() }
-        gitBtn.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(gitBtn)
-
-        // WebPicker button
+            normalColor: .clear, hoverColor: .clear, hoverBg: .clear, pressBg: .clear, cornerRadius: 4)
         webPickerBtn = HoverButton(title: "</>", fontSize: 9, weight: .bold,
-            normalColor: NSColor(calibratedWhite: 0.5, alpha: 1.0),
-            hoverColor: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 1.0),
-            hoverBg: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.12),
-            pressBg: NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.55, alpha: 0.25),
-            cornerRadius: 4)
-        webPickerBtn.onClick = { [weak self] in self?.onWebPickerToggle?() }
-        webPickerBtn.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(webPickerBtn)
-
-        // SSH button
+            normalColor: .clear, hoverColor: .clear, hoverBg: .clear, pressBg: .clear, cornerRadius: 4)
         sshBtn = HoverButton(title: "SSH", fontSize: 9, weight: .bold,
-            normalColor: NSColor(calibratedWhite: 0.5, alpha: 1.0),
-            hoverColor: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 1.0),
-            hoverBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.12),
-            pressBg: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1.0, alpha: 0.25),
-            cornerRadius: 4)
-        sshBtn.onClick = { [weak self] in self?.onSSHToggle?() }
-        sshBtn.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(sshBtn)
+            normalColor: .clear, hoverColor: .clear, hoverBg: .clear, pressBg: .clear, cornerRadius: 4)
 
         // Separator line at bottom
         sep.wantsLayer = true
@@ -5488,35 +5454,9 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
 
         NSLayoutConstraint.activate([
             tabScrollView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            tabScrollView.trailingAnchor.constraint(equalTo: splitVBtn.leadingAnchor, constant: -4),
+            tabScrollView.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -4),
             tabScrollView.centerYAnchor.constraint(equalTo: centerYAnchor),
             tabScrollView.heightAnchor.constraint(equalToConstant: 24),
-
-            // Buttons: [splitV] [splitH] [GIT] [+]
-            splitVBtn.trailingAnchor.constraint(equalTo: splitHBtn.leadingAnchor, constant: -2),
-            splitVBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            splitVBtn.widthAnchor.constraint(equalToConstant: 20),
-            splitVBtn.heightAnchor.constraint(equalToConstant: 20),
-
-            splitHBtn.trailingAnchor.constraint(equalTo: gitBtn.leadingAnchor, constant: -4),
-            splitHBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            splitHBtn.widthAnchor.constraint(equalToConstant: 20),
-            splitHBtn.heightAnchor.constraint(equalToConstant: 20),
-
-            gitBtn.trailingAnchor.constraint(equalTo: webPickerBtn.leadingAnchor, constant: -4),
-            gitBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            gitBtn.widthAnchor.constraint(equalToConstant: 30),
-            gitBtn.heightAnchor.constraint(equalToConstant: 20),
-
-            webPickerBtn.trailingAnchor.constraint(equalTo: sshBtn.leadingAnchor, constant: -4),
-            webPickerBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            webPickerBtn.widthAnchor.constraint(equalToConstant: 30),
-            webPickerBtn.heightAnchor.constraint(equalToConstant: 20),
-
-            sshBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -4),
-            sshBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            sshBtn.widthAnchor.constraint(equalToConstant: 30),
-            sshBtn.heightAnchor.constraint(equalToConstant: 20),
 
             addBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             addBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -14250,6 +14190,8 @@ class OnboardingPanel: NSPanel {
 
 class EditorView: NSView {
 
+    override var isFlipped: Bool { true }
+
     private(set) var textView: NSTextView!
     private var scrollView: NSScrollView!
 
@@ -14780,6 +14722,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func addTab() {
+        if activeTab < tabTypes.count, tabTypes[activeTab] == .editor {
+            createEditorTab(); return
+        }
         let shells = ["/bin/zsh", "/bin/bash", "/bin/sh"]
         let idx = UserDefaults.standard.integer(forKey: "defaultShellIndex")
         let shell = idx >= 0 && idx < shells.count ? shells[idx] : "/bin/zsh"
