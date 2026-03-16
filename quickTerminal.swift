@@ -3745,6 +3745,9 @@ class TerminalView: NSView {
             if event.keyCode == 18 { switchToShell1(nil); (NSApp.delegate as? AppDelegate)?.updateHeaderTabs(); (NSApp.delegate as? AppDelegate)?.updateFooter(); return }
             if event.keyCode == 19 { switchToShell2(nil); (NSApp.delegate as? AppDelegate)?.updateHeaderTabs(); (NSApp.delegate as? AppDelegate)?.updateFooter(); return }
             if event.keyCode == 20 { switchToShell3(nil); (NSApp.delegate as? AppDelegate)?.updateHeaderTabs(); (NSApp.delegate as? AppDelegate)?.updateFooter(); return }
+            // Cmd+Left → Zeilenanfang (Ctrl+A), Cmd+Right → Zeilenende (Ctrl+E)
+            if event.keyCode == 123 { writePTY(Data([0x01])); return } // Left arrow
+            if event.keyCode == 124 { writePTY(Data([0x05])); return } // Right arrow
             // Cmd+Backspace → kill entire line (Ctrl+U)
             if event.keyCode == 51 { writePTY(Data([0x15])); return }
             switch event.charactersIgnoringModifiers {
