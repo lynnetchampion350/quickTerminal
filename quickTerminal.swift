@@ -10,7 +10,7 @@ import AVKit
 
 // MARK: - Version
 
-let kAppVersion = "1.4.0"
+let kAppVersion = "1.5.0"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -216,6 +216,18 @@ enum Loc {
     static var sshConnPh: String    { t("sshConnPh") }
     static var sshKeyPh: String     { t("sshKeyPh") }
 
+    // MARK: Editor
+    static var newTabMenuTerminal: String { t("newTabMenuTerminal") }
+    static var newTabMenuEditor: String   { t("newTabMenuEditor") }
+    static var editorOpen: String         { t("editorOpen") }
+    static var editorSave: String         { t("editorSave") }
+    static var editorSaveAs: String       { t("editorSaveAs") }
+    static var nanoModeBar: String        { t("nanoModeBar") }
+    static var vimNormal: String          { t("vimNormal") }
+    static var vimInsert: String          { t("vimInsert") }
+    static var editorTabName: String      { t("editorTabName") }
+    static var newEditorTab: String       { t("newEditorTab") }
+
     // MARK: - Translation Table
     static let strings: [String: [String: String]] = [
         "en": [
@@ -280,6 +292,11 @@ enum Loc {
             "sshNamePh": "Name  (optional, e.g. Production)",
             "sshConnPh": "user@host  or  user@host:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (optional – leave empty for password auth)",
+            "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Text Editor",
+            "editorOpen": "Open", "editorSave": "Save", "editorSaveAs": "Save As",
+            "nanoModeBar": "^S Save   ^X Close   ^K Cut Line   ^U Paste",
+            "vimNormal": "── NORMAL ──", "vimInsert": "── INSERT ──",
+            "editorTabName": "Editor", "newEditorTab": "New Editor Tab",
         ],
         "de": [
             "language": "SPRACHE",
@@ -343,6 +360,11 @@ enum Loc {
             "sshNamePh": "Name  (optional, z.B. Produktion)",
             "sshConnPh": "user@host  oder  user@host:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (optional – leer lassen für Passwort-Auth)",
+            "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Text-Editor",
+            "editorOpen": "Öffnen", "editorSave": "Speichern", "editorSaveAs": "Speichern als",
+            "nanoModeBar": "^S Speichern   ^X Schließen   ^K Zeile ausschneiden   ^U Einfügen",
+            "vimNormal": "── NORMAL ──", "vimInsert": "── EINFÜGEN ──",
+            "editorTabName": "Editor", "newEditorTab": "Neuer Editor-Tab",
         ],
         "tr": [
             "language": "DİL",
@@ -406,6 +428,11 @@ enum Loc {
             "sshNamePh": "Ad  (isteğe bağlı, örn. Üretim)",
             "sshConnPh": "kullanıcı@host  veya  kullanıcı@host:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (isteğe bağlı – şifre için boş bırakın)",
+            "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Metin Editörü",
+            "editorOpen": "Aç", "editorSave": "Kaydet", "editorSaveAs": "Farklı Kaydet",
+            "nanoModeBar": "^S Kaydet   ^X Kapat   ^K Satır Kes   ^U Yapıştır",
+            "vimNormal": "── NORMAL ──", "vimInsert": "── EKLE ──",
+            "editorTabName": "Editör", "newEditorTab": "Yeni Editör Sekmesi",
         ],
         "es": [
             "language": "IDIOMA",
@@ -469,6 +496,11 @@ enum Loc {
             "sshNamePh": "Nombre  (opcional, p.ej. Producción)",
             "sshConnPh": "usuario@host  o  usuario@host:puerto  *",
             "sshKeyPh": "~/.ssh/id_rsa  (opcional – dejar vacío para auth por contraseña)",
+            "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Editor de Texto",
+            "editorOpen": "Abrir", "editorSave": "Guardar", "editorSaveAs": "Guardar Como",
+            "nanoModeBar": "^S Guardar   ^X Cerrar   ^K Cortar Línea   ^U Pegar",
+            "vimNormal": "── NORMAL ──", "vimInsert": "── INSERTAR ──",
+            "editorTabName": "Editor", "newEditorTab": "Nueva Pestaña de Editor",
         ],
         "fr": [
             "language": "LANGUE",
@@ -532,6 +564,11 @@ enum Loc {
             "sshNamePh": "Nom  (optionnel, ex. Production)",
             "sshConnPh": "utilisateur@hôte  ou  utilisateur@hôte:port  *",
             "sshKeyPh": "~/.ssh/id_rsa  (optionnel – laisser vide pour auth par mot de passe)",
+            "newTabMenuTerminal": "Terminal", "newTabMenuEditor": "Éditeur de Texte",
+            "editorOpen": "Ouvrir", "editorSave": "Enregistrer", "editorSaveAs": "Enregistrer Sous",
+            "nanoModeBar": "^S Enregistrer   ^X Fermer   ^K Couper Ligne   ^U Coller",
+            "vimNormal": "── NORMAL ──", "vimInsert": "── INSÉRER ──",
+            "editorTabName": "Éditeur", "newEditorTab": "Nouvel Onglet Éditeur",
         ],
         "it": [
             "language": "LINGUA",
@@ -595,6 +632,11 @@ enum Loc {
             "sshNamePh": "Nome  (opzionale, es. Produzione)",
             "sshConnPh": "utente@host  o  utente@host:porta  *",
             "sshKeyPh": "~/.ssh/id_rsa  (opzionale – lasciare vuoto per auth con password)",
+            "newTabMenuTerminal": "Terminale", "newTabMenuEditor": "Editor di Testo",
+            "editorOpen": "Apri", "editorSave": "Salva", "editorSaveAs": "Salva Come",
+            "nanoModeBar": "^S Salva   ^X Chiudi   ^K Taglia Riga   ^U Incolla",
+            "vimNormal": "── NORMALE ──", "vimInsert": "── INSERISCI ──",
+            "editorTabName": "Editor", "newEditorTab": "Nuova Scheda Editor",
         ],
         "ar": [
             "language": "اللغة",
@@ -658,6 +700,11 @@ enum Loc {
             "sshNamePh": "الاسم  (اختياري، مثل: الإنتاج)",
             "sshConnPh": "مستخدم@مضيف  أو  مستخدم@مضيف:منفذ  *",
             "sshKeyPh": "~/.ssh/id_rsa  (اختياري – اتركه فارغاً لاستخدام كلمة المرور)",
+            "newTabMenuTerminal": "الطرفية", "newTabMenuEditor": "محرر النصوص",
+            "editorOpen": "فتح", "editorSave": "حفظ", "editorSaveAs": "حفظ باسم",
+            "nanoModeBar": "^S حفظ   ^X إغلاق   ^K قص سطر   ^U لصق",
+            "vimNormal": "── عادي ──", "vimInsert": "── إدراج ──",
+            "editorTabName": "محرر", "newEditorTab": "تبويب محرر جديد",
         ],
         "ja": [
             "language": "言語",
@@ -721,6 +768,11 @@ enum Loc {
             "sshNamePh": "名前  (任意、例: 本番)",
             "sshConnPh": "ユーザー@ホスト  または  ユーザー@ホスト:ポート  *",
             "sshKeyPh": "~/.ssh/id_rsa  (任意 – パスワード認証は空のまま)",
+            "newTabMenuTerminal": "ターミナル", "newTabMenuEditor": "テキストエディタ",
+            "editorOpen": "開く", "editorSave": "保存", "editorSaveAs": "別名で保存",
+            "nanoModeBar": "^S 保存   ^X 閉じる   ^K 行を切り取る   ^U 貼り付け",
+            "vimNormal": "── NORMAL ──", "vimInsert": "── 挿入 ──",
+            "editorTabName": "エディタ", "newEditorTab": "新しいエディタタブ",
         ],
         "zh": [
             "language": "语言",
@@ -784,6 +836,11 @@ enum Loc {
             "sshNamePh": "名称  (可选，例如 生产)",
             "sshConnPh": "用户@主机  或  用户@主机:端口  *",
             "sshKeyPh": "~/.ssh/id_rsa  (可选 – 留空则使用密码认证)",
+            "newTabMenuTerminal": "终端", "newTabMenuEditor": "文本编辑器",
+            "editorOpen": "打开", "editorSave": "保存", "editorSaveAs": "另存为",
+            "nanoModeBar": "^S 保存   ^X 关闭   ^K 剪切行   ^U 粘贴",
+            "vimNormal": "── 普通 ──", "vimInsert": "── 插入 ──",
+            "editorTabName": "编辑器", "newEditorTab": "新建编辑器标签页",
         ],
         "ru": [
             "language": "ЯЗЫК",
@@ -847,6 +904,11 @@ enum Loc {
             "sshNamePh": "Имя  (необязательно, напр. Продакшн)",
             "sshConnPh": "пользователь@хост  или  пользователь@хост:порт  *",
             "sshKeyPh": "~/.ssh/id_rsa  (необязательно – оставьте пустым для пароля)",
+            "newTabMenuTerminal": "Терминал", "newTabMenuEditor": "Текстовый редактор",
+            "editorOpen": "Открыть", "editorSave": "Сохранить", "editorSaveAs": "Сохранить как",
+            "nanoModeBar": "^S Сохранить   ^X Закрыть   ^K Вырезать строку   ^U Вставить",
+            "vimNormal": "── NORMAL ──", "vimInsert": "── ВСТАВКА ──",
+            "editorTabName": "Редактор", "newEditorTab": "Новая вкладка редактора",
         ],
     ]
 }
@@ -1033,8 +1095,10 @@ func applyTheme(_ t: TerminalTheme) {
     }
     // Sync editor views to new theme
     if let delegate = NSApp.delegate as? AppDelegate {
+        let dark = t.id != "light"
         for ev in delegate.tabEditorViews.compactMap({ $0 }) {
             ev.applyColors(bg: NSColor(cgColor: kTermBgCGColor) ?? kDefaultBG, fg: kDefaultFG)
+            ev.setHighlightDark(dark)
         }
     }
 }
@@ -2930,6 +2994,11 @@ class TerminalView: NSView {
             // Bottom corners (diagonal)
             addCursorRect(NSRect(x: 0, y: 0, width: e, height: e), cursor: BorderlessWindow.resizeNESW)     // bottomLeft
             addCursorRect(NSRect(x: w - e, y: 0, width: e, height: e), cursor: BorderlessWindow.resizeNWSE) // bottomRight
+            // Override: arrow for version button overlay (last-added wins on overlap)
+            if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn, !vb.isHidden,
+               let vbSuper = vb.superview {
+                addCursorRect(convert(vb.frame, from: vbSuper), cursor: .arrow)
+            }
         }
     }
 
@@ -3975,7 +4044,9 @@ class TerminalView: NSView {
             let pos = gridPos(from: event)
             if pos.row >= 0, pos.row < terminal.rows, pos.col >= 0, pos.col < terminal.cols,
                let url = terminal.grid[pos.row][pos.col].hyperlink,
-               let nsUrl = URL(string: url) {
+               let nsUrl = URL(string: url),
+               let scheme = nsUrl.scheme?.lowercased(),
+               ["https", "http", "mailto"].contains(scheme) {
                 NSWorkspace.shared.open(nsUrl)
                 return
             }
@@ -4068,6 +4139,11 @@ class TerminalView: NSView {
         if terminal.mouseMode >= 1003, window?.isKeyWindow == true {
             sendMouseEvent(button: 35, x: pos.col, y: pos.row)
         }
+        // Overlay views (e.g. version button) manage their own cursor via cursorUpdate —
+        // just return here so iBeam.set() doesn't override them.
+        let locInWindow = event.locationInWindow
+        if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
+           !vb.isHidden, vb.frame.contains(locInWindow) { return }
         // In edge zone: show resize cursor instead of iBeam
         if isInEdgeZone(event), let w = window as? BorderlessWindow {
             w.setEdgeCursor(at: event.locationInWindow)
@@ -4861,6 +4937,7 @@ class BorderlessWindow: NSWindow {
                         }
                         if ev.handleVimTwoKeyOp(event) { return }
                         if ev.handleVimKey(event) { return }
+                        return // consume all unrecognized keys in normal mode — don't pass to NSTextView
                     }
                 }
             }
@@ -4970,11 +5047,19 @@ class HoverButton: NSView {
         return NSSize(width: s.width + 12, height: s.height + 6)
     }
 
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .arrow)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        NSCursor.arrow.set()
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let t = trackingArea { removeTrackingArea(t) }
         trackingArea = NSTrackingArea(rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInActiveApp],
+            options: [.mouseEnteredAndExited, .activeInActiveApp, .cursorUpdate],
             owner: self, userInfo: nil)
         addTrackingArea(trackingArea!)
     }
@@ -5443,6 +5528,16 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
     var onFileOpen:   (() -> Void)?
     var onFileSave:   (() -> Void)?
     var onFileSaveAs: (() -> Void)?
+    var onFileDropped: ((URL) -> Void)?
+    private var dropHighlight = false
+    private let dropOverlay: NSView = {
+        let v = NSView()
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
+        v.autoresizingMask = [.width, .height]
+        v.isHidden = true
+        return v
+    }()
 
     private var tabContainer = NSView()
     private let tabScrollView = NSScrollView()
@@ -5480,6 +5575,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         tabScrollView.hasHorizontalScroller = false
         tabScrollView.hasVerticalScroller = false
         tabScrollView.horizontalScrollElasticity = .allowed
+        tabScrollView.verticalScrollElasticity = .none
         tabScrollView.wantsLayer = true
         tabScrollView.translatesAutoresizingMaskIntoConstraints = false
 
@@ -5498,9 +5594,9 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         addBtn.onClick = { [weak self] in
             guard let self = self else { return }
             let menu = NSMenu()
-            let termItem = NSMenuItem(title: "Terminal", action: #selector(HeaderBarView._addTerminal), keyEquivalent: "")
+            let termItem = NSMenuItem(title: Loc.newTabMenuTerminal, action: #selector(HeaderBarView._addTerminal), keyEquivalent: "")
             termItem.target = self
-            let editorItem = NSMenuItem(title: "Text Editor", action: #selector(HeaderBarView._addEditor), keyEquivalent: "")
+            let editorItem = NSMenuItem(title: Loc.newTabMenuEditor, action: #selector(HeaderBarView._addEditor), keyEquivalent: "")
             editorItem.target = self
             menu.addItem(termItem)
             menu.addItem(editorItem)
@@ -5515,7 +5611,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         let fileHoverBg = NSColor(calibratedRed: 0.3, green: 0.55, blue: 1.0, alpha: 0.12)
         let filePressedBg = NSColor(calibratedRed: 0.3, green: 0.55, blue: 1.0, alpha: 0.25)
 
-        fileOpenBtn = HoverButton(title: "Open", fontSize: 9, weight: .bold,
+        fileOpenBtn = HoverButton(title: Loc.editorOpen, fontSize: 9, weight: .bold,
             normalColor: fileGray, hoverColor: fileHover, hoverBg: fileHoverBg,
             pressBg: filePressedBg, cornerRadius: 4)
         fileOpenBtn.onClick = { [weak self] in self?.onFileOpen?() }
@@ -5523,7 +5619,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         fileOpenBtn.isHidden = true
         addSubview(fileOpenBtn)
 
-        fileSaveBtn = HoverButton(title: "Save", fontSize: 9, weight: .bold,
+        fileSaveBtn = HoverButton(title: Loc.editorSave, fontSize: 9, weight: .bold,
             normalColor: fileGray, hoverColor: fileHover, hoverBg: fileHoverBg,
             pressBg: filePressedBg, cornerRadius: 4)
         fileSaveBtn.onClick = { [weak self] in self?.onFileSave?() }
@@ -5531,7 +5627,7 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
         fileSaveBtn.isHidden = true
         addSubview(fileSaveBtn)
 
-        fileSaveAsBtn = HoverButton(title: "Save As", fontSize: 9, weight: .bold,
+        fileSaveAsBtn = HoverButton(title: Loc.editorSaveAs, fontSize: 9, weight: .bold,
             normalColor: fileGray, hoverColor: fileHover, hoverBg: fileHoverBg,
             pressBg: filePressedBg, cornerRadius: 4)
         fileSaveAsBtn.onClick = { [weak self] in self?.onFileSaveAs?() }
@@ -5563,17 +5659,14 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
 
             fileOpenBtn.trailingAnchor.constraint(equalTo: fileSaveBtn.leadingAnchor, constant: -4),
             fileOpenBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            fileOpenBtn.widthAnchor.constraint(equalToConstant: 34),
             fileOpenBtn.heightAnchor.constraint(equalToConstant: 20),
 
             fileSaveBtn.trailingAnchor.constraint(equalTo: fileSaveAsBtn.leadingAnchor, constant: -4),
             fileSaveBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            fileSaveBtn.widthAnchor.constraint(equalToConstant: 34),
             fileSaveBtn.heightAnchor.constraint(equalToConstant: 20),
 
             fileSaveAsBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -6),
             fileSaveAsBtn.centerYAnchor.constraint(equalTo: centerYAnchor),
-            fileSaveAsBtn.widthAnchor.constraint(equalToConstant: 50),
             fileSaveAsBtn.heightAnchor.constraint(equalToConstant: 20),
 
             addBtn.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
@@ -5586,9 +5679,55 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
             sep.trailingAnchor.constraint(equalTo: trailingAnchor),
             sep.heightAnchor.constraint(equalToConstant: 1),
         ])
+
+        // File drop support
+        registerForDraggedTypes([.fileURL])
+        dropOverlay.frame = bounds
+        addSubview(dropOverlay)
+
+        NotificationCenter.default.addObserver(self, selector: #selector(onLanguageChanged),
+                                               name: .appLanguageChanged, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: .appLanguageChanged, object: nil)
+    }
+
+    // ── File Drop ───────────────────────────────────────────────────────────────
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard sender.draggingPasteboard.canReadObject(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else { return [] }
+        dropHighlight = true
+        dropOverlay.isHidden = false
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        dropHighlight = false
+        dropOverlay.isHidden = true
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        dropHighlight = false
+        dropOverlay.isHidden = true
+        guard let urls = sender.draggingPasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL],
+              let url = urls.first else { return false }
+        // Reject directories
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+              !isDir.boolValue else { return false }
+        onFileDropped?(url)
+        return true
+    }
+
+    @objc private func onLanguageChanged() { refreshLanguage() }
 
     var onDoubleClick: (() -> Void)?
 
@@ -5877,6 +6016,15 @@ class HeaderBarView: NSView, NSTextFieldDelegate {
 
     @objc private func _addTerminal() { onAddTab?() }
     @objc private func _addEditor()   { onAddEditorTab?() }
+
+    func refreshLanguage() {
+        fileOpenBtn?.label.stringValue   = Loc.editorOpen
+        fileSaveBtn?.label.stringValue   = Loc.editorSave
+        fileSaveAsBtn?.label.stringValue = Loc.editorSaveAs
+        fileOpenBtn?.invalidateIntrinsicContentSize()
+        fileSaveBtn?.invalidateIntrinsicContentSize()
+        fileSaveAsBtn?.invalidateIntrinsicContentSize()
+    }
 }
 
 // MARK: - Footer Bar
@@ -6587,6 +6735,7 @@ class FooterBarView: NSView {
     var onSwitchShell: ((Int) -> Void)?
     var onSettings: (() -> Void)?
     var onNewTab: (() -> Void)?
+    var onNewEditorTab: (() -> Void)?
     var onCloseTab: (() -> Void)?
     var onSplitV: (() -> Void)?
     var onSplitH: (() -> Void)?
@@ -6700,7 +6849,9 @@ class FooterBarView: NSView {
 
         let badgeItems: [(keys: String, label: String, color: NSColor?)] = [
             ("\u{2325}", "\u{21E5}", NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.5, alpha: 1.0)),
-            ("\u{2318}", "T", nil), ("\u{2318}", "W", nil),
+            ("\u{2318}", "T", nil),
+            ("\u{2318}", "E", NSColor(calibratedRed: 0.35, green: 0.65, blue: 1.0, alpha: 1.0)),
+            ("\u{2318}", "W", nil),
             ("\u{2318}", "D", nil), ("\u{2318}\u{21E7}", "D", nil),
         ]
         for (i, item) in badgeItems.enumerated() {
@@ -6709,9 +6860,10 @@ class FooterBarView: NSView {
             switch i {
             case 0: badge.onClick = { [weak self] in self?.onSwitchSplitPane?() }
             case 1: badge.onClick = { [weak self] in self?.onNewTab?() }
-            case 2: badge.onClick = { [weak self] in self?.onCloseTab?() }
-            case 3: badge.onClick = { [weak self] in self?.onSplitV?() }
-            case 4: badge.onClick = { [weak self] in self?.onSplitH?() }
+            case 2: badge.onClick = { [weak self] in self?.onNewEditorTab?() }
+            case 3: badge.onClick = { [weak self] in self?.onCloseTab?() }
+            case 4: badge.onClick = { [weak self] in self?.onSplitV?() }
+            case 5: badge.onClick = { [weak self] in self?.onSplitH?() }
             default: break
             }
             tabShortcutBadges.append(badge)
@@ -7267,10 +7419,18 @@ class SettingsOverlay: NSView {
     private var themeCards: [ThemeCardView] = []
     private weak var themePickerView: NSView?
 
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: .arrow)
+    private var settingsCursorArea: NSTrackingArea?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = settingsCursorArea { removeTrackingArea(t); settingsCursorArea = nil }
+        settingsCursorArea = NSTrackingArea(rect: bounds,
+            options: [.mouseMoved, .activeInActiveApp, .cursorUpdate],
+            owner: self, userInfo: nil)
+        addTrackingArea(settingsCursorArea!)
     }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.arrow.set(); super.mouseMoved(with: event) }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -10534,6 +10694,7 @@ class GitPanelView: NSView {
     deinit {
         refreshTimer?.invalidate()
         feedbackTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self, name: .appLanguageChanged, object: nil)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -10833,7 +10994,10 @@ class ChromeCDPClient {
             let isLocal = urlStr.hasPrefix("localhost") || urlStr.hasPrefix("127.0.0.1") || urlStr.hasPrefix("0.0.0.0")
             urlStr = (isLocal ? "http://" : "https://") + urlStr
         }
-        guard !urlStr.isEmpty, let _ = URL(string: urlStr) else { return }
+        guard !urlStr.isEmpty,
+              let parsed = URL(string: urlStr),
+              let scheme = parsed.scheme?.lowercased(),
+              ["http", "https"].contains(scheme) else { return }
         cdpCommand("Page.navigate", params: ["url": urlStr]) { _ in }
     }
 
@@ -10904,6 +11068,14 @@ class ChromeCDPClient {
 }
 // MARK: - SSH Manager
 
+/// Shell-escape a single argument: wrap in single quotes, escape embedded single quotes.
+private func sshArgEscape(_ s: String) -> String {
+    if s.rangeOfCharacter(from: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "/_.-+:@")).inverted) == nil {
+        return s
+    }
+    return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+}
+
 struct SSHProfile: Codable {
     var id: String = UUID().uuidString
     var label: String
@@ -10913,11 +11085,11 @@ struct SSHProfile: Codable {
     var keyFile: String = ""
 
     var connectCommand: String {
-        var cmd = "ssh \(user)@\(host)"
+        var cmd = "ssh \(sshArgEscape(user))@\(sshArgEscape(host))"
         if port != 22 { cmd += " -p \(port)" }
         if !keyFile.isEmpty {
             let expanded = keyFile.replacingOccurrences(of: "~", with: NSHomeDirectory())
-            cmd += " -i \(expanded)"
+            cmd += " -i \(sshArgEscape(expanded))"
         }
         return cmd
     }
@@ -10972,6 +11144,8 @@ class SSHManagerView: NSView {
                                                name: .appLanguageChanged, object: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit { NotificationCenter.default.removeObserver(self, name: .appLanguageChanged, object: nil) }
 
     private func setupUI() {
         // ── Header ──
@@ -12575,6 +12749,7 @@ class WebPickerSidebarView: NSView {
         tabSearchTimer?.invalidate()
         titlePollTimer?.invalidate()
         cdp.disconnect()
+        NotificationCenter.default.removeObserver(self, name: .appLanguageChanged, object: nil)
     }
 
     override func rightMouseDown(with event: NSEvent) {
@@ -14199,10 +14374,11 @@ class UpdateChecker {
                     }
                 }
             } else {
-                // Dev binary: shell wrapper
+                // Dev binary: pass exe path as $1 to avoid shell injection via path interpolation
+                let exePath = ProcessInfo.processInfo.arguments[0]
                 let shellProc = Process()
                 shellProc.executableURL = URL(fileURLWithPath: "/bin/sh")
-                shellProc.arguments = ["-c", "sleep 0.3; \"\(ProcessInfo.processInfo.arguments[0])\""]
+                shellProc.arguments = ["-c", "sleep 0.3; \"$1\"", "--", exePath]
                 do {
                     try shellProc.run()
                     try? fm.removeItem(at: backupPath)
@@ -14349,6 +14525,210 @@ class OnboardingPanel: NSPanel {
     }
 }
 
+// Minimal NSTextView subclass — only overrides cursor management so the
+// version-button overlay always shows an arrow cursor instead of iBeam.
+private class EditorTextView: NSTextView {
+    override func mouseMoved(with event: NSEvent) {
+        if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
+           !vb.isHidden, vb.frame.contains(event.locationInWindow) { return }
+        super.mouseMoved(with: event)
+    }
+    override func cursorUpdate(with event: NSEvent) {
+        if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
+           !vb.isHidden, vb.frame.contains(event.locationInWindow) {
+            NSCursor.arrow.set(); return
+        }
+        super.cursorUpdate(with: event)
+    }
+}
+
+// MARK: - Syntax Highlighting
+
+enum SyntaxLanguage: String {
+    case none, json, html, css, javascript
+
+    static func detect(from url: URL) -> SyntaxLanguage {
+        switch url.pathExtension.lowercased() {
+        case "json":                                    return .json
+        case "html", "htm":                             return .html
+        case "css":                                     return .css
+        case "js", "mjs", "cjs", "ts", "tsx", "jsx":   return .javascript
+        default:                                        return .none
+        }
+    }
+}
+
+private struct SyntaxRule {
+    let regex: NSRegularExpression
+    let color: NSColor
+    let group: Int  // 0 = whole match, >0 = capture group
+
+    init(_ pattern: String, _ color: NSColor, group: Int = 0,
+         options: NSRegularExpression.Options = [.dotMatchesLineSeparators]) {
+        self.regex = try! NSRegularExpression(pattern: pattern, options: options)
+        self.color = color
+        self.group = group
+    }
+}
+
+// Module-level cache: rules compiled once per (language, isDark) pair
+private var _syntaxRulesCache: [String: [SyntaxRule]] = [:]
+
+private extension SyntaxLanguage {
+    static func rules(for lang: SyntaxLanguage, isDark: Bool) -> [SyntaxRule] {
+        let key = "\(lang.rawValue)-\(isDark)"
+        if let cached = _syntaxRulesCache[key] { return cached }
+        let rules = buildRules(lang: lang, isDark: isDark)
+        _syntaxRulesCache[key] = rules
+        return rules
+    }
+
+    // IMPORTANT: Rules are applied in ORDER — later rules overwrite earlier ones.
+    // Put lower-priority rules first (base colors), higher-priority last (keywords, tags).
+    private static func buildRules(lang: SyntaxLanguage, isDark: Bool) -> [SyntaxRule] {
+        func c(_ hex: UInt32, alpha: CGFloat = 1) -> NSColor {
+            NSColor(calibratedRed: CGFloat((hex >> 16) & 0xFF) / 255,
+                    green:         CGFloat((hex >> 8)  & 0xFF) / 255,
+                    blue:          CGFloat(hex         & 0xFF) / 255,
+                    alpha: alpha)
+        }
+
+        switch lang {
+        case .none: return []
+
+        case .json:
+            let string  = isDark ? c(0xCE9178) : c(0xA31515)
+            let number  = isDark ? c(0xB5CEA8) : c(0x098658)
+            let keyword = isDark ? c(0x569CD6) : c(0x0000FF)
+            let key     = isDark ? c(0x9CDCFE) : c(0x001080)
+            let punct   = isDark ? c(0x808080) : c(0x555555)
+            return [
+                SyntaxRule(#""[^"\\]*(?:\\.[^"\\]*)*""#,     string),
+                SyntaxRule(#"-?\b\d+\.?\d*([eE][+-]?\d+)?\b"#, number),
+                SyntaxRule(#"\b(true|false|null)\b"#,        keyword),
+                SyntaxRule(#"[{}\[\]:,]"#,                   punct),
+                SyntaxRule(#""[^"\\]*(?:\\.[^"\\]*)*"(?=\s*:)"#, key),
+            ]
+
+        case .html:
+            let comment = isDark ? c(0x6A9955) : c(0x008000)
+            let tag     = isDark ? c(0x4EC9B0) : c(0x800000)
+            let attrN   = isDark ? c(0x9CDCFE) : c(0xE50000)
+            let attrV   = isDark ? c(0xCE9178) : c(0xA31515)
+            let doctype = isDark ? c(0x569CD6) : c(0x0000FF)
+            return [
+                SyntaxRule(#"<!--[\s\S]*?-->"#,              comment),
+                SyntaxRule(#"<!DOCTYPE[^>]*>"#,              doctype, options: [.caseInsensitive]),
+                SyntaxRule(#"</?[\w:-]+"#,                   tag),
+                SyntaxRule(#"\b[\w:-]+(?=\s*=)"#,            attrN),
+                SyntaxRule(#""[^"]*"|'[^']*'"#,              attrV),
+            ]
+
+        case .css:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let atRule   = isDark ? c(0xC586C0) : c(0xAF00DB)
+            let selector = isDark ? c(0xD7BA7D) : c(0x800000)
+            let prop     = isDark ? c(0x9CDCFE) : c(0xFF0000)
+            let value    = isDark ? c(0xCE9178) : c(0xA31515)
+            let number   = isDark ? c(0xB5CEA8) : c(0x098658)
+            let color    = isDark ? c(0x4EC9B0) : c(0x098658)
+            return [
+                SyntaxRule(#"\/\*[\s\S]*?\*\/"#,             comment),
+                SyntaxRule(#"@[\w-]+"#,                      atRule),
+                SyntaxRule(#"[^{};,]+(?=\s*\{)"#,            selector),
+                SyntaxRule(#"[\w-]+(?=\s*:)"#,               prop),
+                SyntaxRule(#""[^"]*"|'[^']*'"#,              value),
+                SyntaxRule(#"#[0-9a-fA-F]{3,8}\b"#,          color),
+                SyntaxRule(#"\b\d+\.?\d*(%|px|em|rem|vh|vw|pt|s|ms)?\b"#, number),
+            ]
+
+        case .javascript:
+            let comment  = isDark ? c(0x6A9955) : c(0x008000)
+            let string   = isDark ? c(0xCE9178) : c(0xA31515)
+            let number   = isDark ? c(0xB5CEA8) : c(0x098658)
+            let keyword  = isDark ? c(0x569CD6) : c(0x0000FF)
+            let fnCall   = isDark ? c(0xDCDCAA) : c(0x795E26)
+            return [
+                SyntaxRule(#"\/\*[\s\S]*?\*\/"#,             comment),
+                SyntaxRule(#"\/\/[^\n]*"#,                   comment, options: []),
+                SyntaxRule(#"`[^`]*`"#,                      string),
+                SyntaxRule(#""[^"\\]*(?:\\.[^"\\]*)*""#,     string),
+                SyntaxRule(#"'[^'\\]*(?:\\.[^'\\]*)*'"#,     string),
+                SyntaxRule(#"\b\d+\.?\d*\b"#,                number),
+                SyntaxRule(#"\b(const|let|var|function|return|if|else|for|while|do|switch|case|break|continue|new|this|class|extends|import|export|default|from|async|await|typeof|instanceof|null|undefined|true|false|void|throw|try|catch|finally|delete|in|of)\b"#, keyword),
+                SyntaxRule(#"\b[\w$]+(?=\s*\()"#,            fnCall),
+            ]
+        }
+    }
+}
+
+final class SyntaxTextStorage: NSTextStorage {
+    private let backing = NSMutableAttributedString()
+    var language: SyntaxLanguage = .none { didSet { if oldValue != language { highlight() } } }
+    var isDark: Bool = true          { didSet { if oldValue != isDark  { highlight() } } }
+    var baseFont: NSFont = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+    var baseFG:   NSColor = .white
+
+    private var highlightTimer: Timer?
+
+    // ── NSTextStorage backing store ──────────────────────────────────────────
+
+    override var string: String { backing.string }
+
+    override func attributes(at location: Int,
+                             effectiveRange range: NSRangePointer?) -> [NSAttributedString.Key: Any] {
+        backing.attributes(at: location, effectiveRange: range)
+    }
+
+    override func replaceCharacters(in range: NSRange, with str: String) {
+        beginEditing()
+        backing.replaceCharacters(in: range, with: str)
+        edited(.editedCharacters, range: range, changeInLength: str.utf16.count - range.length)
+        endEditing()
+    }
+
+    override func setAttributes(_ attrs: [NSAttributedString.Key: Any]?, range: NSRange) {
+        beginEditing()
+        backing.setAttributes(attrs, range: range)
+        edited(.editedAttributes, range: range, changeInLength: 0)
+        endEditing()
+    }
+
+    // ── Highlighting ─────────────────────────────────────────────────────────
+
+    override func processEditing() {
+        super.processEditing()
+        guard language != .none else { return }
+        highlightTimer?.invalidate()
+        highlightTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
+            self?.highlight()
+        }
+    }
+
+    func highlight() {
+        guard language != .none else { return }
+        let str = string
+        guard !str.isEmpty else { return }
+        let full = NSRange(location: 0, length: (str as NSString).length)
+        let rules = SyntaxLanguage.rules(for: language, isDark: isDark)
+
+        beginEditing()
+        // Reset: base font + foreground
+        addAttributes([.font: baseFont, .foregroundColor: baseFG], range: full)
+        // Apply token colors in order (later rules win)
+        for rule in rules {
+            rule.regex.enumerateMatches(in: str, options: [], range: full) { match, _, _ in
+                guard let match = match else { return }
+                let r = (rule.group > 0 && rule.group < match.numberOfRanges)
+                    ? match.range(at: rule.group) : match.range
+                guard r.location != NSNotFound else { return }
+                addAttribute(.foregroundColor, value: rule.color, range: r)
+            }
+        }
+        endEditing()
+    }
+}
+
 // MARK: - Text Editor
 
 class EditorView: NSView {
@@ -14359,6 +14739,7 @@ class EditorView: NSView {
     private var scrollView: NSScrollView!
     private var modeBar: NSView!
     private var modeBarLabel: NSTextField!
+    private var syntaxStorage: SyntaxTextStorage?
     var vimMode: VimSubMode = .normal
     var vimYankBuffer: String = ""
     var vimPendingColon: Bool = false
@@ -14383,16 +14764,24 @@ class EditorView: NSView {
         addSubview(scrollView)
 
         let contentSize = scrollView.contentSize
-        textView = NSTextView(frame: NSRect(origin: .zero, size: contentSize))
+        // Build custom text-storage stack so SyntaxTextStorage can highlight live
+        let storage = SyntaxTextStorage()
+        syntaxStorage = storage
+        let layoutMgr = NSLayoutManager()
+        storage.addLayoutManager(layoutMgr)
+        let tw = max(contentSize.width, 100)
+        let th = max(contentSize.height, 100)
+        let container = NSTextContainer(size: NSSize(width: tw, height: .greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layoutMgr.addTextContainer(container)
+        textView = EditorTextView(frame: NSRect(origin: .zero, size: NSSize(width: tw, height: th)),
+                                  textContainer: container)
         textView.minSize = NSSize(width: 0, height: contentSize.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                   height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainer?.containerSize = NSSize(width: contentSize.width,
-                                                       height: CGFloat.greatestFiniteMagnitude)
-        textView.textContainer?.widthTracksTextView = true
         textView.isRichText = false
         textView.isContinuousSpellCheckingEnabled = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -14442,6 +14831,17 @@ class EditorView: NSView {
         modeBar?.layer?.backgroundColor = isDark
             ? NSColor(calibratedWhite: 0.0, alpha: 0.35).cgColor
             : NSColor(calibratedWhite: 0.0, alpha: 0.12).cgColor
+        syntaxStorage?.baseFG = fg
+    }
+
+    func setLanguage(_ lang: SyntaxLanguage) {
+        syntaxStorage?.language = lang
+        // language didSet triggers highlight() automatically
+    }
+
+    func setHighlightDark(_ dark: Bool) {
+        syntaxStorage?.isDark = dark
+        // isDark didSet triggers highlight() automatically
     }
 
     func setInputMode(_ mode: EditorInputMode) {
@@ -14451,7 +14851,7 @@ class EditorView: NSView {
             textView.isEditable = true
         case .nano:
             modeBar.isHidden = false
-            modeBarLabel.stringValue = "^S Save   ^X Close   ^K Cut Line   ^U Paste"
+            modeBarLabel.stringValue = Loc.nanoModeBar
             modeBarLabel.textColor = NSColor(calibratedRed: 0.5, green: 0.85, blue: 0.5, alpha: 1.0)
             textView.isEditable = true
         case .vim:
@@ -14464,7 +14864,10 @@ class EditorView: NSView {
 
     func setVimMode(_ vm: VimSubMode) {
         vimMode = vm
-        textView.isEditable = (vm == .insert)
+        // Keep isEditable = true in both modes so the insertion point stays visible.
+        // Key events in normal mode are fully intercepted by BorderlessWindow.sendEvent
+        // before they reach the text view, so no accidental typing can occur.
+        textView.isEditable = true
         if vm == .normal { vimPendingD = false; vimPendingY = false; vimPendingColon = false }
         updateVimModeBar()
     }
@@ -14472,10 +14875,10 @@ class EditorView: NSView {
     private func updateVimModeBar() {
         switch vimMode {
         case .normal:
-            modeBarLabel.stringValue = "── NORMAL ──"
+            modeBarLabel.stringValue = Loc.vimNormal
             modeBarLabel.textColor = NSColor(calibratedRed: 0.4, green: 0.7, blue: 1.0, alpha: 1.0)
         case .insert:
-            modeBarLabel.stringValue = "── INSERT ──"
+            modeBarLabel.stringValue = Loc.vimInsert
             modeBarLabel.textColor = NSColor(calibratedRed: 0.4, green: 0.9, blue: 0.5, alpha: 1.0)
         }
     }
@@ -14560,6 +14963,16 @@ class EditorView: NSView {
 
         default: break
         }
+
+        // Arrow keys (no character, check keyCode)
+        switch event.keyCode {
+        case 123: tv.moveLeft(nil);  return true  // ←
+        case 124: tv.moveRight(nil); return true  // →
+        case 125: tv.moveDown(nil);  return true  // ↓
+        case 126: tv.moveUp(nil);    return true  // ↑
+        default: break
+        }
+
         return false
     }
 
@@ -14609,6 +15022,15 @@ class EditorView: NSView {
         case "x":
             d.saveCurrentEditor(); d.closeCurrentTab(); return true
         default: return false
+        }
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        // Override: arrow for version button overlay (last-added wins on overlap)
+        if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn, !vb.isHidden,
+           let vbSuper = vb.superview {
+            addCursorRect(convert(vb.frame, from: vbSuper), cursor: .arrow)
         }
     }
 
@@ -14714,6 +15136,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var sidebarPanelHeights: [String: CGFloat] = ["git": 300, "picker": 320, "ssh": 260]
     var sidebarHDividers: [String: GitPanelDividerView] = [:]
     var helpViewer: HelpViewer?
+    var versionBtn: HoverButton?
     var perfOverlay: DiagnosticsOverlay?
     var parserOverlay: DiagnosticsOverlay?
     var usagePopover: AIUsagePopover?
@@ -14884,6 +15307,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.collectionBehavior = followSpaces ? [.canJoinAllSpaces] : [.moveToActiveSpace]
         window.appearance = NSAppearance(named: .darkAqua)  // always dark mode
 
+        // Pre-position using screen fallback so the window never sits at (0, 0).
+        // button.window is always nil/bogus at this point; the real position is
+        // applied 200 ms later in showWindowAnimated() once the tray icon is stable.
+        positionWindowUnderTrayIcon()
+
         // Shape mask: rounded rect body + popover arrow at top center
         window.contentView?.wantsLayer = true
         updateWindowMask()
@@ -14936,6 +15364,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         headerView.onFileOpen   = { [weak self] in self?.openEditorFile() }
         headerView.onFileSave   = { [weak self] in self?.saveCurrentEditor() }
         headerView.onFileSaveAs = { [weak self] in self?.saveCurrentEditorAs() }
+        headerView.onFileDropped = { [weak self] url in
+            self?.createEditorTabInternal(url: url)
+        }
         headerView.onDoubleClick = { [weak self] in self?.toggleFullscreen() }
 
         window.contentView?.addSubview(headerView)
@@ -14966,6 +15397,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         footerView.onSettings = { [weak self] in self?.toggleSettings() }
         footerView.onNewTab = { [weak self] in self?.addTab() }
+        footerView.onNewEditorTab = { [weak self] in self?.createEditorTab() }
         footerView.onCloseTab = { [weak self] in self?.closeCurrentTab() }
         footerView.onSplitV = { [weak self] in self?.toggleSplit(vertical: true) }
         footerView.onSplitH = { [weak self] in self?.toggleSplit(vertical: false) }
@@ -15030,6 +15462,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         verBtn.autoresizingMask = [.minXMargin, .maxYMargin]
         verBtn.layer?.zPosition = 1
         window.contentView?.addSubview(verBtn)
+        versionBtn = verBtn
 
         // Restore previous session or create first tab
         if !restoreSession() {
@@ -15071,23 +15504,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return event
         }
 
-        // Show window on launch — defer one run-loop so statusItem.button.window is ready.
+        // Show window on launch.
+        //
+        // WHY the delay exists (and must stay):
+        // macOS places status-bar items asynchronously after launch.  During the first
+        // ~150 ms, `convertToScreen` on the status-bar button returns one of two bogus
+        // results:
+        //   • y ≈ −11  (button not yet in a real screen window)
+        //   • x ≈ far-right  (button placed temporarily at the right edge while other
+        //     items are still being added and push it left)
+        // Showing the window before the position stabilises produces a visible flash at
+        // (0, 0) or a jump from the wrong side of the screen.
+        //
+        // SOLUTION:
+        //   Detached window — uses saved X/Y from UserDefaults, no tray dependency →
+        //     show on the next run-loop (main.async).
+        //   Docked window   — wait 200 ms so all status-bar items are placed and the
+        //     tray-icon coordinate is final.  showWindowAnimated() then positions once
+        //     with real coords and fades in cleanly.  No retry needed.
         DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            if UserDefaults.standard.bool(forKey: "windowDetached") {
-                self.restoreDetachedWindowState()
-            } else {
-                self.showWindowAnimated()
-            }
+            guard let self = self,
+                  UserDefaults.standard.bool(forKey: "windowDetached") else { return }
+            self.restoreDetachedWindowState()
         }
-        // Retry positioning after 150ms — the status-bar button reports a bogus
-        // screenRect (0, -11) on the very first run-loop after launch. By 150ms
-        // macOS has placed the button correctly, so positionWindowUnderTrayIcon
-        // will now calculate the real position and snap the window into place.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            guard let self = self, !self.isWindowDetached, self.window.isVisible else { return }
-            self.positionWindowUnderTrayIcon()
-            self.updateWindowMask()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { [weak self] in
+            guard let self = self, !self.isWindowDetached else { return }
+            self.showWindowAnimated()
         }
 
         // First-launch onboarding video (plays once, never again)
@@ -15114,9 +15556,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func addTab() {
-        if activeTab < tabTypes.count, tabTypes[activeTab] == .editor {
-            createEditorTab(); return
-        }
         let shells = ["/bin/zsh", "/bin/bash", "/bin/sh"]
         let idx = UserDefaults.standard.integer(forKey: "defaultShellIndex")
         let shell = idx >= 0 && idx < shells.count ? shells[idx] : "/bin/zsh"
@@ -15175,6 +15614,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         activeTab = termViews.count - 1
         container.alphaValue = 0
         window.contentView?.addSubview(container)
+        if let vb = versionBtn { window.contentView?.addSubview(vb, positioned: .above, relativeTo: nil) }
         window.makeFirstResponder(tv)
 
         // Fade-in animation for new tab
@@ -15200,10 +15640,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.begin { [weak self] result in
+        panel.beginSheetModal(for: window) { [weak self] result in
             guard let self = self, result == .OK, let url = panel.url else { return }
             guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
             ev.textView.string = content
+            ev.setLanguage(SyntaxLanguage.detect(from: url))
             if capturedTab < self.tabEditorURLs.count {
                 self.tabEditorURLs[capturedTab] = url
             }
@@ -15231,7 +15672,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let capturedTab = activeTab
         guard capturedTab < tabEditorViews.count, let ev = tabEditorViews[capturedTab] else { return }
         let panel = NSSavePanel()
-        panel.begin { [weak self] result in
+        panel.beginSheetModal(for: window) { [weak self] result in
             guard let self = self, result == .OK, let url = panel.url else { return }
             try? ev.textView.string.write(to: url, atomically: true, encoding: .utf8)
             if capturedTab < self.tabEditorURLs.count {
@@ -15247,7 +15688,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    func createEditorTab() {
+    @objc func createEditorTab() { createEditorTabInternal(url: nil) }
+
+    private func createEditorTabInternal(url: URL?) {
         let tf = termFrame()
 
         let editorView = EditorView(frame: tf)
@@ -15255,6 +15698,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         editorView.applyColors(bg: NSColor(cgColor: kTermBgCGColor) ?? kDefaultBG, fg: kDefaultFG)
 
+        // Hide current tab's visible view (container or editor) — same as createTab()
         if !splitContainers.isEmpty && activeTab < splitContainers.count {
             splitContainers[activeTab].isHidden = true
             if activeTab < tabGitPanels.count {
@@ -15262,9 +15706,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 tabGitDividers[activeTab]?.isHidden = true
             }
         }
+        if activeTab < tabEditorViews.count {
+            tabEditorViews[activeTab]?.isHidden = true
+        }
 
         // Placeholder SplitContainer keeps all tab-index arrays aligned
         let dummyTV = TerminalView(frameRect: tf, shell: "/usr/bin/true", cwd: nil, historyId: nil)
+        dummyTV.onShellExit = { }  // Prevent NSApp.terminate(nil) when /usr/bin/true exits immediately
         let placeholder = SplitContainer(frame: tf, primary: dummyTV)
         placeholder.isHidden = true
 
@@ -15272,12 +15720,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         tabTypes.append(.editor)
         tabEditorViews.append(editorView)
         tabEditorModes.append(.normal)
-        tabEditorURLs.append(nil)
+        tabEditorURLs.append(url)
         tabEditorDirty.append(false)
         splitContainers.append(placeholder)
         tabColors.append(NSColor(calibratedHue: CGFloat.random(in: 0...1),
                                   saturation: 0.65, brightness: 0.85, alpha: 1.0))
-        tabCustomNames.append("Editor")
+        tabCustomNames.append(Loc.editorTabName)
+        // If a URL was provided, load content + set language + tab name
+        if let url = url,
+           let content = try? String(contentsOf: url, encoding: .utf8) {
+            editorView.textView.string = content
+            editorView.setLanguage(SyntaxLanguage.detect(from: url))
+            tabCustomNames[tabCustomNames.count - 1] = url.lastPathComponent
+            tabEditorDirty[tabEditorDirty.count - 1] = false
+        }
         tabGitPositions.append(.none)
         tabGitPanels.append(nil)
         tabGitDividers.append(nil)
@@ -15289,7 +15745,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         editorView.alphaValue = 0
         window.contentView?.addSubview(editorView)
-        window.makeFirstResponder(editorView.textView)
+        if let vb = versionBtn { window.contentView?.addSubview(vb, positioned: .above, relativeTo: nil) }
+        // Only set first responder when window is already visible (not during session restore).
+        // Calling makeFirstResponder on an invisible window can cause a brief window flash at (0,0).
+        if window.isVisible { window.makeFirstResponder(editorView.textView) }
 
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
@@ -15404,6 +15863,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if from < tabCustomNames.count && to < tabCustomNames.count {
             let name = tabCustomNames.remove(at: from)
             tabCustomNames.insert(name, at: to)
+        }
+        if from < tabTypes.count && to < tabTypes.count {
+            let tt = tabTypes.remove(at: from)
+            tabTypes.insert(tt, at: to)
+            let ev = tabEditorViews.remove(at: from)
+            tabEditorViews.insert(ev, at: to)
+            let em = tabEditorModes.remove(at: from)
+            tabEditorModes.insert(em, at: to)
+            let eu = tabEditorURLs.remove(at: from)
+            tabEditorURLs.insert(eu, at: to)
+            let ed = tabEditorDirty.remove(at: from)
+            tabEditorDirty.insert(ed, at: to)
         }
         if from < tabGitPositions.count && to < tabGitPositions.count {
             let pos = tabGitPositions.remove(at: from)
@@ -15644,6 +16115,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     UserDefaults.standard.removeObject(forKey: key)
                 }
             }
+
+            // D-pre) Remove GitHub OAuth token from Keychain
+            GitHubKeychainStore.delete(key: "oauth-token")
 
             // D) Delete caches & stray preference files
             let cachesDir = (try? fm.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false))?.path ?? (home + "/Library/Caches")
@@ -15892,6 +16366,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func switchToTab(_ index: Int) {
         guard index >= 0 && index < termViews.count && index != activeTab else { return }
+        guard activeTab < splitContainers.count && index < splitContainers.count else { return }
         let oldTab = activeTab
         let oldContainer = splitContainers[activeTab]
         activeTab = index
@@ -16503,20 +16978,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func positionWindowUnderTrayIcon() {
-        guard let button = statusItem.button, let buttonWindow = button.window else { return }
-        let buttonRect = button.convert(button.bounds, to: nil)
-        let screenRect = buttonWindow.convertToScreen(buttonRect)
         let wSize = window.frame.size
-        // Y is ALWAYS calculated from the tray icon — never from saved value.
-        // Using a saved Y after resize causes a small rounding drift (~3px on Retina)
-        // because the saved value and the tray calculation can disagree by 1-2 points.
-        let y = round(screenRect.minY - 4 - wSize.height)
-        // Sanity check: if the status-bar button hasn't been placed by macOS yet,
-        // convertToScreen returns a bogus rect near (0, -11). A real menu-bar button
-        // is always near the TOP of a screen so y must be positive.
-        guard y > 0 else { return }
+        let midX: CGFloat
+        let y: CGFloat
+
+        // Try to get the real tray icon position. macOS sometimes returns a bogus screenRect
+        // with y ≈ -11 or -22 (button exists in a window but hasn't been screen-placed yet).
+        // In that case fall through to the screen fallback — same as when button.window is nil.
+        var realPosition: (y: CGFloat, midX: CGFloat)? = nil
+        if let button = statusItem.button, let buttonWindow = button.window {
+            let buttonRect = button.convert(button.bounds, to: nil)
+            let screenRect = buttonWindow.convertToScreen(buttonRect)
+            let calculatedY = round(screenRect.minY - 4 - wSize.height)
+            if calculatedY > 0 {
+                realPosition = (y: calculatedY, midX: round(screenRect.midX))
+            }
+        }
+
+        if let real = realPosition {
+            y = real.y
+            midX = real.midX
+        } else {
+            // Button not placed yet — fall back to main screen visibleFrame.
+            // visibleFrame.maxY ≈ trayIcon.minY in practice, so this lands within 1–2px
+            // of the real position. The 150ms retry will apply the exact final position.
+            guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+            let fallbackY = round(screen.visibleFrame.maxY - 4 - wSize.height)
+            guard fallbackY > 0 else { return }
+            y = fallbackY
+            midX = round(screen.visibleFrame.midX)
+        }
+
         // X uses saved value if available (respects user horizontal resize preference).
-        let defaultX = round(screenRect.midX - wSize.width / 2)
+        let defaultX = round(midX - wSize.width / 2)
         let x: CGFloat
         if UserDefaults.standard.object(forKey: "windowX") != nil {
             let sx = CGFloat(UserDefaults.standard.double(forKey: "windowX"))
@@ -16650,7 +17144,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if #available(macOS 14.0, *) { NSApp.activate() }
         else { NSApp.activate(ignoringOtherApps: true) }
         if !termViews.isEmpty && activeTab < termViews.count {
-            window.makeFirstResponder(termViews[activeTab])
+            if activeTab < tabTypes.count, tabTypes[activeTab] == .editor {
+                window.makeFirstResponder(tabEditorViews[activeTab]?.textView)
+            } else if let tv = termViews[activeTab] {
+                window.makeFirstResponder(tv)
+            }
         }
     }
 
@@ -17519,7 +18017,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         })
 
         if !termViews.isEmpty && activeTab < termViews.count {
-            window.makeFirstResponder(termViews[activeTab])
+            if activeTab < tabTypes.count, tabTypes[activeTab] == .editor {
+                window.makeFirstResponder(tabEditorViews[activeTab]?.textView)
+            } else if let tv = termViews[activeTab] {
+                window.makeFirstResponder(tv)
+            }
         }
 
         // Monitor clicks outside to auto-close
@@ -17925,6 +18427,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     if let content = try? String(contentsOf: url, encoding: .utf8),
                        tabIdx < tabEditorViews.count, let ev = tabEditorViews[tabIdx] {
                         ev.textView.string = content
+                        ev.setLanguage(SyntaxLanguage.detect(from: url))
                         tabEditorURLs[tabIdx] = url
                         tabCustomNames[tabIdx] = url.lastPathComponent
                     }
@@ -18131,7 +18634,8 @@ editMenuItem.submenu = editMenu
 let tabMenuItem = NSMenuItem()
 mainMenu.addItem(tabMenuItem)
 let tabMenu = NSMenu(title: "Tab")
-tabMenu.addItem(NSMenuItem(title: "New Tab", action: #selector(AppDelegate.addTab), keyEquivalent: "t"))
+tabMenu.addItem(NSMenuItem(title: "New Terminal Tab", action: #selector(AppDelegate.addTab), keyEquivalent: "t"))
+tabMenu.addItem(NSMenuItem(title: Loc.newEditorTab, action: #selector(AppDelegate.createEditorTab), keyEquivalent: "e"))
 tabMenu.addItem(NSMenuItem(title: "Close Tab", action: #selector(AppDelegate.closeCurrentTab), keyEquivalent: "w"))
 tabMenu.addItem(NSMenuItem.separator())
 tabMenu.addItem(NSMenuItem(title: "Tab 1", action: #selector(AppDelegate.switchToTab1), keyEquivalent: ""))

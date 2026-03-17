@@ -4,6 +4,33 @@ All notable changes to quickTERMINAL are documented here.
 
 ---
 
+## v1.5.0 — 2026-03-16
+
+### New Features
+- **Text Editor Tab** — Open a full text editor tab alongside terminal tabs. Click `+` → "Text Editor" or press `⌘E`. Supports open (`⌘O`), save (`⌘S`), and save-as (`⌘⇧S`) with native sheet panels.
+- **Syntax Highlighting** — Live token coloring auto-detected from file extension:
+  JSON, HTML/HTM, CSS, JavaScript/TypeScript (JS/MJS/CJS/TS/TSX/JSX).
+  Regex-based engine, debounced at 150ms. Colors adapt to dark/light theme automatically.
+- **File Drop on Tab Header** — Drag any text file from Finder onto the tab bar
+  to open it in a new editor tab with syntax highlighting applied automatically.
+- **Editor Modes** — Three input modes selectable via footer buttons: `NORMAL` (plain NSTextView), `NANO` (`Ctrl+S/X/K/U` shortcuts), `VIM` (modal hjkl/insert/dd/yy/p/:/wq).
+- **Vim Mode** — Minimal modal editing: hjkl + arrow key navigation, `i/a/o` insert, `dd` delete line, `yy` yank, `p` paste, `0/$` line start/end, `:w/:q/:wq` file operations. Status bar shows `── NORMAL ──` / `── INSERT ──`.
+- **Nano Mode** — Shortcut bar with `^S Save  ^X Close  ^K Cut Line  ^U Paste`. Keys intercepted at window level.
+- **Session Persistence** — Editor tabs (including open file URL and editor mode) are saved and restored across restarts.
+- **Theme Sync** — Editor background and text color automatically follow the active color theme.
+
+### Bug Fixes
+- **Window positioning flash on launch** — Docked window now waits 200 ms for status-bar item coordinates to stabilize before calling `showWindowAnimated()`. Eliminates flash/jump since v1.3.
+- **Multiple editor tabs background darkening** — Each new editor tab no longer composites on top of the previous one; views are properly hidden before the new one is shown.
+- **File panels appearing behind window** — `NSOpenPanel` / `NSSavePanel` now use `beginSheetModal(for:)`, attaching them as sheets to the window instead of floating behind it.
+- **Version button not clickable** — Tab content views are re-added below the version button in z-order after each tab creation.
+- **Version button shows text cursor** — HoverButton now has `resetCursorRects`, `cursorUpdate`, and `.cursorUpdate` tracking area. TerminalView and EditorTextView both early-return when the cursor is over the version button.
+- **`+` → Terminal opened editor** — Removed incorrect branch in `addTab()` that called `createEditorTab()` when the active tab was an editor.
+- **Vim cursor invisible in normal mode** — `isEditable` stays `true` in all Vim sub-modes; key blocking is handled entirely by `BorderlessWindow.sendEvent`.
+- **Vim normal mode typing** — All unrecognized keyDown events in normal mode are now consumed by `sendEvent` before reaching NSTextView.
+
+---
+
 ## v1.4.0 — 2026-03-14
 
 ### New Features
