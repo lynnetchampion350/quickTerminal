@@ -13877,6 +13877,7 @@ class UnsavedAlertView: NSView {
     private var onSave:    (() -> Void)?
     private var onDiscard: (() -> Void)?
     private var onCancel:  (() -> Void)?
+    private var eventMonitor: Any?
 
     static let panelW: CGFloat = 310
     static let panelH: CGFloat = 152
@@ -13985,7 +13986,18 @@ class UnsavedAlertView: NSView {
         contentView.addSubview(overlay)
         overlay.layer?.zPosition = 9999
         overlay.alphaValue = 0
-        NSCursor.arrow.push()   // push arrow onto cursor stack — overrides iBeam from TerminalView
+
+        // Local event monitor: intercepts mouseMoved BEFORE TerminalView's tracking area
+        // fires and sets iBeam. Returns nil to consume the event so iBeam never gets set.
+        overlay.eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak overlay] event in
+            guard let ov = overlay, ov.superview != nil else { return event }
+            let loc = ov.convert(event.locationInWindow, from: nil)
+            guard ov.bounds.contains(loc) else { return event }
+            if ov.hitTest(loc) is AlertButton { NSCursor.pointingHand.set() }
+            else                              { NSCursor.arrow.set() }
+            return nil  // consume: TerminalView never sees this event
+        }
+
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.13
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -13995,7 +14007,7 @@ class UnsavedAlertView: NSView {
 
     // ── Dismiss ────────────────────────────────────────────────────────────
     fileprivate func dismiss(calling action: (() -> Void)?) {
-        NSCursor.pop()  // restore cursor that was active before overlay
+        if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.10
             self.animator().alphaValue = 0
@@ -14053,11 +14065,9 @@ private class AlertButton: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        NSCursor.pointingHand.push()
         layer?.backgroundColor = hoverBg
     }
     override func mouseExited(with event: NSEvent) {
-        NSCursor.pop()
         layer?.backgroundColor = normalBg
     }
     override func mouseDown(with event: NSEvent) {
