@@ -8698,10 +8698,12 @@ class SettingsOverlay: NSView {
         let h = ud.double(forKey: "windowHeight")
         if w > 0 && abs(w - 860) > 1 { return false }
         if h > 0 && abs(h - 480) > 1 { return false }
-        // Window was moved from default centered position
+        // Detached window was moved from default position
         let sx = ud.double(forKey: "windowX")
         let sy = ud.double(forKey: "windowY")
         if sx != 0 || sy != 0 { return false }
+        // Docked window was moved from tray-icon center
+        if ud.object(forKey: "dockedWindowX") != nil { return false }
         return true
     }
 
@@ -17192,6 +17194,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.40) { [weak self] in
             guard let self = self, !self.isWindowDetached else { return }
+            // Restore saved docked position from previous session.
+            // Uses separate keys (dockedWindowX/Y) so the tray-icon fallback
+            // never causes a feedback loop.
+            let ud = UserDefaults.standard
+            let dx = ud.double(forKey: "dockedWindowX")
+            let dy = ud.double(forKey: "dockedWindowY")
+            let dw = ud.double(forKey: "windowWidth")
+            let dh = ud.double(forKey: "windowHeight")
+            if dx != 0 || dy != 0 {
+                let sz = NSSize(width: dw > 0 ? CGFloat(dw) : self.window.frame.width,
+                                height: dh > 0 ? CGFloat(dh) : self.window.frame.height)
+                self.lastDockedFrame = NSRect(origin: NSPoint(x: CGFloat(dx), y: CGFloat(dy)),
+                                              size: sz)
+            }
             self.showWindowAnimated()
         }
 
@@ -19935,6 +19951,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             UserDefaults.standard.set(Double(newFrame.origin.y), forKey: "windowY")
         } else {
             lastDockedFrame = nil   // reset clears custom docked position → back to tray icon center
+            UserDefaults.standard.removeObject(forKey: "dockedWindowX")
+            UserDefaults.standard.removeObject(forKey: "dockedWindowY")
         }
     }
 
@@ -20296,9 +20314,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 UserDefaults.standard.set(Double(origin.x), forKey: "windowX")
                 UserDefaults.standard.set(Double(origin.y), forKey: "windowY")
             } else {
-                // Docked: remember user-moved position in memory (not UserDefaults —
-                // avoids the feedback loop when the tray icon fallback position gets saved).
+                // Docked: save user-moved position in memory AND UserDefaults.
+                // Uses separate keys (dockedWindowX/Y) to avoid the feedback loop
+                // that occurred when the tray-icon fallback position was saved to windowX/Y.
                 self.lastDockedFrame = self.window.frame
+                UserDefaults.standard.set(Double(origin.x), forKey: "dockedWindowX")
+                UserDefaults.standard.set(Double(origin.y), forKey: "dockedWindowY")
                 self.settingsOverlay?.updateResetButtonState()
             }
         }
