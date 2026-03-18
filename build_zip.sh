@@ -3,9 +3,9 @@
 set -e
 cd "$(dirname "$0")"
 
-VERSION="$(sed -nE 's/^let kAppVersion = "([^"]+)".*/\1/p' quickTerminal.swift | head -n1)"
-[ -n "$VERSION" ] || { echo "ERROR: kAppVersion not found in quickTerminal.swift"; exit 1; }
-ZIP_NAME="quickTERMINAL_v${VERSION}.zip"
+VERSION="$(sed -nE 's/^let kAppVersion = "([^"]+)".*/\1/p' systemtrayterminal.swift | head -n1)"
+[ -n "$VERSION" ] || { echo "ERROR: kAppVersion not found in systemtrayterminal.swift"; exit 1; }
+ZIP_NAME="SystemTrayTerminal_v${VERSION}.zip"
 
 echo "=== Building ${ZIP_NAME} (v${VERSION}) ==="
 
@@ -16,7 +16,7 @@ bash build_app.sh
 # ─── Step 2: Package zip ───
 echo "[2/2] Packaging ${ZIP_NAME}..."
 rm -f "$ZIP_NAME"
-ditto -ck --sequesterRsrc --keepParent quickTerminal.app "$ZIP_NAME"
+ditto -ck --sequesterRsrc --keepParent SystemTrayTerminal.app "$ZIP_NAME"
 
 # Add documentation files into the zip
 # (ditto creates a clean zip, we use /usr/bin/zip to append extra files)
@@ -26,7 +26,7 @@ ZIP_SIZE=$(du -sh "$ZIP_NAME" | cut -f1)
 echo ""
 echo "    ${ZIP_NAME}  →  ${ZIP_SIZE}"
 echo "    Contents:"
-echo "      quickTerminal.app"
+echo "      SystemTrayTerminal.app"
 echo "      install.sh"
 echo "      FIRST_READ.txt"
 echo "      LICENSE"

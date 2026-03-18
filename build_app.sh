@@ -2,14 +2,14 @@
 set -e
 cd "$(dirname "$0")"
 
-APP_NAME="quickTerminal"
+APP_NAME="SystemTrayTerminal"
 BUNDLE="${APP_NAME}.app"
 ICON_SRC="icon.png"
-BUNDLE_ID="com.l3v0.quickterminal"
+BUNDLE_ID="com.l3v0.systemtrayterminal"
 
 # ─── Read version from source of truth ───
-VERSION="$(sed -nE 's/^let kAppVersion = "([^"]+)".*/\1/p' quickTerminal.swift | head -n1)"
-[ -n "$VERSION" ] || { echo "ERROR: kAppVersion not found in quickTerminal.swift"; exit 1; }
+VERSION="$(sed -nE 's/^let kAppVersion = "([^"]+)".*/\1/p' systemtrayterminal.swift | head -n1)"
+[ -n "$VERSION" ] || { echo "ERROR: kAppVersion not found in systemtrayterminal.swift"; exit 1; }
 
 echo "=== Building ${APP_NAME}.app ==="
 
@@ -37,7 +37,7 @@ echo "    AppIcon.icns created"
 
 # ─── Step 2: Compile binary ───
 echo "[2/4] Compiling binary..."
-swiftc -O quickTerminal.swift -o "${APP_NAME}_bin" \
+swiftc -O systemtrayterminal.swift -o "${APP_NAME}_bin" \
   -framework Cocoa -framework Carbon -framework AVKit \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __jbmono -Xlinker _JetBrainsMono-LightItalic-terminal.ttf \
   -Xlinker -sectcreate -Xlinker __FONTS -Xlinker __monocraft -Xlinker _Monocraft-terminal.ttf \
@@ -69,7 +69,7 @@ rm -f "${BUNDLE}/Contents/MacOS/shell/.zsh_history"
 cp AppIcon.icns "${BUNDLE}/Contents/Resources/"
 
 # Onboarding video
-cp quickTERMINAL.mp4 "${BUNDLE}/Contents/Resources/"
+cp SystemTrayTerminal.mp4 "${BUNDLE}/Contents/Resources/"
 
 # PkgInfo
 echo -n "APPL????" > "${BUNDLE}/Contents/PkgInfo"
@@ -83,7 +83,7 @@ cat > "${BUNDLE}/Contents/Info.plist" << PLIST
     <key>CFBundleName</key>
     <string>${APP_NAME}</string>
     <key>CFBundleDisplayName</key>
-    <string>quickTERMINAL</string>
+    <string>SystemTrayTerminal</string>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleVersion</key>
@@ -109,7 +109,7 @@ cat > "${BUNDLE}/Contents/Info.plist" << PLIST
     <key>NSSupportsSuddenTermination</key>
     <false/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>quickTERMINAL needs accessibility access for the global hotkey.</string>
+    <string>SystemTrayTerminal needs accessibility access for the global hotkey.</string>
 </dict>
 </plist>
 PLIST
