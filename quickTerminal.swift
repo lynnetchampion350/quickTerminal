@@ -14050,7 +14050,7 @@ private class AlertButton: NSView {
         addTrackingArea(trackingArea!)
     }
 
-    // Always show pointing-hand cursor over the button
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
 
     override func mouseEntered(with event: NSEvent) {
