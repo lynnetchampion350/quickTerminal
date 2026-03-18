@@ -16517,6 +16517,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var isAnimating = false
     var pendingToggle = false           // queued toggle: execute one toggleWindow() after current animation
     var isWindowDetached = false        // free-floating mode (not anchored to tray icon)
+    var lastDockedFrame: NSRect? = nil  // user-moved position in docked mode; restored on toggle show
     var lastHideTime: TimeInterval = 0  // suppress hover-activate right after hiding
     let updateChecker = UpdateChecker()
     var pendingRelease: GitHubRelease?
@@ -19750,6 +19751,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if isWindowDetached {
             UserDefaults.standard.set(Double(newFrame.origin.x), forKey: "windowX")
             UserDefaults.standard.set(Double(newFrame.origin.y), forKey: "windowY")
+        } else {
+            lastDockedFrame = nil   // reset clears custom docked position → back to tray icon center
         }
     }
 
@@ -19911,6 +19914,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Re-position after ordering: alpha=0 so windowDidMove guard (alpha>0) skips
         // saving, and we override any macOS screen-constraint repositioning cleanly.
         positionWindowUnderTrayIcon()
+
+        // Docked: if user previously moved the window to a custom position, restore it.
+        // (alpha is still 0 here, so windowDidMove guard blocks any accidental save.)
+        if !isWindowDetached, let saved = lastDockedFrame {
+            let screen = NSScreen.main ?? NSScreen.screens.first
+            let clamped = clampFrameToScreen(saved, screen: screen)
+            window.setFrameOrigin(clamped.origin)
+        }
 
         if #available(macOS 14.0, *) { NSApp.activate() }
         else { NSApp.activate(ignoringOtherApps: true) }
@@ -20101,6 +20112,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 UserDefaults.standard.set(Double(origin.x), forKey: "windowX")
                 UserDefaults.standard.set(Double(origin.y), forKey: "windowY")
             } else {
+                // Docked: remember user-moved position in memory (not UserDefaults —
+                // avoids the feedback loop when the tray icon fallback position gets saved).
+                self.lastDockedFrame = self.window.frame
                 self.settingsOverlay?.updateResetButtonState()
             }
         }
