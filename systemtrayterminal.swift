@@ -119,6 +119,7 @@ enum Loc {
     static var copyOnSelect: String { t("copyOnSelect") }
     static var launchAtLogin: String { t("launchAtLogin") }
     static var autoCheckUpdates: String { t("autoCheckUpdates") }
+    static var bellNotification: String { t("bellNotification") }
     static var webpickerSection: String { t("webpickerSection") }
     static var browser: String      { t("browser") }
     static var claudeSection: String { t("claudeSection") }
@@ -242,7 +243,7 @@ enum Loc {
             "windowSection": "Window", "alwaysOnTop": "Always on Top", "followAllSpaces": "Follow All Spaces", "autoDim": "Auto-Dim",
             "hideOnClickOutside": "Hide on Click Outside", "hideOnDeactivate": "Hide on Deactivate",
             "copyOnSelect": "Copy on Select", "launchAtLogin": "Launch at Login",
-            "autoCheckUpdates": "Auto-Check Updates", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "Auto-Check Updates", "bellNotification": "Bell Notification", "webpickerSection": "WebPicker",
             "browser": "Browser", "claudeSection": "Claude Code", "showUsageBadge": "Show Usage Badge",
             "refresh": "Refresh", "status": "Status", "connected": "Connected",
             "noToken": "No Claude Code Token", "resetToDefaults": "Reset to Defaults",
@@ -311,7 +312,7 @@ enum Loc {
             "windowSection": "Fenster", "alwaysOnTop": "Immer im Vordergrund", "followAllSpaces": "Allen Spaces folgen", "autoDim": "Auto-Dimmen",
             "hideOnClickOutside": "Bei Klick außen ausblenden", "hideOnDeactivate": "Bei Deaktivierung ausblenden",
             "copyOnSelect": "Kopieren bei Auswahl", "launchAtLogin": "Beim Start öffnen",
-            "autoCheckUpdates": "Updates automatisch prüfen", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "Updates automatisch prüfen", "bellNotification": "Glocken-Benachrichtigung", "webpickerSection": "WebPicker",
             "browser": "Browser", "claudeSection": "Claude Code", "showUsageBadge": "Nutzungs-Badge anzeigen",
             "refresh": "Aktualisieren", "status": "Status", "connected": "Verbunden",
             "noToken": "Kein Claude Code Token", "resetToDefaults": "Auf Standard zurücksetzen",
@@ -380,7 +381,7 @@ enum Loc {
             "windowSection": "Pencere", "alwaysOnTop": "Her Zaman Üstte", "followAllSpaces": "Tüm Alanlarda Görün", "autoDim": "Otomatik Karart",
             "hideOnClickOutside": "Dış Tıklamada Gizle", "hideOnDeactivate": "Devre Dışında Gizle",
             "copyOnSelect": "Seçimde Kopyala", "launchAtLogin": "Girişte Başlat",
-            "autoCheckUpdates": "Güncellemeleri Otomatik Kontrol Et", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "Güncellemeleri Otomatik Kontrol Et", "bellNotification": "Zil Bildirimi", "webpickerSection": "WebPicker",
             "browser": "Tarayıcı", "claudeSection": "Claude Code", "showUsageBadge": "Kullanım Rozeti",
             "refresh": "Yenile", "status": "Durum", "connected": "Bağlı",
             "noToken": "Claude Code Token Yok", "resetToDefaults": "Varsayılanlara Sıfırla",
@@ -449,7 +450,7 @@ enum Loc {
             "windowSection": "Ventana", "alwaysOnTop": "Siempre Visible", "followAllSpaces": "Seguir Todos los Espacios", "autoDim": "Auto-Atenuar",
             "hideOnClickOutside": "Ocultar al Hacer Clic Fuera", "hideOnDeactivate": "Ocultar al Desactivar",
             "copyOnSelect": "Copiar al Seleccionar", "launchAtLogin": "Iniciar al Entrar",
-            "autoCheckUpdates": "Buscar Actualizaciones Automáticamente", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "Buscar Actualizaciones Automáticamente", "bellNotification": "Notificación de Timbre", "webpickerSection": "WebPicker",
             "browser": "Navegador", "claudeSection": "Claude Code", "showUsageBadge": "Mostrar Insignia de Uso",
             "refresh": "Actualizar", "status": "Estado", "connected": "Conectado",
             "noToken": "Sin Token de Claude Code", "resetToDefaults": "Restablecer Valores",
@@ -518,7 +519,7 @@ enum Loc {
             "windowSection": "Fenêtre", "alwaysOnTop": "Toujours au Premier Plan", "followAllSpaces": "Suivre Tous les Espaces", "autoDim": "Assombrissement Auto",
             "hideOnClickOutside": "Masquer au Clic Extérieur", "hideOnDeactivate": "Masquer à la Désactivation",
             "copyOnSelect": "Copier à la Sélection", "launchAtLogin": "Lancer à la Connexion",
-            "autoCheckUpdates": "Vérifier les MàJ Automatiquement", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "Vérifier les MàJ Automatiquement", "bellNotification": "Notification Sonore", "webpickerSection": "WebPicker",
             "browser": "Navigateur", "claudeSection": "Claude Code", "showUsageBadge": "Afficher Badge d'Utilisation",
             "refresh": "Actualiser", "status": "Statut", "connected": "Connecté",
             "noToken": "Pas de Token Claude Code", "resetToDefaults": "Réinitialiser",
@@ -587,7 +588,7 @@ enum Loc {
             "windowSection": "Finestra", "alwaysOnTop": "Sempre in Primo Piano", "followAllSpaces": "Segui Tutti gli Spazi", "autoDim": "Oscuramento Auto",
             "hideOnClickOutside": "Nascondi al Clic Esterno", "hideOnDeactivate": "Nascondi alla Disattivazione",
             "copyOnSelect": "Copia alla Selezione", "launchAtLogin": "Avvia all'Accesso",
-            "autoCheckUpdates": "Controlla Aggiornamenti Auto", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "Controlla Aggiornamenti Auto", "bellNotification": "Notifica Sonora", "webpickerSection": "WebPicker",
             "browser": "Browser", "claudeSection": "Claude Code", "showUsageBadge": "Mostra Badge Utilizzo",
             "refresh": "Aggiorna", "status": "Stato", "connected": "Connesso",
             "noToken": "Nessun Token Claude Code", "resetToDefaults": "Ripristina Impostazioni",
@@ -656,7 +657,7 @@ enum Loc {
             "windowSection": "النافذة", "alwaysOnTop": "دائماً في المقدمة", "followAllSpaces": "متابعة جميع الفضاءات", "autoDim": "تعتيم تلقائي",
             "hideOnClickOutside": "إخفاء عند النقر خارجاً", "hideOnDeactivate": "إخفاء عند التعطيل",
             "copyOnSelect": "نسخ عند التحديد", "launchAtLogin": "تشغيل عند تسجيل الدخول",
-            "autoCheckUpdates": "فحص التحديثات تلقائياً", "webpickerSection": "منتقي الويب",
+            "autoCheckUpdates": "فحص التحديثات تلقائياً", "bellNotification": "إشعار الجرس", "webpickerSection": "منتقي الويب",
             "browser": "المتصفح", "claudeSection": "كلود كود", "showUsageBadge": "إظهار شارة الاستخدام",
             "refresh": "تحديث", "status": "الحالة", "connected": "متصل",
             "noToken": "لا يوجد رمز كلود كود", "resetToDefaults": "إعادة تعيين الافتراضيات",
@@ -725,7 +726,7 @@ enum Loc {
             "windowSection": "ウィンドウ", "alwaysOnTop": "常に最前面", "followAllSpaces": "全スペースに表示", "autoDim": "自動暗転",
             "hideOnClickOutside": "外クリックで非表示", "hideOnDeactivate": "非アクティブ時に非表示",
             "copyOnSelect": "選択時にコピー", "launchAtLogin": "ログイン時に起動",
-            "autoCheckUpdates": "自動更新確認", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "自動更新確認", "bellNotification": "ベル通知", "webpickerSection": "WebPicker",
             "browser": "ブラウザ", "claudeSection": "Claude Code", "showUsageBadge": "使用バッジを表示",
             "refresh": "更新", "status": "ステータス", "connected": "接続済み",
             "noToken": "Claude Codeトークンなし", "resetToDefaults": "デフォルトにリセット",
@@ -794,7 +795,7 @@ enum Loc {
             "windowSection": "窗口", "alwaysOnTop": "始终置顶", "followAllSpaces": "跟随所有空间", "autoDim": "自动变暗",
             "hideOnClickOutside": "点击外部时隐藏", "hideOnDeactivate": "失活时隐藏",
             "copyOnSelect": "选中即复制", "launchAtLogin": "登录时启动",
-            "autoCheckUpdates": "自动检查更新", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "自动检查更新", "bellNotification": "铃声通知", "webpickerSection": "WebPicker",
             "browser": "浏览器", "claudeSection": "Claude Code", "showUsageBadge": "显示使用徽章",
             "refresh": "刷新", "status": "状态", "connected": "已连接",
             "noToken": "无 Claude Code 令牌", "resetToDefaults": "恢复默认设置",
@@ -863,7 +864,7 @@ enum Loc {
             "windowSection": "Окно", "alwaysOnTop": "Всегда поверх", "followAllSpaces": "На всех рабочих столах", "autoDim": "Авто-затемнение",
             "hideOnClickOutside": "Скрыть при клике вне", "hideOnDeactivate": "Скрыть при деактивации",
             "copyOnSelect": "Копировать при выборе", "launchAtLogin": "Запуск при входе",
-            "autoCheckUpdates": "Автопроверка обновлений", "webpickerSection": "WebPicker",
+            "autoCheckUpdates": "Автопроверка обновлений", "bellNotification": "Звуковое уведомление", "webpickerSection": "WebPicker",
             "browser": "Браузер", "claudeSection": "Claude Code", "showUsageBadge": "Показать значок",
             "refresh": "Обновить", "status": "Статус", "connected": "Подключено",
             "noToken": "Нет токена Claude Code", "resetToDefaults": "Сбросить настройки",
@@ -3082,6 +3083,10 @@ class TerminalView: NSView {
         terminal.onBell = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                // bellEnabled defaults to true when key is absent
+                let ud = UserDefaults.standard
+                let bellOn = ud.object(forKey: "bellEnabled") == nil || ud.bool(forKey: "bellEnabled")
+                guard bellOn else { return }
                 NSSound(named: "Purr")?.play()
                 (NSApp.delegate as? AppDelegate)?.flashTrayIconIfNeeded()
             }
@@ -7821,6 +7826,7 @@ class SettingsOverlay: NSView {
         rows.append(makeToggleRow(label: Loc.copyOnSelect, settingsKey: "copyOnSelect"))
         rows.append(makeToggleRow(label: Loc.launchAtLogin, settingsKey: "autoStartEnabled"))
         rows.append(makeToggleRow(label: Loc.autoCheckUpdates, settingsKey: "autoCheckUpdates"))
+        rows.append(makeBellRow())
 
         // WebPicker
         rows.append(makeSectionHeader(Loc.webpickerSection))
@@ -8249,6 +8255,56 @@ class SettingsOverlay: NSView {
         return row
     }
 
+    /// Bell row: label  |  [TEST]  toggle
+    private func makeBellRow() -> NSView {
+        let row = SettingsRowView()
+
+        let lbl = NSTextField(labelWithString: Loc.bellNotification)
+        lbl.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
+        lbl.textColor = NSColor(calibratedWhite: 0.75, alpha: 1.0)
+        lbl.isEditable = false; lbl.isBordered = false; lbl.drawsBackground = false
+        lbl.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(lbl)
+
+        let isOn = UserDefaults.standard.object(forKey: "bellEnabled") == nil
+                    || UserDefaults.standard.bool(forKey: "bellEnabled")
+        let toggle = SettingsToggle(isOn: isOn)
+        toggle.translatesAutoresizingMaskIntoConstraints = false
+        toggle.onChange = { [weak self] on in
+            UserDefaults.standard.set(on, forKey: "bellEnabled")
+            self?.onChanged?("bellEnabled", on)
+            self?.updateResetButtonState()
+        }
+        row.addSubview(toggle)
+
+        // TEST button — plays sound + flashes tray immediately
+        let testBtn = NSButton(title: "TEST", target: nil, action: nil)
+        testBtn.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .medium)
+        testBtn.bezelStyle = .roundRect
+        testBtn.controlSize = .mini
+        testBtn.translatesAutoresizingMaskIntoConstraints = false
+        BlockTarget.shared.register(testBtn) {
+            NSSound(named: "Purr")?.play()
+            (NSApp.delegate as? AppDelegate)?.flashTrayIconIfNeeded()
+        }
+        row.addSubview(testBtn)
+
+        NSLayoutConstraint.activate([
+            lbl.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            lbl.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+
+            toggle.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            toggle.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
+            toggle.widthAnchor.constraint(equalToConstant: 34),
+            toggle.heightAnchor.constraint(equalToConstant: 18),
+
+            testBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            testBtn.trailingAnchor.constraint(equalTo: toggle.leadingAnchor, constant: -8),
+        ])
+
+        return row
+    }
+
     private func makeSliderRow(label: String, min: Double, max: Double, value: Double,
                                 fmt: String, fmtScale: Double, key: String) -> NSView {
         let row = SettingsRowView()
@@ -8547,6 +8603,7 @@ class SettingsOverlay: NSView {
         "promptTheme": "default",
         "autoStartEnabled": false,
         "autoCheckUpdates": true,
+        "bellEnabled": true,
         "webPickerBrowser": 0,
         "showAIUsage": true,
         "aiUsageRefreshIndex": 0,
@@ -19202,6 +19259,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.startUpdateDownload(release: release)
             },
             PaletteCommand(title: "Auto-Check Updates (\(onOff("autoCheckUpdates")))", shortcut: "") { [weak self] in self?.promptToggle("Auto-Check Updates", key: "autoCheckUpdates") },
+            PaletteCommand(title: "Bell Notification (\(onOff("bellEnabled")))", shortcut: "") { [weak self] in self?.promptToggle("Bell Notification", key: "bellEnabled") },
             PaletteCommand(title: "WebPicker", shortcut: "") { [weak self] in self?.toggleWebPicker() },
             PaletteCommand(title: "Git", shortcut: "") { [weak self] in self?.toggleGitPanel() },
         ]
