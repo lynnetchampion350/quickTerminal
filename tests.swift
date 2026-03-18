@@ -1387,6 +1387,60 @@ func testSyntaxLanguageDetection() {
 testSyntaxLanguageDetection()
 
 // ============================================================================
+// MARK: - Print Options
+// ============================================================================
+
+// ── PrintOption stub (mirrors quickTerminal.swift) ──────────────────────────
+enum PrintAction_Test { case renderedHTML, sourceCode, terminal }
+struct PrintOption_Test { let label: String; let action: PrintAction_Test }
+
+func buildPrintOptions_Test(isEditor: Bool, ext: String) -> [PrintOption_Test] {
+    guard isEditor else {
+        return [PrintOption_Test(label: "Terminal drucken", action: .terminal)]
+    }
+    let renderedExts: Set<String> = ["md","markdown","mdown","mkd","html","htm","svg","csv"]
+    guard renderedExts.contains(ext) else {
+        return [PrintOption_Test(label: "Quellcode drucken", action: .sourceCode)]
+    }
+    return [
+        PrintOption_Test(label: "Drucken",           action: .renderedHTML),
+        PrintOption_Test(label: "Quellcode drucken", action: .sourceCode),
+    ]
+}
+
+func testBuildPrintOptions() {
+    // Terminal tab
+    let t = buildPrintOptions_Test(isEditor: false, ext: "")
+    assert(t.count == 1 && t[0].action == .terminal, "terminal: 1 option .terminal")
+
+    // Markdown
+    let md = buildPrintOptions_Test(isEditor: true, ext: "md")
+    assert(md.count == 2, "markdown: 2 options")
+    assert(md[0].action == .renderedHTML, "markdown[0] = renderedHTML")
+    assert(md[1].action == .sourceCode,   "markdown[1] = sourceCode")
+
+    // HTML
+    let html = buildPrintOptions_Test(isEditor: true, ext: "html")
+    assert(html.count == 2 && html[0].action == .renderedHTML, "html: 2 options, first rendered")
+
+    // SVG
+    let svg = buildPrintOptions_Test(isEditor: true, ext: "svg")
+    assert(svg.count == 2 && svg[0].action == .renderedHTML, "svg: 2 options, first rendered")
+
+    // CSV
+    let csv = buildPrintOptions_Test(isEditor: true, ext: "csv")
+    assert(csv.count == 2 && csv[0].action == .renderedHTML, "csv: 2 options, first rendered")
+
+    // Swift (source only)
+    let sw = buildPrintOptions_Test(isEditor: true, ext: "swift")
+    assert(sw.count == 1 && sw[0].action == .sourceCode, "swift: 1 option sourceCode")
+
+    testsPassed += 1
+    print("✓ buildPrintOptions — 6 cases")
+}
+testBuildPrintOptions()
+
+// ============================================================================
 // MARK: - Results
 // ============================================================================
 

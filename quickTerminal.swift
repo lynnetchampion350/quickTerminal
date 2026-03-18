@@ -2960,6 +2960,7 @@ class TerminalView: NSView {
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         guard !settingsVisible else { return }
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true { return }
         // Hover-to-activate: bring window to front when mouse enters
         // Skip if window was just hidden (e.g. via Ctrl+< hotkey) to prevent instant reappear
         if let w = window, !w.isKeyWindow {
@@ -4138,6 +4139,8 @@ class TerminalView: NSView {
     override func mouseMoved(with event: NSEvent) {
         // Don't interfere with cursor when settings overlay is visible
         guard !settingsVisible else { return }
+        // Don't set iBeam when UnsavedAlert overlay is active
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true { return }
         let pos = gridPos(from: event)
         // Any-event tracking (1003): report all motion even without buttons
         if terminal.mouseMode >= 1003, window?.isKeyWindow == true {
@@ -6929,6 +6932,8 @@ class FooterBarView: NSView {
     private var tabShortcutBadges: [BadgeButton] = []
     var gearBtn: GearButton!
     private var quitBtn: QuitButton!
+    private var printerBtn: SymbolHoverButton!
+    var onPrint: (() -> Void)?
     private(set) var usageBadge: AIUsageBadge!
     // Scroll containers for each column
     private let linksScroll = NSScrollView()
@@ -7074,6 +7079,16 @@ class FooterBarView: NSView {
             tabShortcutBadges.append(badge)
         }
 
+        printerBtn = SymbolHoverButton(
+            symbolName: "printer", size: 12,
+            normalColor: NSColor(calibratedWhite: 0.50, alpha: 1.0),
+            hoverColor:  NSColor(calibratedWhite: 0.88, alpha: 1.0),
+            hoverBg: NSColor(calibratedWhite: 1.0, alpha: 0.08),
+            pressBg: NSColor(calibratedWhite: 1.0, alpha: 0.16))
+        printerBtn.toolTip = "Drucken"
+        printerBtn.onClick = { [weak self] in self?.onPrint?() }
+        rechtsContent.addSubview(printerBtn)
+
         gearBtn = GearButton(frame: .zero)
         gearBtn.onClick = { [weak self] in self?.onSettings?() }
         rechtsContent.addSubview(gearBtn)
@@ -7136,6 +7151,10 @@ class FooterBarView: NSView {
             rx += bw + badgeGap
         }
         rx += 13
+        let printerSize: CGFloat = 24
+        printerBtn.frame = NSRect(x: rx, y: cy - printerSize / 2,
+                                  width: printerSize, height: printerSize)
+        rx += printerSize + gap
         gearBtn.frame = NSRect(x: rx, y: cy - iconSize / 2, width: iconSize, height: iconSize)
         rx += iconSize + gap
         quitBtn.frame = NSRect(x: rx, y: cy - iconSize / 2, width: iconSize, height: iconSize)
@@ -13987,8 +14006,9 @@ class UnsavedAlertView: NSView {
         overlay.layer?.zPosition = 9999
         overlay.alphaValue = 0
 
-        // Intercept mouseMoved AND cursorUpdate — both can trigger iBeam from TerminalView.
-        // Return nil to consume so TerminalView never sees the event over the overlay.
+        // Set arrow cursor over the overlay. TerminalView.mouseMoved bails via its
+        // UnsavedAlertView guard, so we don't need to consume the event here —
+        // passing it through lets tracking areas fire so hover effects work.
         overlay.eventMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.mouseMoved, .cursorUpdate]
         ) { [weak overlay] event in
@@ -13996,7 +14016,7 @@ class UnsavedAlertView: NSView {
             let loc = ov.convert(event.locationInWindow, from: nil)
             guard ov.bounds.contains(loc) else { return event }
             NSCursor.arrow.set()
-            return nil
+            return event
         }
 
         NSAnimationContext.runAnimationGroup { ctx in
@@ -14951,11 +14971,15 @@ class OnboardingPanel: NSPanel {
 // version-button overlay always shows an arrow cursor instead of iBeam.
 private class EditorTextView: NSTextView {
     override func mouseMoved(with event: NSEvent) {
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true { return }
         if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
            !vb.isHidden, vb.frame.contains(event.locationInWindow) { return }
         super.mouseMoved(with: event)
     }
     override func cursorUpdate(with event: NSEvent) {
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true {
+            NSCursor.arrow.set(); return
+        }
         if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
            !vb.isHidden, vb.frame.contains(event.locationInWindow) {
             NSCursor.arrow.set(); return
@@ -15364,6 +15388,206 @@ final class SyntaxTextStorage: NSTextStorage {
         }
         endEditing()
     }
+}
+
+// MARK: - Print Modal
+
+enum PrintAction {
+    case renderedHTML(String, URL?)   // html string + optional base URL
+    case sourceCode                   // textView.printOperation
+    case terminal                     // terminal buffer as HTML
+}
+
+struct PrintOption {
+    let label:  String
+    let action: PrintAction
+}
+
+class PrintModal: NSView {
+    private let panel = NSView()
+    private var onSelect: ((PrintAction) -> Void)?
+    private var onCancel: (() -> Void)?
+
+    override var isFlipped: Bool { true }
+    override func mouseDown(with event: NSEvent) {}
+    override func rightMouseDown(with event: NSEvent) {}
+    override func scrollWheel(with event: NSEvent) {}
+
+    static func show(in contentView: NSView,
+                     options: [PrintOption],
+                     onSelect: @escaping (PrintAction) -> Void,
+                     onCancel: @escaping () -> Void) {
+        let v = PrintModal(frame: contentView.bounds)
+        v.onSelect = onSelect
+        v.onCancel = onCancel
+        v.autoresizingMask = [.width, .height]
+        v.build(options: options)
+        contentView.addSubview(v)
+        v.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            v.animator().alphaValue = 1
+        }
+    }
+
+    private func dismissAnimated() {
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.12
+            self.animator().alphaValue = 0
+        }, completionHandler: { self.removeFromSuperview() })
+    }
+
+    private func build(options: [PrintOption]) {
+        // Backdrop
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+
+        // Panel sizing
+        let btnH: CGFloat = 36
+        let btnGap: CGFloat = 8
+        let padV: CGFloat = 20
+        let padH: CGFloat = 20
+        let iconH: CGFloat = 28
+        let titleH: CGFloat = 20
+        let cancelH: CGFloat = 28
+        let panelW: CGFloat = 320
+        let panelH = padV + iconH + 10 + titleH + 16
+                    + CGFloat(options.count) * (btnH + btnGap)
+                    + cancelH + padV
+
+        // Panel
+        panel.wantsLayer = true
+        panel.layer?.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.08,
+                                               blue: 0.10, alpha: 0.97).cgColor
+        panel.layer?.cornerRadius  = 10
+        panel.layer?.borderColor   = NSColor(calibratedWhite: 1, alpha: 0.09).cgColor
+        panel.layer?.borderWidth   = 0.5
+        panel.layer?.shadowOpacity = 0.7
+        panel.layer?.shadowRadius  = 22
+        panel.layer?.shadowOffset  = CGSize(width: 0, height: -8)
+        panel.layer?.shadowColor   = NSColor.black.cgColor
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(panel)
+        NSLayoutConstraint.activate([
+            panel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            panel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            panel.widthAnchor.constraint(equalToConstant: panelW),
+            panel.heightAnchor.constraint(equalToConstant: panelH),
+        ])
+
+        var y = padV
+
+        // Printer icon
+        let cfg = NSImage.SymbolConfiguration(pointSize: 18, weight: .medium)
+        if let img = NSImage(systemSymbolName: "printer", accessibilityDescription: nil)?
+                .withSymbolConfiguration(cfg) {
+            let iv = NSImageView(image: img)
+            iv.contentTintColor = NSColor(calibratedWhite: 0.75, alpha: 1)
+            iv.frame = NSRect(x: (panelW - iconH) / 2, y: y, width: iconH, height: iconH)
+            panel.addSubview(iv)
+        }
+        y += iconH + 10
+
+        // Title
+        let title = NSTextField(labelWithString: "Drucken")
+        title.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+        title.textColor = NSColor(calibratedWhite: 0.92, alpha: 1)
+        title.alignment = .center
+        title.frame = NSRect(x: padH, y: y, width: panelW - padH * 2, height: titleH)
+        panel.addSubview(title)
+        y += titleH + 16
+
+        // Action buttons
+        for opt in options {
+            let btn = PrintPanelButton(frame: NSRect(x: padH, y: y,
+                                                     width: panelW - padH * 2, height: btnH))
+            btn.labelText = opt.label
+            let action = opt.action
+            btn.onTap = { [weak self] in
+                self?.dismissAnimated()
+                self?.onSelect?(action)
+            }
+            panel.addSubview(btn)
+            y += btnH + btnGap
+        }
+
+        // Cancel
+        let cancelBtn = NSButton(title: "Abbrechen", target: nil, action: nil)
+        cancelBtn.bezelStyle = .inline
+        cancelBtn.isBordered = false
+        cancelBtn.font = NSFont.systemFont(ofSize: 12)
+        cancelBtn.contentTintColor = NSColor(calibratedWhite: 0.45, alpha: 1)
+        cancelBtn.frame = NSRect(x: padH, y: y, width: panelW - padH * 2, height: cancelH)
+        cancelBtn.alignment = .center
+        cancelBtn.target = self
+        cancelBtn.action = #selector(cancelTapped)
+        panel.addSubview(cancelBtn)
+    }
+
+    @objc private func cancelTapped() {
+        dismissAnimated()
+        onCancel?()
+    }
+}
+
+private class PrintPanelButton: NSView {
+    var labelText: String = "" { didSet { labelField.stringValue = labelText } }
+    var onTap: (() -> Void)?
+    private let labelField = NSTextField(labelWithString: "")
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        layer?.backgroundColor = NSColor(calibratedWhite: 1, alpha: 0.06).cgColor
+
+        labelField.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        labelField.textColor = NSColor(calibratedWhite: 0.88, alpha: 1)
+        labelField.alignment = .center
+        labelField.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(labelField)
+        NSLayoutConstraint.activate([
+            labelField.centerXAnchor.constraint(equalTo: centerXAnchor),
+            labelField.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = trackingArea { removeTrackingArea(t) }
+        trackingArea = NSTrackingArea(rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self, userInfo: nil)
+        addTrackingArea(trackingArea!)
+    }
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+        animateBg(to: NSColor(calibratedWhite: 1, alpha: 0.12).cgColor)
+    }
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+        animateBg(to: NSColor(calibratedWhite: 1, alpha: 0.06).cgColor)
+    }
+    override func mouseDown(with event: NSEvent) {
+        animateBg(to: NSColor(calibratedWhite: 1, alpha: 0.20).cgColor, duration: 0.06)
+    }
+    override func mouseUp(with event: NSEvent) {
+        let loc = convert(event.locationInWindow, from: nil)
+        animateBg(to: isHovered
+            ? NSColor(calibratedWhite: 1, alpha: 0.12).cgColor
+            : NSColor(calibratedWhite: 1, alpha: 0.06).cgColor)
+        if bounds.contains(loc) { onTap?() }
+    }
+    private func animateBg(to color: CGColor, duration: CFTimeInterval = 0.15) {
+        let anim = CABasicAnimation(keyPath: "backgroundColor")
+        anim.fromValue = layer?.presentation()?.backgroundColor ?? layer?.backgroundColor
+        anim.toValue = color; anim.duration = duration
+        anim.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer?.add(anim, forKey: "bg"); layer?.backgroundColor = color
+    }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
 }
 
 // MARK: - Editor Alert Overlay
@@ -16602,6 +16826,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.updateFooter()
         }
         footerView.onSettings = { [weak self] in self?.toggleSettings() }
+        footerView.onPrint    = { [weak self] in self?.printCurrentTab() }
         footerView.onNewTab = { [weak self] in self?.addTab() }
         footerView.onNewEditorTab = { [weak self] in self?.createEditorTab() }
         footerView.onCloseTab = { [weak self] in self?.closeCurrentTab() }
@@ -16972,6 +17197,143 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         case "csv":                                return csvToHTML(text, isDark: isDark)
         default:                                   return nil
         }
+    }
+
+    // MARK: - Print
+
+    private func buildPrintOptions(isEditor: Bool, ext: String) -> [PrintOption] {
+        guard isEditor else {
+            return [PrintOption(label: "Terminal drucken", action: .terminal)]
+        }
+        let tabURL = activeTab < tabEditorURLs.count ? tabEditorURLs[activeTab] : nil
+        switch ext {
+        case "md", "markdown", "mdown", "mkd":
+            let html = buildPreviewHTML(for: activeTab) ?? ""
+            return [
+                PrintOption(label: "Formatiert drucken", action: .renderedHTML(html, tabURL)),
+                PrintOption(label: "Quellcode drucken",  action: .sourceCode),
+            ]
+        case "html", "htm":
+            let html = buildPreviewHTML(for: activeTab) ?? ""
+            return [
+                PrintOption(label: "Vorschau drucken",   action: .renderedHTML(html, tabURL)),
+                PrintOption(label: "Quellcode drucken",  action: .sourceCode),
+            ]
+        case "svg":
+            let html = buildPreviewHTML(for: activeTab) ?? ""
+            return [
+                PrintOption(label: "SVG-Grafik drucken", action: .renderedHTML(html, tabURL)),
+                PrintOption(label: "Quellcode drucken",  action: .sourceCode),
+            ]
+        case "csv":
+            let html = buildPreviewHTML(for: activeTab) ?? ""
+            return [
+                PrintOption(label: "Als Tabelle drucken", action: .renderedHTML(html, tabURL)),
+                PrintOption(label: "Quellcode drucken",   action: .sourceCode),
+            ]
+        default:
+            return [PrintOption(label: "Quellcode drucken", action: .sourceCode)]
+        }
+    }
+
+    func printCurrentTab() {
+        guard !termViews.isEmpty, activeTab < termViews.count else { return }
+        let isEditor = activeTab < tabTypes.count && tabTypes[activeTab] == .editor
+        let ext: String
+        if isEditor, activeTab < tabEditorURLs.count, let u = tabEditorURLs[activeTab] {
+            ext = u.pathExtension.lowercased()
+        } else {
+            ext = ""
+        }
+        let options = buildPrintOptions(isEditor: isEditor, ext: ext)
+        guard let cv = window.contentView else { return }
+        PrintModal.show(in: cv, options: options, onSelect: { [weak self] action in
+            self?.executePrintAction(action)
+        }, onCancel: {})
+    }
+
+    private var printWebView: WKWebView?   // retained until print completes
+
+    func executePrintAction(_ action: PrintAction) {
+        switch action {
+
+        case .sourceCode:
+            guard activeTab < tabEditorViews.count,
+                  let ev = tabEditorViews[activeTab] else { return }
+            let op = NSPrintOperation(view: ev.textView, printInfo: NSPrintInfo.shared)
+            op.showsPrintPanel = true
+            op.showsProgressPanel = true
+            op.runModal(for: window, delegate: nil as AnyObject?,
+                        didRun: nil, contextInfo: nil)
+
+        case .terminal:
+            let isDark = NSColor(cgColor: kTermBgCGColor)?.brightnessComponent ?? 0 < 0.5
+            let html = buildTerminalPrintHTML(isDark: isDark)
+            printHTML(html, baseURL: nil)
+
+        case .renderedHTML(let html, let baseURL):
+            printHTML(html, baseURL: baseURL)
+        }
+    }
+
+    private func buildTerminalPrintHTML(isDark: Bool) -> String {
+        let lines: [String]
+        if activeTab < termViews.count, let tv = termViews[activeTab] {
+            let grid = tv.terminal.grid
+            lines = grid.map { row in
+                var s = ""
+                for cell in row {
+                    let scalar: Unicode.Scalar = cell.char.value == 0 ? " " : cell.char
+                    s.unicodeScalars.append(scalar)
+                }
+                return s
+            }
+        } else { lines = [] }
+        let bg  = isDark ? "#0d0d10" : "#ffffff"
+        let fg  = isDark ? "#d0d0d0" : "#1a1a1a"
+        let escaped = lines.map { l in
+            l.replacingOccurrences(of: "&", with: "&amp;")
+             .replacingOccurrences(of: "<", with: "&lt;")
+             .replacingOccurrences(of: ">", with: "&gt;")
+        }.joined(separator: "\n")
+        return """
+        <!DOCTYPE html><html><head><meta charset="utf-8">
+        <style>
+        body{background:\(bg);color:\(fg);font-family:Menlo,monospace;font-size:11px;
+             white-space:pre;margin:16px;line-height:1.4}
+        </style></head><body>\(escaped)</body></html>
+        """
+    }
+
+    private func printHTML(_ html: String, baseURL: URL?) {
+        let wk = WKWebView(frame: window.contentView?.bounds ?? .zero)
+        wk.isHidden = true
+        window.contentView?.addSubview(wk)
+        printWebView = wk
+
+        class NavDelegate: NSObject, WKNavigationDelegate {
+            weak var delegate: AppDelegate?
+            func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+                guard let d = delegate, let w = d.window else { return }
+                let op = webView.printOperation(with: NSPrintInfo.shared)
+                op.showsPrintPanel   = true
+                op.showsProgressPanel = true
+                op.runModal(for: w, delegate: d,
+                            didRun: #selector(AppDelegate.printOperationDidRun(_:success:contextInfo:)),
+                            contextInfo: nil)
+            }
+        }
+        let nav = NavDelegate(); nav.delegate = self
+        wk.navigationDelegate = nav
+        objc_setAssociatedObject(wk, "nav", nav, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        wk.loadHTMLString(html, baseURL: baseURL)
+    }
+
+    @objc func printOperationDidRun(_ op: NSPrintOperation,
+                                    success: Bool,
+                                    contextInfo: UnsafeMutableRawPointer?) {
+        printWebView?.removeFromSuperview()
+        printWebView = nil
     }
 
     // Returns nil if file passes, or a user-facing error string.
