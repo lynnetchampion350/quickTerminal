@@ -25,7 +25,7 @@ Bevor du Swift/AppKit/SwiftUI Code schreibst oder reviewst, lies die relevanten 
 
 ## Projekt-Kurzreferenz
 
-- **Hauptdatei**: `SystemTrayTerminal.swift` (~16500+ Zeilen, single-file macOS App)
+- **Hauptdatei**: `systemtrayterminal.swift` (~16500+ Zeilen, single-file macOS App)
 - **Build**: `bash build.sh` nach JEDER Änderung
 - **Tests**: laufen automatisch am Ende von `build.sh`
 - **Architektur**: macOS Menu-Bar App, kein Dock-Icon, Cocoa + Carbon only
