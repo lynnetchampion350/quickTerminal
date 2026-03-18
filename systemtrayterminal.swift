@@ -11,7 +11,7 @@ import WebKit
 
 // MARK: - Version
 
-let kAppVersion = "1.5.0"
+let kAppVersion = "1.5.1"
 
 func isNewerVersion(remote: String, local: String) -> Bool {
     let strip: (String) -> String = { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
@@ -3085,7 +3085,7 @@ class TerminalView: NSView {
         terminal.onResponse = { [weak self] response in self?.writePTY(response) }
         terminal.onBell = { [weak self] in
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard self != nil else { return }
                 // bellEnabled defaults to true when key is absent
                 let ud = UserDefaults.standard
                 let bellOn = ud.object(forKey: "bellEnabled") == nil || ud.bool(forKey: "bellEnabled")
@@ -20294,9 +20294,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Detached: save X/Y so position is fully restored on next launch.
             UserDefaults.standard.set(Double(frame.origin.x), forKey: "windowX")
             UserDefaults.standard.set(Double(frame.origin.y), forKey: "windowY")
+        } else {
+            // Docked: save full frame (origin + size) so position+size survive hide/show and restart.
+            lastDockedFrame = frame
+            UserDefaults.standard.set(Double(frame.origin.x), forKey: "dockedWindowX")
+            UserDefaults.standard.set(Double(frame.origin.y), forKey: "dockedWindowY")
+            settingsOverlay?.updateResetButtonState()
         }
-        // When docked, do NOT save Y — it is always derived from the tray icon.
-        if !isWindowDetached { settingsOverlay?.updateResetButtonState() }
     }
 
     func centerCommandPalette() {
@@ -20469,13 +20473,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Always persist the final window size so next launch opens at the same size.
+        // Always persist the final window frame so next launch opens at the same size+position.
         if let w = window {
             UserDefaults.standard.set(Double(w.frame.size.width),  forKey: "windowWidth")
             UserDefaults.standard.set(Double(w.frame.size.height), forKey: "windowHeight")
             if isWindowDetached {
                 UserDefaults.standard.set(Double(w.frame.origin.x), forKey: "windowX")
                 UserDefaults.standard.set(Double(w.frame.origin.y), forKey: "windowY")
+            } else {
+                // Docked: persist position so next launch restores where the user left it.
+                UserDefaults.standard.set(Double(w.frame.origin.x), forKey: "dockedWindowX")
+                UserDefaults.standard.set(Double(w.frame.origin.y), forKey: "dockedWindowY")
             }
         }
         saveSession()

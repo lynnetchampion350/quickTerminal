@@ -8,6 +8,10 @@
 
 <br>
 
+<img src="stt.png" width="700" alt="SystemTrayTerminal Screenshot">
+
+<br>
+
 **A blazing-fast, single-file terminal emulator for macOS.**
 
 *Zero dependencies. Pure Swift. Lives in your menu bar. Built-in Text Editor, SSH Manager, Git panel, Claude Code integration & auto-updater. 4.8 MB app bundle.*
@@ -22,7 +26,7 @@
 
 <br>
 
-[**Download SystemTrayTerminal.app (v1.5.0)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
+[**Download SystemTrayTerminal.app (v1.5.1)**](https://github.com/LEVOGNE/SystemTrayTerminal/releases/latest) · [**Website**](https://levogne.github.io/SystemTrayTerminal/)
 
 ---
 
@@ -786,7 +790,7 @@ This project follows [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 
 <img src="icon.png" width="64" alt="SystemTrayTerminal">
 
-### SystemTrayTerminal v1.5.0
+### SystemTrayTerminal v1.5.1
 
 *17,700+ lines. One file. Zero dependencies. Text Editor with Live Preview. SSH Manager. Git panel. Color Themes. SHA256-verified auto-updater.*
 

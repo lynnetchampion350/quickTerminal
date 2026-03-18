@@ -367,7 +367,7 @@
 
 ![Built with Swift](https://img.shields.io/badge/Built_with-Swift-F05138?style=flat-square&logo=swift&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-macOS-000000?style=flat-square&logo=apple&logoColor=white)
-![SystemTrayTerminal](https://img.shields.io/badge/SystemTrayTerminal-v1.5.0-blue?style=flat-square)
+![SystemTrayTerminal](https://img.shields.io/badge/SystemTrayTerminal-v1.5.1-blue?style=flat-square)
 ![Lines](https://img.shields.io/badge/17000%2B_Lines-One_File-blue?style=flat-square)
 ![App](https://img.shields.io/badge/App-4.8_MB-brightgreen?style=flat-square)
 

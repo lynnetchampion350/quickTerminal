@@ -4,6 +4,20 @@ All notable changes to SystemTrayTerminal are documented here.
 
 ---
 
+## v1.5.1 — 2026-03-18
+
+### New Features
+- **Bell Notification** — Plays a sound (Purr) and flashes the tray icon 3× when the terminal rings BEL (ASCII 7) and the window is not in focus. Toggle in Settings (default on) with a TEST button. Also accessible via quickBar command. Fully localized in all 10 languages.
+- **Inactivity Alert** — Automatically triggers a bell notification after N seconds of terminal silence following user input. Useful for detecting when Claude CLI or other tools are waiting for a response. Delay configurable: 5s / 8s (default) / 15s / 30s.
+
+### Bug Fixes
+- **Docked window position not persisted** — Window position is now saved to `UserDefaults` as `dockedWindowX`/`dockedWindowY` during drag and restored on next launch. Position is not overwritten by the tray-centered fallback during show/hide cycles. Reset button clears the saved position.
+- **Window position reset on hide/show** — Debounce timer cancelled at the start of `showWindowAnimated()`, preventing a race where the tray-centered position could overwrite the user's saved position.
+- **Restore without screen clamp** — Saved docked position is restored without forcing the window fully on-screen, allowing intentional partial off-screen positioning.
+- **Arrow offset after edge snap** — Left/right edge double-click snaps now use `pad = 24`, keeping the tray arrow correctly centered over the tray icon.
+
+---
+
 ## v1.5.0 — 2026-03-14 … 2026-03-18
 
 ### New Features

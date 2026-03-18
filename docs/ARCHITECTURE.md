@@ -1,8 +1,8 @@
-# quickTerminal — Architecture & Developer Notes
+# SystemTrayTerminal — Architecture & Developer Notes
 
 ## Overview
 
-Single-file macOS menu-bar terminal emulator (`quickTerminal.swift`, ~16 500 lines).
+Single-file macOS menu-bar terminal emulator (`systemtrayterminal.swift`, ~16 500 lines).
 No external dependencies — only Cocoa + Carbon frameworks.
 
 ---
@@ -13,7 +13,7 @@ No external dependencies — only Cocoa + Carbon frameworks.
 |--------|---------|
 | `bash build.sh` | Local test build (fast `swiftc`) + runs `swift tests.swift` |
 | `bash build_app.sh` | Creates `.app` bundle with icon, fonts, shell configs |
-| `bash build_zip.sh` | Packs `.app` + `install.sh` + `FIRST_READ.txt` → `quickTerminal.zip` |
+| `bash build_zip.sh` | Packs `.app` + `install.sh` + `FIRST_READ.txt` → `SystemTrayTerminal_vX.Y.Z.zip` |
 
 **VERSION** must be kept in sync: `kAppVersion` (Swift) + all 3 build scripts.
 
@@ -132,7 +132,7 @@ dummyTV.onShellExit = { }  // CRITICAL — prevents NSApp.terminate(nil) when /u
 
 ## Session Persistence
 
-- Saved to `~/.quickterminal/session.json`
+- Saved to `~/.systemtrayterminal/session.json`
 - Editor tabs: `type: "editor"`, `editorURL`, `editorMode`
 - `restoreSession()` calls `createEditorTab()` synchronously during launch (window not visible yet)
 
