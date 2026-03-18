@@ -13987,15 +13987,16 @@ class UnsavedAlertView: NSView {
         overlay.layer?.zPosition = 9999
         overlay.alphaValue = 0
 
-        // Local event monitor: intercepts mouseMoved BEFORE TerminalView's tracking area
-        // fires and sets iBeam. Returns nil to consume the event so iBeam never gets set.
-        overlay.eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak overlay] event in
+        // Intercept mouseMoved AND cursorUpdate — both can trigger iBeam from TerminalView.
+        // Return nil to consume so TerminalView never sees the event over the overlay.
+        overlay.eventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .cursorUpdate]
+        ) { [weak overlay] event in
             guard let ov = overlay, ov.superview != nil else { return event }
             let loc = ov.convert(event.locationInWindow, from: nil)
             guard ov.bounds.contains(loc) else { return event }
-            if ov.hitTest(loc) is AlertButton { NSCursor.pointingHand.set() }
-            else                              { NSCursor.arrow.set() }
-            return nil  // consume: TerminalView never sees this event
+            NSCursor.arrow.set()
+            return nil
         }
 
         NSAnimationContext.runAnimationGroup { ctx in
@@ -14058,11 +14059,14 @@ private class AlertButton: NSView {
         if let t = trackingArea { removeTrackingArea(t) }
         trackingArea = NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways],
+            options: [.mouseEnteredAndExited, .activeAlways],
             owner: self, userInfo: nil
         )
         addTrackingArea(trackingArea!)
     }
+
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
 
     override func mouseEntered(with event: NSEvent) {
         layer?.backgroundColor = hoverBg
