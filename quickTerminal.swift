@@ -2960,7 +2960,7 @@ class TerminalView: NSView {
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         guard !settingsVisible else { return }
-        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true { return }
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView || $0 is PrintModal }) == true { return }
         // Hover-to-activate: bring window to front when mouse enters
         // Skip if window was just hidden (e.g. via Ctrl+< hotkey) to prevent instant reappear
         if let w = window, !w.isKeyWindow {
@@ -4140,7 +4140,7 @@ class TerminalView: NSView {
         // Don't interfere with cursor when settings overlay is visible
         guard !settingsVisible else { return }
         // Don't set iBeam when UnsavedAlert overlay is active
-        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true { return }
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView || $0 is PrintModal }) == true { return }
         let pos = gridPos(from: event)
         // Any-event tracking (1003): report all motion even without buttons
         if terminal.mouseMode >= 1003, window?.isKeyWindow == true {
@@ -14971,13 +14971,13 @@ class OnboardingPanel: NSPanel {
 // version-button overlay always shows an arrow cursor instead of iBeam.
 private class EditorTextView: NSTextView {
     override func mouseMoved(with event: NSEvent) {
-        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true { return }
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView || $0 is PrintModal }) == true { return }
         if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
            !vb.isHidden, vb.frame.contains(event.locationInWindow) { return }
         super.mouseMoved(with: event)
     }
     override func cursorUpdate(with event: NSEvent) {
-        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView }) == true {
+        if window?.contentView?.subviews.contains(where: { $0 is UnsavedAlertView || $0 is PrintModal }) == true {
             NSCursor.arrow.set(); return
         }
         if let vb = (NSApp.delegate as? AppDelegate)?.versionBtn,
@@ -15393,9 +15393,9 @@ final class SyntaxTextStorage: NSTextStorage {
 // MARK: - Print Modal
 
 enum PrintAction {
-    case renderedHTML(String, URL?)   // html string + optional base URL
-    case sourceCode                   // textView.printOperation
-    case terminal                     // terminal buffer as HTML
+    case renderedHTML(URL?)   // base URL; HTML is built lazily when user confirms
+    case sourceCode           // textView.printOperation
+    case terminal             // terminal buffer as HTML
 }
 
 struct PrintOption {
@@ -15407,6 +15407,7 @@ class PrintModal: NSView {
     private let panel = NSView()
     private var onSelect: ((PrintAction) -> Void)?
     private var onCancel: (() -> Void)?
+    private var eventMonitor: Any?
 
     override var isFlipped: Bool { true }
     override func mouseDown(with event: NSEvent) {}
@@ -15424,6 +15425,17 @@ class PrintModal: NSView {
         v.build(options: options)
         contentView.addSubview(v)
         v.alphaValue = 0
+
+        // Set arrow cursor over the backdrop; pass events through so
+        // PrintPanelButton tracking areas receive mouseEntered/mouseExited.
+        v.eventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .cursorUpdate]
+        ) { [weak v] event in
+            guard let modal = v, modal.superview != nil else { return event }
+            NSCursor.arrow.set()
+            return event
+        }
+
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
             v.animator().alphaValue = 1
@@ -15431,6 +15443,7 @@ class PrintModal: NSView {
     }
 
     private func dismissAnimated() {
+        if let m = eventMonitor { NSEvent.removeMonitor(m); eventMonitor = nil }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
             self.animator().alphaValue = 0
@@ -17206,31 +17219,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return [PrintOption(label: "Terminal drucken", action: .terminal)]
         }
         let tabURL = activeTab < tabEditorURLs.count ? tabEditorURLs[activeTab] : nil
+        let rendered = PrintAction.renderedHTML(tabURL)
         switch ext {
         case "md", "markdown", "mdown", "mkd":
-            let html = buildPreviewHTML(for: activeTab) ?? ""
-            return [
-                PrintOption(label: "Formatiert drucken", action: .renderedHTML(html, tabURL)),
-                PrintOption(label: "Quellcode drucken",  action: .sourceCode),
-            ]
+            return [PrintOption(label: "Formatiert drucken", action: rendered),
+                    PrintOption(label: "Quellcode drucken",  action: .sourceCode)]
         case "html", "htm":
-            let html = buildPreviewHTML(for: activeTab) ?? ""
-            return [
-                PrintOption(label: "Vorschau drucken",   action: .renderedHTML(html, tabURL)),
-                PrintOption(label: "Quellcode drucken",  action: .sourceCode),
-            ]
+            return [PrintOption(label: "Vorschau drucken",   action: rendered),
+                    PrintOption(label: "Quellcode drucken",  action: .sourceCode)]
         case "svg":
-            let html = buildPreviewHTML(for: activeTab) ?? ""
-            return [
-                PrintOption(label: "SVG-Grafik drucken", action: .renderedHTML(html, tabURL)),
-                PrintOption(label: "Quellcode drucken",  action: .sourceCode),
-            ]
+            return [PrintOption(label: "SVG-Grafik drucken", action: rendered),
+                    PrintOption(label: "Quellcode drucken",  action: .sourceCode)]
         case "csv":
-            let html = buildPreviewHTML(for: activeTab) ?? ""
-            return [
-                PrintOption(label: "Als Tabelle drucken", action: .renderedHTML(html, tabURL)),
-                PrintOption(label: "Quellcode drucken",   action: .sourceCode),
-            ]
+            return [PrintOption(label: "Als Tabelle drucken", action: rendered),
+                    PrintOption(label: "Quellcode drucken",   action: .sourceCode)]
         default:
             return [PrintOption(label: "Quellcode drucken", action: .sourceCode)]
         }
@@ -17271,7 +17273,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let html = buildTerminalPrintHTML(isDark: isDark)
             printHTML(html, baseURL: nil)
 
-        case .renderedHTML(let html, let baseURL):
+        case .renderedHTML(let baseURL):
+            let html = buildPreviewHTML(for: activeTab) ?? ""
             printHTML(html, baseURL: baseURL)
         }
     }
@@ -17306,6 +17309,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func printHTML(_ html: String, baseURL: URL?) {
+        printWebView?.removeFromSuperview()   // clean up any orphaned previous instance
         let wk = WKWebView(frame: window.contentView?.bounds ?? .zero)
         wk.isHidden = true
         window.contentView?.addSubview(wk)
