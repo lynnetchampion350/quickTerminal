@@ -13985,6 +13985,7 @@ class UnsavedAlertView: NSView {
         contentView.addSubview(overlay)
         overlay.layer?.zPosition = 9999
         overlay.alphaValue = 0
+        NSCursor.arrow.push()   // push arrow onto cursor stack — overrides iBeam from TerminalView
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.13
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -13994,6 +13995,7 @@ class UnsavedAlertView: NSView {
 
     // ── Dismiss ────────────────────────────────────────────────────────────
     fileprivate func dismiss(calling action: (() -> Void)?) {
+        NSCursor.pop()  // restore cursor that was active before overlay
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.10
             self.animator().alphaValue = 0
@@ -14050,13 +14052,12 @@ private class AlertButton: NSView {
         addTrackingArea(trackingArea!)
     }
 
-    override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
-    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
-
     override func mouseEntered(with event: NSEvent) {
+        NSCursor.pointingHand.push()
         layer?.backgroundColor = hoverBg
     }
     override func mouseExited(with event: NSEvent) {
+        NSCursor.pop()
         layer?.backgroundColor = normalBg
     }
     override func mouseDown(with event: NSEvent) {
