@@ -2903,6 +2903,9 @@ class TerminalView: NSView {
     var suppressResize = false
     private var winSizeWorkItem: DispatchWorkItem?  // debounce TIOCSWINSZ during sidebar drag
     private var isFirstResize = true               // fire TIOCSWINSZ immediately on first layout
+    private var inactivityWorkItem: DispatchWorkItem?  // fires bell after silence
+    private var inactivityAlerted = false              // prevent repeat alert for same silence
+    private var hasUserInput = false                   // only alert after user has typed something
     var source: DispatchSourceRead?
     var refreshTimer: Timer?
     var cursorBlinkOn = true
@@ -3270,6 +3273,26 @@ class TerminalView: NSView {
 
     var onShellExit: (() -> Void)?
 
+    /// Starts (or restarts) the inactivity countdown. Fires bell after silence if:
+    /// - bellEnabled is on
+    /// - shell is ready and user has typed at least once
+    /// - alert hasn't already fired for this silence period
+    private func scheduleInactivityAlert() {
+        inactivityWorkItem?.cancel()
+        let ud = UserDefaults.standard
+        let bellOn = ud.object(forKey: "bellEnabled") == nil || ud.bool(forKey: "bellEnabled")
+        guard bellOn, shellReady, hasUserInput, !inactivityAlerted else { return }
+        let delay = max(3.0, ud.double(forKey: "bellInactivityDelay") > 0
+                              ? ud.double(forKey: "bellInactivityDelay") : 8.0)
+        let item = DispatchWorkItem { [weak self] in
+            guard let self = self, !self.inactivityAlerted else { return }
+            self.inactivityAlerted = true
+            self.terminal.onBell?()
+        }
+        inactivityWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
     func readPTY() {
         // Capture source by reference so we only cancel THIS source, not a newer one
         // that may have been installed by a concurrent switchShell().
@@ -3294,6 +3317,9 @@ class TerminalView: NSView {
                 dirty = true
                 for i in bidiCacheValid.indices { bidiCacheValid[i] = false }
                 a11yValueCache = nil
+                // New output → reset inactivity alert and start silence countdown
+                inactivityAlerted = false
+                scheduleInactivityAlert()
             } else {
                 if n == 0 || (errno != EAGAIN && errno != EINTR) {
                     mySource?.cancel()
@@ -3319,6 +3345,10 @@ class TerminalView: NSView {
     func writePTY(_ data: Data) {
         let fd = masterFd
         guard fd >= 0 else { return }
+        // User typed → cancel pending inactivity alert; mark that user has interacted
+        hasUserInput = true
+        inactivityWorkItem?.cancel()
+        inactivityWorkItem = nil
         perf.writeBytes += data.count; perf.writeCount += 1
         data.withUnsafeBytes { ptr in
             guard let base = ptr.baseAddress else { return }
@@ -7827,6 +7857,7 @@ class SettingsOverlay: NSView {
         rows.append(makeToggleRow(label: Loc.launchAtLogin, settingsKey: "autoStartEnabled"))
         rows.append(makeToggleRow(label: Loc.autoCheckUpdates, settingsKey: "autoCheckUpdates"))
         rows.append(makeBellRow())
+        rows.append(makeBellDelayRow())
 
         // WebPicker
         rows.append(makeSectionHeader(Loc.webpickerSection))
@@ -8252,6 +8283,45 @@ class SettingsOverlay: NSView {
             toggle.heightAnchor.constraint(equalToConstant: 18),
         ])
 
+        return row
+    }
+
+    /// Bell delay row: label  |  segment (5s / 10s / 30s)
+    private func makeBellDelayRow() -> NSView {
+        let row = SettingsRowView()
+        let lbl = NSTextField(labelWithString: "↳ Delay")
+        lbl.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .medium)
+        lbl.textColor = NSColor(calibratedWhite: 0.5, alpha: 1.0)
+        lbl.isEditable = false; lbl.isBordered = false; lbl.drawsBackground = false
+        lbl.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(lbl)
+
+        let delays: [Double] = [5, 8, 15, 30]
+        let saved = UserDefaults.standard.double(forKey: "bellInactivityDelay")
+        let selIdx = delays.firstIndex(of: saved) ?? 1   // default: 8s (index 1)
+        let seg = NSSegmentedControl(labels: ["5s", "8s", "15s", "30s"],
+                                     trackingMode: .selectOne, target: nil, action: nil)
+        seg.selectedSegment = selIdx
+        seg.controlSize = .mini
+        seg.segmentStyle = .rounded
+        seg.font = NSFont.monospacedSystemFont(ofSize: 9, weight: .medium)
+        seg.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(seg)
+
+        row.hoverControl = seg
+        seg.target = BlockTarget.shared
+        BlockTarget.shared.registerSeg(seg) { [weak self] s in
+            let delay = delays[s.selectedSegment]
+            UserDefaults.standard.set(delay, forKey: "bellInactivityDelay")
+            self?.onChanged?("bellInactivityDelay", delay)
+        }
+
+        NSLayoutConstraint.activate([
+            lbl.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            lbl.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+            seg.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            seg.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
+        ])
         return row
     }
 
